@@ -9,7 +9,7 @@ import { COLORS } from '../theme';
 import { ArrowLeft, Check, ChevronRight, Plus, Trash2, MapPin, ClipboardList, CreditCard } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
-import { getImageUrl, sanitizeData } from '../services/api';
+import { getImageUrl, sanitizeData, userService } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
 
@@ -154,19 +154,37 @@ export default function CheckoutScreen({ navigation }) {
 
   const loadAddresses = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@UserAddresses');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setAddresses(parsed);
-        if (parsed.length > 0) setSelAddr(parsed[0].id);
+      const currentUserId = user?._id || user?.id;
+      if (!currentUserId) return;
+
+      // Try fetching from backend
+      const data = await userService.getAddresses(currentUserId);
+      const backendAddrs = Array.isArray(data) ? data : data.data || data.addresses || [];
+      
+      if (backendAddrs.length > 0) {
+        setAddresses(backendAddrs);
+        if (backendAddrs.length > 0) setSelAddr(backendAddrs[0].id || backendAddrs[0]._id);
+        await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
+      } else {
+        const stored = await AsyncStorage.getItem('@UserAddresses');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setAddresses(parsed);
+          if (parsed.length > 0) setSelAddr(parsed[0].id);
+        }
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('Error loading addresses:', e);
+      const stored = await AsyncStorage.getItem('@UserAddresses');
+      if (stored) setAddresses(JSON.parse(stored));
+    }
   };
 
   const handleSaveAddress = async (newAddr) => {
     try {
+      const currentUserId = user?._id || user?.id;
       const formatted = {
-        id: editingAddr ? editingAddr.id : Date.now().toString(),
+        id: editingAddr ? (editingAddr.id || editingAddr._id) : Date.now().toString(),
         type: newAddr.saveAs || 'HOME',
         name: newAddr.firstName,
         address: newAddr.line1,
@@ -174,15 +192,18 @@ export default function CheckoutScreen({ navigation }) {
         city: newAddr.city,
         state: newAddr.state,
         zip: newAddr.pincode,
-
         phone: `${newAddr.countryCode} ${newAddr.mobile}`,
         full: `${newAddr.line1}, ${newAddr.line2 ? newAddr.line2 + ', ' : ''}${newAddr.city}, ${newAddr.state} - ${newAddr.pincode}`,
-        raw: newAddr
       };
+
+      // Save to backend if logged in
+      if (currentUserId) {
+        await userService.addAddress(currentUserId, formatted);
+      }
 
       let updated;
       if (editingAddr) {
-        updated = addresses.map(a => a.id === editingAddr.id ? formatted : a);
+        updated = addresses.map(a => (a.id === editingAddr.id || a._id === editingAddr._id) ? formatted : a);
       } else {
         updated = [...addresses, formatted];
       }
@@ -191,7 +212,10 @@ export default function CheckoutScreen({ navigation }) {
       setSelAddr(formatted.id);
       setShowAddForm(false);
       setEditingAddr(null);
-    } catch (e) { console.error(e); }
+      
+      // Refresh from backend to be sure
+      loadAddresses();
+    } catch (e) { console.error('Error saving address:', e); }
   };
 
   const handleDeleteAddress = async (id) => {
@@ -251,6 +275,9 @@ export default function CheckoutScreen({ navigation }) {
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
         const updatedOrders = [newOrder, ...orders];
         await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+
+        // Save to backend
+        await userService.createOrder(newOrder);
 
         // Clear cart
         clearCart();

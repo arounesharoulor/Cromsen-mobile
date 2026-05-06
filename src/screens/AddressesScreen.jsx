@@ -4,10 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MapPin, Plus, Trash2, X } from 'lucide-react-native';
-import { BackIcon } from '../components/CustomIcons';
-import { COLORS } from '../theme';
-import { EmptyState } from '../components';
-import { Platform } from 'react-native';
+import { sanitizeData, userService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function AddressesScreen({ navigation }) {
   const [addresses, setAddresses] = useState([]);
@@ -19,26 +17,50 @@ export default function AddressesScreen({ navigation }) {
 
 
 
+  const { user } = useAuth();
+
   useEffect(() => {
     loadAddresses();
   }, []);
 
   const loadAddresses = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@UserAddresses');
-      if (stored) {
-        setAddresses(JSON.parse(stored));
+      const currentUserId = user?._id || user?.id;
+      if (!currentUserId) return;
+
+      // Fetch from backend
+      const data = await userService.getAddresses(currentUserId);
+      const backendAddrs = Array.isArray(data) ? data : data.data || data.addresses || [];
+      
+      if (backendAddrs.length > 0) {
+        setAddresses(backendAddrs);
+        await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
+      } else {
+        const stored = await AsyncStorage.getItem('@UserAddresses');
+        if (stored) setAddresses(JSON.parse(stored));
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('Error loading addresses:', e);
+      const stored = await AsyncStorage.getItem('@UserAddresses');
+      if (stored) setAddresses(JSON.parse(stored));
+    }
   };
 
   const handleDelete = async (id) => {
     Alert.alert('Delete Address', 'Are you sure you want to delete this address?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const filtered = addresses.filter(a => a.id !== id);
-        setAddresses(filtered);
-        await AsyncStorage.setItem('@UserAddresses', JSON.stringify(filtered));
+        try {
+          const currentUserId = user?._id || user?.id;
+          if (currentUserId) {
+            await userService.deleteAddress(currentUserId, id);
+          }
+          const filtered = addresses.filter(a => (a.id !== id && a._id !== id));
+          setAddresses(filtered);
+          await AsyncStorage.setItem('@UserAddresses', JSON.stringify(filtered));
+        } catch (e) {
+          Alert.alert('Error', 'Failed to delete address from server.');
+        }
       }}
     ]);
   };
@@ -49,24 +71,34 @@ export default function AddressesScreen({ navigation }) {
       return;
     }
 
+    const currentUserId = user?._id || user?.id;
     const fullAddr = `${form.address}, ${form.line2 ? form.line2 + ', ' : ''}${form.city}, ${form.state} - ${form.zip}`;
     const raw = {
       firstName: form.name, countryCode: '+91', mobile: form.phone.replace('+91 ', ''),
       pincode: form.zip, state: form.state, city: form.city, line1: form.address, line2: form.line2, saveAs: form.type
     };
 
-    
-    let updated;
-    if (editingId) {
-      updated = addresses.map(a => a.id === editingId ? { ...form, id: editingId, full: fullAddr, raw } : a);
-    } else {
-      updated = [...addresses, { ...form, id: Date.now().toString(), full: fullAddr, raw }];
-    }
+    const newAddr = { ...form, id: editingId || Date.now().toString(), full: fullAddr, raw };
 
-    
-    setAddresses(updated);
-    await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
-    setModalVisible(false);
+    try {
+      if (currentUserId) {
+        await userService.addAddress(currentUserId, newAddr);
+      }
+
+      let updated;
+      if (editingId) {
+        updated = addresses.map(a => (a.id === editingId || a._id === editingId) ? newAddr : a);
+      } else {
+        updated = [...addresses, newAddr];
+      }
+
+      setAddresses(updated);
+      await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
+      setModalVisible(false);
+      loadAddresses(); // Refresh from backend
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save address to server.');
+    }
   };
 
   const openForm = (addr = null) => {

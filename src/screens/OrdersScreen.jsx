@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, ChevronRight, X } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { EmptyState, AppButton } from '../components';
-import { sanitizeData } from '../services/api';
+import { sanitizeData, userService } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
 
@@ -58,22 +58,41 @@ export default function OrdersScreen({ navigation }) {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      const currentUserId = user?._id || user?.id;
+      if (!currentUserId) {
+        setOrders([]);
+        return;
+      }
+
+      // Try fetching from backend first
+      const data = await userService.getOrders(currentUserId);
+      const backendOrders = Array.isArray(data) ? data : data.data || data.orders || [];
+      
+      if (backendOrders.length > 0) {
+        setOrders(backendOrders);
+        // Sync to local storage for offline view
+        await AsyncStorage.setItem('@UserOrders', JSON.stringify(backendOrders));
+      } else {
+        // Fallback to local storage if backend is empty but user had local data
+        const stored = await AsyncStorage.getItem('@UserOrders');
+        if (stored) {
+          const localOrders = JSON.parse(stored).filter(o => o.userId === currentUserId);
+          setOrders(localOrders);
+        }
+      }
+    } catch (e) { 
+      console.error('Error fetching orders:', e);
+      // Fallback to local on error
       const stored = await AsyncStorage.getItem('@UserOrders');
       if (stored) {
-        let allOrders = JSON.parse(stored);
-        // Filter by particular user
-        const currentUserId = user?._id || user?.id;
-        if (currentUserId) {
-          allOrders = allOrders.filter(o => o.userId === currentUserId);
-        }
-        setOrders(allOrders);
-
-      } else {
-        setOrders([]);
+        const localOrders = JSON.parse(stored).filter(o => o.userId === (user?._id || user?.id));
+        setOrders(localOrders);
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } finally { 
+      setLoading(false); 
+    }
   };
+
 
   // Derived state for filtered orders
   const filteredOrders = orders.filter(o => {

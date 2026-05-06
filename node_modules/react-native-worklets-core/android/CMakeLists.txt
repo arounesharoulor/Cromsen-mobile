@@ -19,6 +19,10 @@ add_compile_options(${folly_FLAGS})
 find_package(fbjni REQUIRED CONFIG)
 find_package(ReactAndroid REQUIRED CONFIG)
 
+if(${JS_RUNTIME} STREQUAL "hermes")
+  find_package(hermes-engine REQUIRED CONFIG)
+endif()
+
 file(GLOB_RECURSE SOURCES_COMMON CONFIGURE_DEPENDS "../cpp/**.cpp")
 
 add_library(
@@ -55,70 +59,38 @@ target_link_libraries(
 
 target_link_libraries(
   ${PACKAGE_NAME}
+  ReactAndroid::folly_runtime
+  ReactAndroid::glog
   ReactAndroid::jsi
+  ReactAndroid::reactnativejni
   fbjni::fbjni
 )
 
-if(ReactAndroid_VERSION_MINOR GREATER_EQUAL 76)
-  target_link_libraries(
-    ${PACKAGE_NAME}
-    ReactAndroid::reactnative             # <-- RN: Native Modules umbrella prefab
-  )
-else()
-  target_link_libraries(
-    ${PACKAGE_NAME}
-    ReactAndroid::reactnativejni           # <-- RN: React Native JNI bindings
-    ReactAndroid::folly_runtime
-    ReactAndroid::glog
-  )
-endif()
-
-# Add the appropriate JS runtime
 if(${JS_RUNTIME} STREQUAL "hermes")
-  find_package(hermes-engine REQUIRED CONFIG)
-
   string(APPEND CMAKE_CXX_FLAGS " -DJS_RUNTIME_HERMES=1")
 
-  if(ReactAndroid_VERSION_MINOR GREATER_EQUAL 82)
-        target_link_libraries(
-          ${PACKAGE_NAME}
-          hermes-engine::hermesvm
-        )
-  else()
-        target_link_libraries(
-        ${PACKAGE_NAME}
-        hermes-engine::libhermes
+  # From prefab from module `com.facebook.react:hermes-android`
+  set(HERMES_LIB hermes-engine::libhermes)
+
+  target_link_libraries(
+    ${PACKAGE_NAME}
+    ${HERMES_LIB}
   )
-  endif()
-  
 
   if(${HERMES_ENABLE_DEBUGGER})
-    if(ReactAndroid_VERSION_MINOR GREATER_EQUAL 76)
-      target_link_libraries(
-        ${PACKAGE_NAME}
-        ReactAndroid::hermestooling
-      )
-    else()
-      target_link_libraries(
-        ${PACKAGE_NAME}
-        ReactAndroid::hermes_executor
-      )
-    endif()
+    set(HERMES_EXECUTOR_LIB ReactAndroid::hermes_executor)
+
+    target_link_libraries(
+      ${PACKAGE_NAME}
+      ${HERMES_EXECUTOR_LIB}
+    )
   endif()
 elseif(${JS_RUNTIME} STREQUAL "jsc")
   string(APPEND CMAKE_CXX_FLAGS " -DJS_RUNTIME_JSC=1")
 
-  if(ReactAndroid_VERSION_MINOR GREATER_EQUAL 76)
-    target_link_libraries(
-      ${PACKAGE_NAME}
-      ReactAndroid::jsctooling
-    )
-  else()
-    target_link_libraries(
-      ${PACKAGE_NAME}
-      ReactAndroid::jscexecutor
-    )
-  endif()
+  set(JSEXECUTOR_LIB ReactAndroid::jscexecutor)
+
+  target_link_libraries(${PACKAGE_NAME} ${JSEXECUTOR_LIB})
 else()
   message(FATAL_ERROR "Unknown JS runtime ${JS_RUNTIME}.")
 endif()

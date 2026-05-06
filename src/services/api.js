@@ -103,3 +103,35 @@ export const homepageService = {
     return handleResponse(response);
   },
 };
+export const userService = {
+  getAddresses: async (userId) => {
+    const response = await fetch(`${BASE_URL}/users/${userId}/addresses`);
+    return handleResponse(response);
+  },
+  addAddress: async (userId, addressData) => {
+    const response = await fetch(`${BASE_URL}/users/${userId}/addresses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addressData),
+    });
+    return handleResponse(response);
+  },
+  deleteAddress: async (userId, addressId) => {
+    const response = await fetch(`${BASE_URL}/users/${userId}/addresses/${addressId}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(response);
+  },
+  getOrders: async (userId) => {
+    const response = await fetch(`${BASE_URL}/orders/user/${userId}`);
+    return handleResponse(response);
+  },
+  createOrder: async (orderData) => {
+    const response = await fetch(`${BASE_URL}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderData),
+    });
+    return handleResponse(response);
+  },
+};

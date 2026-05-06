@@ -51,7 +51,6 @@ def reactNativeArchitectures() {
 }
 
 apply plugin: "com.android.library"
-apply from: "./fix-prefab.gradle"
 
 if (isNewArchitectureEnabled()) {
     apply plugin: "com.facebook.react"
@@ -81,8 +80,7 @@ android {
         arguments "-DANDROID_STL=c++_shared",
                 "-DANDROID_TOOLCHAIN=clang",
                 "-DREACT_NATIVE_DIR=${nodeModules}/react-native",
-                "-DJS_RUNTIME=${JS_RUNTIME}",
-                "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                "-DJS_RUNTIME=${JS_RUNTIME}"
         abiFilters (*reactNativeArchitectures())
       }
     }
@@ -147,7 +145,6 @@ android {
       "**/libhermes.so",
       "**/libhermes-executor-debug.so",
       "**/libhermes_executor.so",
-      "**/libreactnative.so",
       "**/libreactnativejni.so",
       "**/libturbomodulejsijni.so",
       "**/libreact_nativemodule_core.so",
