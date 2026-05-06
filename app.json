@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Cromsen",
+    "slug": "cromsen-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cromsen.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.cromsen.app"
+    },
+    "web": {
+    }
+  }
+}
