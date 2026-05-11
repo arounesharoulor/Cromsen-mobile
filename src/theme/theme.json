@@ -1,0 +1,13 @@
+{
+  "primary": "#004694",
+  "secondary": "#F4712F",
+  "cartBtn": "#FCD7CF",
+  "darkNavy": "#0C1821",
+  "background": "#EFF1F3",
+  "surface": "#FFFFFF",
+  "text": "#000000",
+  "textSecondary": "#4F4F4F",
+  "border": "#E0E0E0",
+  "error": "#FF3B30",
+  "success": "#34C759"
+}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 
 /**
  * Reusable screen header. Matches Figma nav bar spec:
@@ -20,7 +20,7 @@ export default function ScreenHeader({
       <View style={[styles.compact, style]}>
         {onBack && (
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <ArrowLeft size={20} color={COLORS.text} />
+            <ArrowLeft size={20} color={THEME_COLORS.text} />
           </TouchableOpacity>
         )}
         <Text style={styles.compactTitle}>{title}</Text>
@@ -34,7 +34,7 @@ export default function ScreenHeader({
       <View style={styles.topRow}>
         {onBack ? (
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <ArrowLeft size={20} color={COLORS.text} />
+            <ArrowLeft size={20} color={THEME_COLORS.text} />
           </TouchableOpacity>
         ) : <View style={styles.backBtn} />}
         <View style={styles.rightSlot}>{rightElement || null}</View>
@@ -48,7 +48,7 @@ export default function ScreenHeader({
 const styles = StyleSheet.create({
   header: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     paddingHorizontal: 16,
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: THEME_COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -78,11 +78,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '900',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
   },
   subtitle: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     marginTop: 4,
     fontWeight: '500',
   },
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     elevation: 4,
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   compactTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: THEME_COLORS.primary,
     flex: 1,
     textAlign: 'center',
   },

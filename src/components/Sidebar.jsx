@@ -10,7 +10,7 @@ import {
   ScrollView,
   Platform
 } from 'react-native';
-import { COLORS, SPACING, FONTS } from '../theme';
+import { THEME_COLORS, SPACING, FONTS } from '../theme';
 import { 
   X, 
   Home, 
@@ -65,7 +65,7 @@ export const Sidebar = ({ isOpen, onClose, navigation }) => {
   const bottomItems = [
     { icon: Settings, label: 'Settings' },
     { icon: HelpCircle, label: 'Support' },
-    { icon: LogOut, label: 'Logout', color: COLORS.error, onPress: authLogout },
+    { icon: LogOut, label: 'Logout', color: THEME_COLORS.error, onPress: authLogout },
   ];
 
   return (
@@ -102,10 +102,10 @@ export const Sidebar = ({ isOpen, onClose, navigation }) => {
               }}
             >
               <View style={styles.menuIconContainer}>
-                <item.icon color={COLORS.primary} size={20} />
+                <item.icon color={THEME_COLORS.primary} size={20} />
               </View>
               <Text style={styles.menuLabel}>{item.label}</Text>
-              <ChevronRight color={COLORS.border} size={16} />
+              <ChevronRight color={THEME_COLORS.border} size={16} />
             </TouchableOpacity>
           ))}
 
@@ -121,7 +121,7 @@ export const Sidebar = ({ isOpen, onClose, navigation }) => {
               }}
             >
               <View style={[styles.menuIconContainer, item.color && { backgroundColor: 'rgba(255,59,48,0.1)' }]}>
-                <item.icon color={item.color || COLORS.text} size={20} />
+                <item.icon color={item.color || THEME_COLORS.text} size={20} />
               </View>
               <Text style={[styles.menuLabel, item.color && { color: item.color }]}>{item.label}</Text>
             </TouchableOpacity>
@@ -172,10 +172,10 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
+    shadowColor: THEME_COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -189,18 +189,18 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
   },
   userEmail: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     marginTop: 2,
   },
   closeButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     letterSpacing: 1.5,
     marginBottom: 15,
     marginLeft: 5,
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: `${COLORS.primary}15`,
+    backgroundColor: `${THEME_COLORS.primary}15`,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -236,22 +236,22 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: THEME_COLORS.border,
     marginVertical: 25,
     marginHorizontal: 5,
   },
   footer: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: THEME_COLORS.border,
   },
   versionText: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     textAlign: 'center',
     fontWeight: '600',
   },

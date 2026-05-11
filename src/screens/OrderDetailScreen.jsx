@@ -4,9 +4,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MapPin, Calendar, Truck, CheckCircle2, Package, ShoppingBag } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { BackIcon } from '../components/CustomIcons';
+import { sanitizeData, getImageUrl, userService } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -20,20 +22,47 @@ const ORDER_STATUS_STEPS = [
 export default function OrderDetailScreen({ navigation, route }) {
   const { order } = route.params || {};
   const [showTracking, setShowTracking] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState(order);
 
-  if (!order) return null;
+  React.useEffect(() => {
+    refreshOrder();
+  }, []);
 
-  const subtotal = order.items?.reduce((acc, item) => {
+  const refreshOrder = async () => {
+    try {
+      const orderId = currentOrder._id || currentOrder.id;
+      if (!orderId || String(orderId).startsWith('#')) return;
+
+      const orders = await userService.getOrders(currentOrder.userId);
+      const latest = (Array.isArray(orders) ? orders : orders.data || orders.orders || [])
+        .find(o => (o._id === orderId || o.id === orderId));
+      
+      if (latest) {
+        setCurrentOrder(prev => ({
+          ...prev,
+          status: latest.status,
+          // Sync any other fields if needed
+        }));
+      }
+    } catch (e) {
+      console.warn('Could not refresh order status:', e);
+    }
+  };
+
+  if (!currentOrder) return null;
+
+  const subtotal = currentOrder.items?.reduce((acc, item) => {
     const p = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
     return acc + (p * (item.quantity || 1));
-  }, 0) || (order.total - 20);
+  }, 0) || (currentOrder.total - 20);
 
   
   // Calculate delivery date (3 days after order date)
   const getExpectedDate = () => {
-    if (order.expectedDelivery) return order.expectedDelivery;
+    if (currentOrder.expectedDelivery) return currentOrder.expectedDelivery;
     try {
-      const d = new Date(order.date || Date.now());
+      const d = new Date(currentOrder.date || Date.now());
       if (isNaN(d.getTime())) {
         // Handle "MAY 1, 2026" format manually if needed, 
         // but new Date("MAY 1, 2026") works in most environments.
@@ -51,13 +80,40 @@ export default function OrderDetailScreen({ navigation, route }) {
   };
   const deliveryDate = getExpectedDate();
 
-
+  const handleCancelOrder = async () => {
+    try {
+      setLoading(true);
+      const orderIdStr = String(currentOrder.id || currentOrder._id);
+      
+      if (!orderIdStr.startsWith('#')) {
+        await userService.updateOrderStatus(orderIdStr, 'Cancelled');
+      }
+      
+      const updatedOrder = { ...currentOrder, status: 'CANCELLED' };
+      setCurrentOrder(updatedOrder);
+      
+      // Update local storage
+      const stored = await AsyncStorage.getItem('@UserOrders');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const updatedOrders = parsed.map(o => (o.id === updatedOrder.id || o._id === updatedOrder._id) ? updatedOrder : o);
+        await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+      }
+      
+      alert('Order cancelled successfully.');
+    } catch (e) {
+      console.error('Error cancelling order:', e);
+      alert('Failed to cancel order. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon size={20} color={COLORS.primary} />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
         <View style={{ width: 36 }} />
@@ -67,34 +123,51 @@ export default function OrderDetailScreen({ navigation, route }) {
         {/* STATUS TIMELINE CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.orderId}>{order.id}</Text>
-            <Text style={styles.updatedTime}>Updated 2m ago</Text>
+            <Text style={styles.orderId}>{currentOrder.id}</Text>
+            <Text style={styles.updatedTime}>Updated just now</Text>
           </View>
           <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>{order.status}</Text>
+            <Text style={styles.statusBadgeText}>{currentOrder.status}</Text>
           </View>
 
           {showTracking && (
             <View style={styles.timeline}>
-              {ORDER_STATUS_STEPS.map((step, idx) => (
-                <React.Fragment key={step.label}>
-                  <View style={styles.timelineStep}>
-                    <View style={[
-                      styles.iconCircle, 
-                      step.completed && styles.iconCircleCompleted,
-                      step.active && styles.iconCircleActive
-                    ]}>
-                      {step.icon}
+              {ORDER_STATUS_STEPS.map((step, idx) => {
+                const s = String(currentOrder.status).toUpperCase();
+                let completed = false;
+                let active = false;
+                
+                if (s.includes('DELIVERED')) completed = true;
+                else if (s.includes('SHIPPED')) completed = idx <= 2;
+                else if (s.includes('PACKED')) completed = idx <= 1;
+                else completed = idx === 0;
+
+                active = (s.includes('DELIVERED') && idx === 3) ||
+                         (s.includes('SHIPPED') && idx === 2) ||
+                         (s.includes('PACKED') && idx === 1) ||
+                         (!s.includes('DELIVERED') && !s.includes('SHIPPED') && !s.includes('PACKED') && idx === 0);
+
+                return (
+                  <React.Fragment key={step.label}>
+                    <View style={styles.timelineStep}>
+                      <View style={[
+                        styles.iconCircle, 
+                        completed && styles.iconCircleCompleted,
+                        active && { backgroundColor: THEME_COLORS.secondary }
+                      ]}>
+                        {completed ? <CheckCircle2 size={16} color="#FFF" /> : step.icon}
+                      </View>
+                      <View style={styles.stepInfo}>
+                        <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{step.label}</Text>
+                        <Text style={styles.stepDate}>{completed ? 'Completed' : 'Pending'}</Text>
+                      </View>
                     </View>
-                    <Text style={[styles.stepLabel, step.completed && styles.stepLabelActive]}>
-                      {step.label}
-                    </Text>
-                  </View>
-                  {idx < ORDER_STATUS_STEPS.length - 1 && (
-                    <View style={[styles.timelineLine, step.completed && styles.timelineLineCompleted]} />
-                  )}
-                </React.Fragment>
-              ))}
+                    {idx < ORDER_STATUS_STEPS.length - 1 && (
+                      <View style={[styles.timelineLine, completed && styles.timelineLineCompleted]} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </View>
           )}
           {!showTracking && (
@@ -114,15 +187,15 @@ export default function OrderDetailScreen({ navigation, route }) {
 
           <View style={styles.addressRow}>
             <View style={styles.iconBox}>
-              <MapPin size={18} color={COLORS.secondary} />
+              <MapPin size={18} color={THEME_COLORS.secondary} />
             </View>
             <View style={styles.addressInfo}>
               <Text style={styles.addressLabel}>Delivery Address</Text>
-              <Text style={styles.addressText}>{order.address?.name || 'Customer'}</Text>
+              <Text style={styles.addressText}>{currentOrder.address?.name || 'Customer'}</Text>
               <Text style={styles.addressSub}>
-                {order.address?.full || 'Address not available'}
+                {currentOrder.address?.full || currentOrder.address?.address || 'Address not available'}
               </Text>
-              <Text style={styles.addressSub}>{order.address?.phone || ''}</Text>
+              <Text style={styles.addressSub}>{currentOrder.address?.phone || ''}</Text>
             </View>
           </View>
 
@@ -130,7 +203,7 @@ export default function OrderDetailScreen({ navigation, route }) {
             style={[styles.trackBtn, showTracking && { backgroundColor: '#F1F5F9' }]}
             onPress={() => setShowTracking(!showTracking)}
           >
-            <Text style={[styles.trackBtnText, showTracking && { color: COLORS.text }]}>
+            <Text style={[styles.trackBtnText, showTracking && { color: THEME_COLORS.text }]}>
               {showTracking ? 'Hide tracking' : 'Track order'}
             </Text>
           </TouchableOpacity>
@@ -140,18 +213,18 @@ export default function OrderDetailScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Order Items</Text>
-            <Text style={styles.itemCount}>{order.items?.length || 0} items</Text>
+            <Text style={styles.itemCount}>{currentOrder.items?.length || 0} items</Text>
           </View>
 
-          {order.items?.map((item, idx) => (
-            <View key={idx} style={[styles.itemRow, idx === order.items.length - 1 && { borderBottomWidth: 0 }]}>
+          {currentOrder.items?.map((item, idx) => (
+            <View key={idx} style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }]}>
               <Image 
-                source={{ uri: item.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=200' }} 
+                source={{ uri: getImageUrl(item?.image || item?.product?.image || currentOrder?.image) }} 
                 style={styles.itemImg} 
               />
 
               <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemName}>{sanitizeData(item.name, 'Product')}</Text>
                 <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
                 <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
                 <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
@@ -177,9 +250,15 @@ export default function OrderDetailScreen({ navigation, route }) {
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Order Total</Text>
-            <Text style={styles.totalValue}>₹{order.total.toFixed(2)}</Text>
+            <Text style={styles.totalValue}>₹{currentOrder.total.toFixed(2)}</Text>
           </View>
         </View>
+
+        {currentOrder.status !== 'CANCELLED' && currentOrder.status !== 'DELIVERED' && currentOrder.status !== 'Refund Tracking' && (
+          <TouchableOpacity style={styles.cancelBigBtn} onPress={handleCancelOrder} disabled={loading}>
+            <Text style={styles.cancelBigBtnText}>{loading ? 'Cancelling...' : 'Cancel Order'}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -196,7 +275,7 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: COLORS.primary },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: THEME_COLORS.primary, fontFamily: 'Plus Jakarta Sans' },
 
   scrollBody: { padding: 20, paddingBottom: 40 },
 
@@ -206,14 +285,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  orderId: { fontSize: 18, fontWeight: '900', color: COLORS.text },
+  orderId: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.text, fontFamily: 'Plus Jakarta Sans' },
   updatedTime: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
 
   statusBadge: {
     backgroundColor: '#FFF9F3', alignSelf: 'flex-start',
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginBottom: 20,
   },
-  statusBadgeText: { color: '#F2994A', fontSize: 10, fontWeight: '800' },
+  statusBadgeText: { color: '#F2994A', fontSize: 10, fontWeight: '800', fontFamily: 'Plus Jakarta Sans' },
 
   timeline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   timelineStep: { alignItems: 'center', width: 60 },
@@ -225,13 +304,13 @@ const styles = StyleSheet.create({
   iconCircleCompleted: { backgroundColor: '#F2994A' },
   iconCircleActive: { borderWidth: 2, borderColor: '#F2994A' },
   stepLabel: { fontSize: 8, fontWeight: '800', color: '#94A3B8', textAlign: 'center' },
-  stepLabelActive: { color: COLORS.text },
+  stepLabelActive: { color: THEME_COLORS.text },
   timelineLine: { flex: 1, height: 2, backgroundColor: '#F1F5F9', marginTop: -20 },
   timelineLineCompleted: { backgroundColor: '#F2994A' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
-  deliveryDate: { fontSize: 18, fontWeight: '900', color: COLORS.secondary, marginBottom: 20 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text },
+  deliveryDate: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.secondary, marginBottom: 20, fontFamily: 'Plus Jakarta Sans' },
 
   addressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   iconBox: {
@@ -240,14 +319,14 @@ const styles = StyleSheet.create({
   },
   addressInfo: { marginLeft: 16 },
   addressLabel: { fontSize: 12, fontWeight: '700', color: '#94A3B8', marginBottom: 2 },
-  addressText: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 2 },
+  addressText: { fontSize: 14, fontWeight: '800', color: THEME_COLORS.text, marginBottom: 2, fontFamily: 'Plus Jakarta Sans' },
   addressSub: { fontSize: 12, color: '#64748B', fontWeight: '500' },
 
   trackBtn: {
-    height: 48, borderRadius: 24, backgroundColor: COLORS.secondary,
+    height: 48, borderRadius: 24, backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
-  trackBtnText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  trackBtnText: { color: '#FFF', fontSize: 14, fontWeight: '900', fontFamily: 'Plus Jakarta Sans' },
 
   itemCount: { fontSize: 12, fontWeight: '700', color: '#94A3B8' },
   itemRow: {
@@ -256,15 +335,22 @@ const styles = StyleSheet.create({
   },
   itemImg: { width: 70, height: 70, borderRadius: 12, backgroundColor: '#F1F5F9' },
   itemInfo: { flex: 1, marginLeft: 16, justifyContent: 'center' },
-  itemName: { fontSize: 15, fontWeight: '800', color: COLORS.text },
+  itemName: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text, fontFamily: 'Plus Jakarta Sans' },
   itemMeta: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
-  itemQty: { fontSize: 12, fontWeight: '700', color: COLORS.text, marginTop: 4 },
-  itemPrice: { fontSize: 14, fontWeight: '900', color: COLORS.primary, marginTop: 2 },
+  itemQty: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.text, marginTop: 4 },
+  itemPrice: { fontSize: 14, fontWeight: '900', color: THEME_COLORS.primary, marginTop: 2, fontFamily: 'Plus Jakarta Sans' },
 
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   summaryLabel: { fontSize: 14, color: '#64748B', fontWeight: '600' },
-  summaryValue: { fontSize: 14, color: COLORS.text, fontWeight: '700' },
+  summaryValue: { fontSize: 14, color: THEME_COLORS.text, fontWeight: '700' },
   totalRow: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 16, marginTop: 4 },
-  totalLabel: { fontSize: 16, fontWeight: '900', color: COLORS.text },
-  totalValue: { fontSize: 18, fontWeight: '900', color: COLORS.text },
+  totalLabel: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text },
+  totalValue: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.text },
+
+  cancelBigBtn: {
+    height: 56, borderRadius: 28, backgroundColor: '#FFF2F2',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 20, borderWidth: 1, borderColor: '#FFD5D5'
+  },
+  cancelBigBtnText: { color: '#EB5757', fontSize: 16, fontWeight: '800' }
 });

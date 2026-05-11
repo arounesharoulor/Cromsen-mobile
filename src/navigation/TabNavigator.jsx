@@ -4,11 +4,11 @@ import HomeScreen from '../screens/HomeScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import CartScreen from '../screens/CartScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../styling';
 import { View, StyleSheet, Platform, Text, Dimensions } from 'react-native';
 import { Home, ShoppingCart, UserCircle } from 'lucide-react-native';
 import { useCart } from '../context/CartContext';
-import { CategoryIcon } from '../components/CustomIcons';
+import { CategoryIcon, CartIcon } from '../components/CustomIcons';
 
 const { width } = Dimensions.get('window');
 const Tab = createBottomTabNavigator();
@@ -20,8 +20,8 @@ export default function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#F26522', // Orange for active
-        tabBarInactiveTintColor: '#94A3B8', // Slate for inactive
+        tabBarActiveTintColor: THEME_COLORS.secondary, // Orange for active
+        tabBarInactiveTintColor: THEME_COLORS.textSecondary, // Slate for inactive
         tabBarStyle: {
           position: 'absolute',
           bottom: 20,
@@ -74,7 +74,7 @@ export default function TabNavigator() {
           tabBarLabel: 'Cart',
           tabBarIcon: ({ color, focused }) => (
             <View>
-              <ShoppingCart color={color} size={24} />
+              <CartIcon color={color} size={24} />
               {cartCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeTxt}>{cartCount}</Text>
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -5,
     right: -10,
-    backgroundColor: '#F26522',
+    backgroundColor: THEME_COLORS.secondary,
     borderRadius: 8,
     width: 16,
     height: 16,

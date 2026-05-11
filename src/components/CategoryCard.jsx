@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { getImageUrl, sanitizeData } from '../services/api';
 
 export default function CategoryCard({ category, onPress, isActive }) {
@@ -37,15 +37,15 @@ const styles = StyleSheet.create({
     width: 110,
     height: 104,
     borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME_COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME_COLORS.border,
   },
   imgBoxActive: {
-    borderColor: COLORS.primary,
+    borderColor: THEME_COLORS.primary,
     borderWidth: 2,
   },
   img: { width: '100%', height: '100%' },
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: THEME_COLORS.primary,
     textAlign: 'center',
   },
   labelActive: { fontWeight: '900' },

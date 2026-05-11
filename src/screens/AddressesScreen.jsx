@@ -3,9 +3,12 @@ import { StyleSheet, Text, View, FlatList, TouchableOpacity, StatusBar, Modal, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MapPin, Plus, Trash2, X } from 'lucide-react-native';
+import { MapPin, Plus, Trash2, X, ArrowLeft } from 'lucide-react-native';
 import { sanitizeData, userService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { THEME_COLORS } from '../theme';
+import { BackIcon } from '../components/CustomIcons';
+import { EmptyState } from '../components';
 
 export default function AddressesScreen({ navigation }) {
   const [addresses, setAddresses] = useState([]);
@@ -53,7 +56,11 @@ export default function AddressesScreen({ navigation }) {
         try {
           const currentUserId = user?._id || user?.id;
           if (currentUserId) {
-            await userService.deleteAddress(currentUserId, id);
+            try {
+              await userService.deleteAddress(currentUserId, id);
+            } catch (err) {
+              console.warn('Backend delete failed, removing locally:', err);
+            }
           }
           const filtered = addresses.filter(a => (a.id !== id && a._id !== id));
           setAddresses(filtered);
@@ -82,7 +89,11 @@ export default function AddressesScreen({ navigation }) {
 
     try {
       if (currentUserId) {
-        await userService.addAddress(currentUserId, newAddr);
+        try {
+          await userService.addAddress(currentUserId, newAddr);
+        } catch (err) {
+          console.warn('Backend save failed, saving locally:', err);
+        }
       }
 
       let updated;
@@ -103,7 +114,7 @@ export default function AddressesScreen({ navigation }) {
 
   const openForm = (addr = null) => {
     if (addr) {
-      setEditingId(addr.id);
+      setEditingId(addr._id || addr.id);
       // Recovery logic for addresses saved with older structure
       const initialForm = {
         type: addr.type || addr.raw?.saveAs || 'HOME',
@@ -132,25 +143,25 @@ export default function AddressesScreen({ navigation }) {
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <BackIcon size={18} color={COLORS.primary} />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Addresses</Text>
         <TouchableOpacity style={styles.addBtn} onPress={() => openForm(null)}>
-          <Plus size={20} color={COLORS.primary} />
+          <Plus size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
 
       </View>
 
       {addresses.length === 0 ? (
         <EmptyState
-          icon={<MapPin size={52} color={COLORS.border} />}
+          icon={<MapPin size={52} color={THEME_COLORS.border} />}
           title="No Addresses Found"
           subtitle="You haven't saved any delivery addresses yet."
         />
       ) : (
         <FlatList
           data={addresses}
-          keyExtractor={a => a.id || a.address}
+          keyExtractor={(a, idx) => a._id || a.id || String(idx)}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.card} onPress={() => openForm(item)}>
@@ -228,13 +239,13 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
   addBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#004694' },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: THEME_COLORS.primary, fontFamily: 'Plus Jakarta Sans' },
   list: { padding: 20 },
   card: {
     backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16,
@@ -242,16 +253,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  cardType: { fontSize: 14, fontWeight: '800', color: COLORS.text },
+  cardType: { fontSize: 14, fontWeight: '800', color: THEME_COLORS.text, fontFamily: 'Plus Jakarta Sans' },
   delBtn: { padding: 4 },
-  addressText: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 4 },
+  addressText: { fontSize: 14, color: THEME_COLORS.textSecondary, marginBottom: 4, fontFamily: 'Plus Jakarta Sans' },
   
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: COLORS.primary },
-  label: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 12 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, height: 50, fontSize: 15, color: COLORS.text, fontWeight: '600' },
-  saveModalBtn: { backgroundColor: COLORS.primary, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 20 },
-  saveModalTxt: { color: '#FFF', fontSize: 16, fontWeight: '800' }
+  modalTitle: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.primary, fontFamily: 'Plus Jakarta Sans' },
+  label: { fontSize: 13, fontWeight: '700', color: THEME_COLORS.textSecondary, marginBottom: 8, marginTop: 12, fontFamily: 'Plus Jakarta Sans' },
+  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, height: 50, fontSize: 15, color: THEME_COLORS.text, fontWeight: '600', fontFamily: 'Plus Jakarta Sans' },
+  saveModalBtn: { backgroundColor: THEME_COLORS.primary, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 20 },
+  saveModalTxt: { color: '#FFF', fontSize: 16, fontWeight: '800', fontFamily: 'Plus Jakarta Sans' }
 });

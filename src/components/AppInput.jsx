@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../styling';
 
 const AppInput = forwardRef(({
   label,
@@ -23,7 +23,7 @@ const AppInput = forwardRef(({
         <TextInput
           ref={ref}
           style={[styles.input, leftIcon && styles.inputWithLeft, rightIcon && styles.inputWithRight, inputStyle]}
-          placeholderTextColor={COLORS.textSecondary}
+          placeholderTextColor={THEME_COLORS.textSecondary}
           {...props}
         />
 
@@ -47,20 +47,20 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
     marginBottom: 6,
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME_COLORS.border,
     borderRadius: 24,
     backgroundColor: '#FFFFFF',
     minHeight: 48,
   },
   inputWrapError: {
-    borderColor: COLORS.error,
+    borderColor: THEME_COLORS.error,
   },
   leftIcon: {
     paddingLeft: 14,
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     fontSize: 14,
-    color: COLORS.text,
+    color: THEME_COLORS.text,
     fontWeight: '500',
   },
   inputWithLeft: { paddingLeft: 4 },
@@ -83,12 +83,12 @@ const styles = StyleSheet.create({
   error: {
     marginTop: 4,
     fontSize: 12,
-    color: COLORS.error,
+    color: THEME_COLORS.error,
     fontWeight: '600',
   },
   hint: {
     marginTop: 4,
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
   },
 });

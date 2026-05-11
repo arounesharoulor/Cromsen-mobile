@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,15 +10,18 @@ import {
   ImageBackground,
   ActivityIndicator,
   StatusBar,
+  Animated,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, SPACING } from '../theme';
-import { ShoppingCart, Search, Menu, Bell, Star, MapPin } from 'lucide-react-native';
+import { FONTS, THEME_COLORS, SPACING } from '../styling';
+
+import { Search, Menu, Star, MapPin } from 'lucide-react-native';
 
 import { productService, categoryService, getImageUrl, sanitizeData } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { LogoIcon, BoldPlusIcon, CategoryIcon } from '../components/CustomIcons';
+import { LogoIcon, BoldPlusIcon, CategoryIcon, CartIcon } from '../components/CustomIcons';
 import ProductCard from '../components/ProductCard';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -58,7 +61,7 @@ const BANNER_DATA = [
   }
 ];
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, route }) {
   const { user } = useAuth();
   const [activeCategory, setActiveCategory] = useState('all');
   const [categories, setCategories] = useState([]);
@@ -67,21 +70,51 @@ export default function HomeScreen({ navigation }) {
   const [activeBanner, setActiveBanner] = useState(0);
   const { cartCount, addToCart } = useCart();
   const bannerRef = React.useRef(null);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const successAnim = useRef(new Animated.Value(-100)).current;
 
   useEffect(() => {
     const timer = setInterval(() => {
       let nextSlide = activeBanner + 1;
       if (nextSlide >= BANNER_DATA.length) nextSlide = 0;
-      
-      bannerRef.current?.scrollTo({
-        x: nextSlide * (width - 40),
-        animated: true,
-      });
+      bannerRef.current?.scrollTo({ x: nextSlide * (width - 40), animated: true });
       setActiveBanner(nextSlide);
     }, 4000);
-
     return () => clearInterval(timer);
   }, [activeBanner]);
+
+  // Show success toast when redirected from a successful payment
+  useEffect(() => {
+    if (route?.params?.paymentSuccess) {
+      handleShowSuccess();
+      // Clear the param so it doesn't fire again
+      navigation.setParams({ paymentSuccess: undefined });
+    }
+  }, [route?.params?.paymentSuccess]);
+
+  const handleShowSuccess = () => {
+    setShowSuccessBanner(true);
+    Animated.spring(successAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      speed: 12,
+      bounciness: 4,
+    }).start();
+
+    // Auto hide after 3 seconds
+    const t = setTimeout(() => {
+      hideSuccessBanner();
+    }, 3000);
+    return () => clearTimeout(t);
+  };
+
+  const hideSuccessBanner = () => {
+    Animated.timing(successAnim, {
+      toValue: -150,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setShowSuccessBanner(false));
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -105,10 +138,11 @@ export default function HomeScreen({ navigation }) {
   };
 
   if (loading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' }}>
-      <ActivityIndicator size="large" color={COLORS.secondary} />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME_COLORS.surface }}>
+      <ActivityIndicator size="large" color={THEME_COLORS.secondary} />
     </View>
   );
+
 
   const renderStars = (rating = 4.5) => (
     <View style={styles.starsRow}>
@@ -130,29 +164,41 @@ export default function HomeScreen({ navigation }) {
     : STATIC_CATEGORIES;
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={{ flex: 1, backgroundColor: THEME_COLORS.background }}>
+      <StatusBar barStyle="dark-content" backgroundColor={THEME_COLORS.surface} />
+
+      {/* ── PAYMENT SUCCESS TOAST ── */}
+      {showSuccessBanner && (
+        <Animated.View style={[styles.successToast, { transform: [{ translateY: successAnim }] }]}>
+          <View style={styles.successLeft}>
+            <View style={styles.successCheckCircle}>
+              <Text style={styles.successIcon}>✓</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.successTitle}>Order Placed Successfully!</Text>
+              <Text style={styles.successSub} numberOfLines={1}>Payment received. Thank you for shopping.</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.closeToastBtn} onPress={hideSuccessBanner}>
+            <Text style={styles.closeToastTxt}>✕</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* ── HEADER ── */}
         <View style={styles.headerContainer}>
           <View style={styles.headerTop}>
-            <View>
-              <LogoIcon size={44} />
-            </View>
-
+            <LogoIcon size={44} />
             <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.headerIconBtn}>
-                <Bell color={COLORS.text} size={20} />
-              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerIconBtn}
                 onPress={() => navigation.navigate('Cart')}
               >
-                <ShoppingCart color={COLORS.text} size={20} />
+                <CartIcon color={THEME_COLORS.text} size={24} />
                 {cartCount > 0 && (
-                  <View style={styles.badge}><Text style={styles.badgeTxt}>{cartCount}</Text></View>
+                  <View style={styles.badge}><Text style={styles.badgeTxt}>{String(cartCount)}</Text></View>
                 )}
               </TouchableOpacity>
             </View>
@@ -163,7 +209,7 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Search')}
             activeOpacity={0.85}
           >
-            <Search color={COLORS.textSecondary} size={18} />
+            <Search color={THEME_COLORS.textSecondary} size={18} />
             <Text style={styles.searchHint}>Search for Products...</Text>
           </TouchableOpacity>
         </View>
@@ -234,7 +280,7 @@ export default function HomeScreen({ navigation }) {
             </View>
 
             {loading ? (
-              <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />
+              <ActivityIndicator color={THEME_COLORS.primary} style={{ marginVertical: 20 }} />
             ) : (
               <ScrollView
                 horizontal
@@ -296,7 +342,7 @@ export default function HomeScreen({ navigation }) {
                         resizeMode="cover"
                       />
                     ) : (
-                      <CategoryIcon size={24} color={activeCategory === cat.id ? '#FFF' : COLORS.textSecondary} />
+                      <CategoryIcon size={24} color={activeCategory === cat.id ? THEME_COLORS.surface : THEME_COLORS.textSecondary} />
                     )}
                   </View>
                   <Text style={[
@@ -320,7 +366,7 @@ export default function HomeScreen({ navigation }) {
             </View>
 
             {loading ? (
-              <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />
+              <ActivityIndicator color={THEME_COLORS.primary} style={{ marginVertical: 20 }} />
             ) : (
               <ScrollView
                 horizontal
@@ -340,10 +386,10 @@ export default function HomeScreen({ navigation }) {
                     >
                       <View style={[styles.heroOverlay, { backgroundColor: 'transparent', borderRadius: 12, padding: 15 }]}>
                         <View style={{ backgroundColor: 'rgba(255,255,255,0.85)', padding: 10, borderRadius: 10, alignSelf: 'flex-start' }}>
-                          <Text style={[styles.heroTitle, { fontSize: 16, color: COLORS.text, marginBottom: 4 }]}>
+                          <Text style={[styles.heroTitle, { fontSize: 16, color: THEME_COLORS.text, marginBottom: 4 }]}>
                             {sanitizeData(p.name, 'Product')}
                           </Text>
-                          <Text style={[styles.heroBtnTxt, { fontSize: 13, color: COLORS.secondary }]}>₹{p.price?.toLocaleString()}</Text>
+                          <Text style={[styles.heroBtnTxt, { fontSize: 13, color: '#1E3C83' }]}>₹{p.price?.toLocaleString()}</Text>
                         </View>
                       </View>
                     </ImageBackground>
@@ -361,14 +407,14 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   headerContainer: {
     height: 150,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     paddingStart: 16,
     paddingTop: 26,
     paddingEnd: 16,
     paddingBottom: 20,
-    shadowColor: '#000000',
+    shadowColor: THEME_COLORS.text,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -392,24 +438,24 @@ const styles = StyleSheet.create({
   badge: {
     position: 'absolute', top: 2, right: 2,
     width: 15, height: 15, borderRadius: 8,
-    backgroundColor: COLORS.secondary,
+    backgroundColor: THEME_COLORS.secondary,
     justifyContent: 'center', alignItems: 'center',
   },
-  badgeTxt: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+  badgeTxt: { color: THEME_COLORS.surface, fontSize: 8, fontWeight: '900', fontFamily: FONTS.family },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderRadius: 24,
     height: 48,
     paddingHorizontal: 20,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: THEME_COLORS.border,
   },
-  searchHint: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '500' },
+  searchHint: { color: THEME_COLORS.textSecondary, fontSize: 14, fontWeight: '500', fontFamily: FONTS.family },
   scroll: { flex: 1 },
-  scrollBody: { backgroundColor: COLORS.background, paddingBottom: 110 },
+  scrollBody: { backgroundColor: THEME_COLORS.background, paddingBottom: 110 },
   carouselWrapper: {
     marginTop: 20,
     marginBottom: 24,
@@ -418,9 +464,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     height: 180,
     position: 'relative',
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME_COLORS.surface,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: THEME_COLORS.text,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -449,7 +495,7 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     width: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
   },
   heroOverlay: {
     flex: 1,
@@ -458,28 +504,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTag: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: THEME_COLORS.secondary,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     alignSelf: 'flex-start',
     marginBottom: 12,
   },
-  heroTagTxt: { color: '#FFF', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  heroTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', lineHeight: 32, marginBottom: 16 },
+  heroTagTxt: { color: THEME_COLORS.surface, fontSize: 9, fontWeight: '900', letterSpacing: 1, fontFamily: FONTS.family },
+  heroTitle: { color: THEME_COLORS.surface, fontSize: 24, fontWeight: '900', lineHeight: 32, marginBottom: 16, fontFamily: FONTS.family },
   heroBtn: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: THEME_COLORS.secondary,
     paddingHorizontal: 16, paddingVertical: 9,
     borderRadius: 10, alignSelf: 'flex-start',
   },
-  heroBtnTxt: { color: '#FFF', fontWeight: '900', fontSize: 12 },
+  heroBtnTxt: { color: THEME_COLORS.surface, fontWeight: '900', fontSize: 12, fontFamily: FONTS.family },
   section: { marginBottom: 22 },
   sectionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, marginBottom: 14,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '900', color: COLORS.text },
-  seeAll: { fontSize: 13, color: COLORS.primary, fontWeight: '700' },
+  sectionTitle: { fontSize: 17, fontWeight: '900', color: THEME_COLORS.text, fontFamily: FONTS.family },
+  seeAll: { fontSize: 13, color: THEME_COLORS.primary, fontWeight: '700', fontFamily: FONTS.family },
   catScroll: { paddingLeft: 20, paddingRight: 8 },
   catItem: { 
     alignItems: 'center', 
@@ -491,7 +537,7 @@ const styles = StyleSheet.create({
   },
   catIconBox: {
     width: 110, height: 104, borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME_COLORS.surface,
     justifyContent: 'center', alignItems: 'center',
     overflow: 'hidden',
     borderWidth: 1, borderColor: '#F2F2F2',
@@ -499,25 +545,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10,
   },
   catIconBoxActive: {
-    borderColor: COLORS.primary,
+    borderColor: THEME_COLORS.primary,
     borderWidth: 2,
   },
   catImage: { width: '100%', height: '100%' },
   catEmoji: { fontSize: 32 },
-  catLabel: { fontSize: 13, fontWeight: '700', color: COLORS.primary, textAlign: 'center' },
+  catLabel: { fontSize: 13, fontWeight: '700', color: THEME_COLORS.primary, textAlign: 'center', fontFamily: FONTS.family },
   catLabelActive: { fontWeight: '900' },
   bsScroll: { paddingLeft: 20, paddingRight: 8, paddingBottom: 10 },
   bsCard: {
     width: 157,
     height: 189,
     marginRight: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#000000',
+    borderColor: THEME_COLORS.text,
     paddingVertical: 5,
     paddingHorizontal: 0,
-    shadowColor: '#000000',
+    shadowColor: THEME_COLORS.text,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -532,21 +578,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   bsInfo: { paddingHorizontal: 4, paddingVertical: 4, flex: 1, justifyContent: 'space-between' },
-  categoryLabel: { fontSize: 10, color: COLORS.textSecondary, fontWeight: '500' },
-  bsName: { fontSize: 12, fontWeight: '700', color: COLORS.text, marginVertical: 1 },
+  categoryLabel: { fontSize: 10, color: THEME_COLORS.textSecondary, fontWeight: '500', fontFamily: FONTS.family },
+  bsName: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.text, marginVertical: 1, fontFamily: FONTS.family },
   bsBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  bsPrice: { fontSize: 14, fontWeight: '900', color: COLORS.primary },
+  bsPrice: { fontSize: 14, fontWeight: '900', color: THEME_COLORS.primary, fontFamily: FONTS.family },
   addIconBtn: {
     width: 28, height: 28, borderRadius: 8,
-    backgroundColor: '#004694',
+    backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
-  addIconTxt: { fontSize: 18, color: '#FFFFFF', fontWeight: '700', marginTop: -1 },
+  addIconTxt: { color: THEME_COLORS.surface, fontSize: 18, fontWeight: '700', marginTop: -1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 12 },
   gridCard: {
-    width: CARD_W, backgroundColor: '#FFFFFF',
+    width: CARD_W, backgroundColor: THEME_COLORS.surface,
     borderRadius: 18, overflow: 'hidden',
-    borderWidth: 1, borderColor: COLORS.border,
+    borderWidth: 1, borderColor: THEME_COLORS.border,
   },
   gridImgWrap: { position: 'relative' },
   gridImg: { width: '100%', height: 128, resizeMode: 'cover' },
@@ -557,13 +603,74 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   gridInfo: { padding: 10 },
-  gridName: { fontSize: 13, fontWeight: '800', color: COLORS.text, marginBottom: 3 },
+  gridName: { fontSize: 13, fontWeight: '800', color: THEME_COLORS.text, marginBottom: 3, fontFamily: FONTS.family },
   gridPriceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
-  gridPrice: { fontSize: 14, fontWeight: '900', color: COLORS.primary },
+  gridPrice: { fontSize: 14, fontWeight: '900', color: THEME_COLORS.primary, fontFamily: FONTS.family },
   gridAddBtn: {
     width: 26, height: 26, borderRadius: 8,
-    backgroundColor: COLORS.secondary,
+    backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
-  gridAddTxt: { color: '#FFF', fontSize: 16, fontWeight: '900', marginTop: -1 },
+  gridAddTxt: { color: THEME_COLORS.surface, fontSize: 16, fontWeight: '900', marginTop: -1 },
+
+  successToast: {
+    position: 'absolute',
+    top: 0,
+    left: 10,
+    right: 10,
+    zIndex: 9999,
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    paddingBottom: 16,
+    borderRadius: 16,
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  successLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  successCheckCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successIcon: {
+    fontSize: 16,
+    color: '#FFF',
+    fontWeight: '900',
+  },
+  successTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#FFF',
+  },
+  successSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+  },
+  closeToastBtn: {
+    padding: 8,
+    marginLeft: 10,
+  },
+  closeToastTxt: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+    opacity: 0.8,
+  },
 });

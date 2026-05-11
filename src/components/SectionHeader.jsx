@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 
 export default function SectionHeader({ title, onSeeAll, style }) {
   return (
@@ -26,11 +26,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: '900',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
   },
   seeAll: {
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: THEME_COLORS.primary,
   },
 });

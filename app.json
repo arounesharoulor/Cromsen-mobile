@@ -3,6 +3,8 @@
     "name": "Cromsen",
     "slug": "cromsen-mobile",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
@@ -19,7 +21,11 @@
       "package": "com.cromsen.app"
     },
     "web": {},
+    "experiments": {
+      "bridgeless": false
+    },
     "extra": {
+
       "eas": {
         "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
       }

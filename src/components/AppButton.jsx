@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../styling';
 
 /**
  * Primary CTA button. Variants: 'primary' | 'secondary' | 'outline' | 'ghost'
@@ -34,7 +34,7 @@ export default function AppButton({
   return (
     <TouchableOpacity style={btnStyle} onPress={onPress} disabled={disabled || loading} activeOpacity={0.85}>
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' || variant === 'ghost' ? COLORS.primary : '#FFF'} />
+        <ActivityIndicator color={variant === 'outline' || variant === 'ghost' ? THEME_COLORS.primary : '#FFF'} />
       ) : (
         <View style={styles.row}>
           {icon && iconPosition === 'left' && <View style={styles.iconLeft}>{icon}</View>}
@@ -63,17 +63,17 @@ const styles = StyleSheet.create({
 
   // Variants
   variant_primary: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME_COLORS.primary,
     elevation: 4,
-    shadowColor: COLORS.primary,
+    shadowColor: THEME_COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
   variant_secondary: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: THEME_COLORS.secondary,
     elevation: 4,
-    shadowColor: COLORS.secondary,
+    shadowColor: THEME_COLORS.secondary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   variant_outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: COLORS.primary,
+    borderColor: THEME_COLORS.primary,
   },
   variant_ghost: {
     backgroundColor: 'transparent',
@@ -95,8 +95,8 @@ const styles = StyleSheet.create({
 
   textVariant_primary: { color: '#FFFFFF' },
   textVariant_secondary: { color: '#FFFFFF' },
-  textVariant_outline: { color: COLORS.primary },
-  textVariant_ghost: { color: COLORS.primary },
+  textVariant_outline: { color: THEME_COLORS.primary },
+  textVariant_ghost: { color: THEME_COLORS.primary },
 
   disabled: { opacity: 0.5 },
 });

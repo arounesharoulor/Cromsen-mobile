@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, StatusBar, Image, Dimensions, KeyboardAvoidingView
+  TextInput, Platform, StatusBar, Image, Dimensions, KeyboardAvoidingView, Linking, NativeModules, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { ArrowLeft, Check, ChevronRight, Plus, Trash2, MapPin, ClipboardList, CreditCard } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
 import { getImageUrl, sanitizeData, userService } from '../services/api';
-import { BackIcon } from '../components/CustomIcons';
+import RazorpayCheckout from 'react-native-razorpay';
 import { useAuth } from '../context/AuthContext';
 
 
 
 const { width } = Dimensions.get('window');
+
 
 const STEPS = [
   { label: 'Address', icon: <MapPin size={12} color="#FFF" /> },
@@ -23,13 +25,65 @@ const STEPS = [
   { label: 'Payment', icon: <CreditCard size={12} color="#FFF" /> },
 ];
 
+/* ─── Add Address Form Styles ─── */
+const f = StyleSheet.create({
+  scroll: { flexGrow: 1, paddingBottom: 40 },
+  formContainer: { padding: 20 },
+  row: { flexDirection: 'row', marginBottom: 16 },
+  fieldGroup: { marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
+  field: {
+    height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0',
+    paddingHorizontal: 14, fontSize: 14, color: '#1E293B', backgroundColor: '#F8FAFC',
+  },
+  fieldError: { borderColor: '#EB5757' },
+  errorTxt: { fontSize: 11, color: '#EB5757', marginTop: 4 },
+  locateMeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#004694', borderRadius: 12,
+    paddingVertical: 10, marginBottom: 20,
+  },
+  locateMeTxt: { fontSize: 13, fontWeight: '700', color: '#004694', marginLeft: 8 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 10 },
+  saveAsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  saveAsChip: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: '#E2E8F0',
+    alignItems: 'center', backgroundColor: '#F8FAFC',
+  },
+  saveAsChipActive: { backgroundColor: '#004694', borderColor: '#004694' },
+  saveAsTxt: { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  saveBtn: {
+    backgroundColor: '#004694', height: 52, borderRadius: 26,
+    justifyContent: 'center', alignItems: 'center', marginTop: 4,
+  },
+  saveBtnTxt: { color: '#FFF', fontSize: 15, fontWeight: '900' },
+});
+
 /* ─── Add Address Form ─── */
 function AddAddressForm({ onSave, initialData }) {
-  const [form, setForm] = useState(initialData || {
-    firstName: '', countryCode: '+91', mobile: '',
-    pincode: '', state: '', city: '',
-    line1: '', line2: '', saveAs: 'HOME',
-  });
+  // Map incoming data (could be raw backend format or formatted app format)
+  const getInitialForm = () => {
+    if (!initialData) return {
+      firstName: '', countryCode: '+91', mobile: '',
+      pincode: '', state: '', city: '',
+      line1: '', line2: '', saveAs: 'HOME',
+    };
+
+    return {
+      firstName: initialData.firstName || initialData.name || '',
+      countryCode: initialData.countryCode || (initialData.phone?.startsWith('+') ? initialData.phone.split(' ')[0] : '+91'),
+      mobile: initialData.mobile || (initialData.phone?.includes(' ') ? initialData.phone.split(' ')[1] : initialData.phone) || '',
+      pincode: initialData.pincode || initialData.zip || '',
+      state: initialData.state || '',
+      city: initialData.city || '',
+      line1: initialData.line1 || initialData.address || '',
+      line2: initialData.line2 || '',
+      saveAs: initialData.saveAs || initialData.type || 'HOME',
+    };
+  };
+
+  const [form, setForm] = useState(getInitialForm());
   const [errors, setErrors] = useState({});
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
@@ -77,13 +131,13 @@ function AddAddressForm({ onSave, initialData }) {
             acc.push(
               <View key={field.key} style={f.row}>
                 <View style={[f.fieldGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={f.fieldLabel}>{field.label}<Text style={{color: '#EB5757'}}>*</Text></Text>
+                  <Text style={f.fieldLabel}>{field.label}<Text style={{color: THEME_COLORS.error}}>*</Text></Text>
                   <TextInput style={[f.field, errors[field.key] && f.fieldError]} placeholder={field.placeholder} value={form[field.key]} onChangeText={(v) => set(field.key, v)} keyboardType={field.keyType || 'default'} />
                   {errors[field.key] && <Text style={f.errorTxt}>{errors[field.key]}</Text>}
                 </View>
                 {next && next.half && (
                   <View style={[f.fieldGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={f.fieldLabel}>{next.label}<Text style={{color: '#EB5757'}}>*</Text></Text>
+                    <Text style={f.fieldLabel}>{next.label}<Text style={{color: THEME_COLORS.error}}>*</Text></Text>
                     <TextInput style={[f.field, errors[next.key] && f.fieldError]} placeholder={next.placeholder} value={form[next.key]} onChangeText={(v) => set(next.key, v)} keyboardType={next.keyType || 'default'} />
                     {errors[next.key] && <Text style={f.errorTxt}>{errors[next.key]}</Text>}
                   </View>
@@ -93,11 +147,11 @@ function AddAddressForm({ onSave, initialData }) {
           } else {
             acc.push(
               <View key={field.key} style={f.fieldGroup}>
-                <Text style={f.fieldLabel}>{field.label}{field.required !== false && <Text style={{color: '#EB5757'}}>*</Text>}</Text>
+                <Text style={f.fieldLabel}>{field.label}{field.required !== false && <Text style={{color: THEME_COLORS.error}}>*</Text>}</Text>
                 <TextInput
                   style={[f.field, errors[field.key] && f.fieldError]}
                   placeholder={field.placeholder}
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={THEME_COLORS.textSecondary}
                   value={form[field.key]}
                   onChangeText={(v) => set(field.key, v)}
                   keyboardType={field.keyType || 'default'}
@@ -109,6 +163,41 @@ function AddAddressForm({ onSave, initialData }) {
           return acc;
 
         }, [])}
+
+        <TouchableOpacity 
+          style={f.locateMeBtn} 
+          onPress={async () => {
+            try {
+              alert('Fetching your current location...');
+              navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                  const { latitude, longitude } = position.coords;
+                  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                  const data = await res.json();
+                  if (data.address) {
+                    const a = data.address;
+                    setForm(f => ({
+                      ...f,
+                      pincode: a.postcode || f.pincode,
+                      state: a.state || a.state_district || f.state,
+                      city: a.city || a.town || a.village || f.city,
+                      line1: a.road || a.suburb || a.pedestrian || f.line1,
+                      line2: a.neighbourhood || a.suburb || f.line2,
+                    }));
+                    alert('Address updated from location!');
+                  }
+                },
+                (err) => alert('Location access denied or unavailable.'),
+                { enableHighAccuracy: true, timeout: 20000 }
+              );
+            } catch (e) {
+              alert('Failed to get location.');
+            }
+          }}
+        >
+          <MapPin size={16} color={THEME_COLORS.primary} />
+          <Text style={f.locateMeTxt}>Use Current Location</Text>
+        </TouchableOpacity>
 
         <Text style={f.sectionLabel}>Save Address as</Text>
         <View style={f.saveAsRow}>
@@ -138,14 +227,22 @@ function AddAddressForm({ onSave, initialData }) {
 }
 
 
-export default function CheckoutScreen({ navigation }) {
-  const { cartItems, clearCart } = useCart();
-  const { user } = useAuth();
+export default function CheckoutScreen({ navigation, route }) {
+  const { cartItems: contextCartItems, clearCart } = useCart();
+  const directItem = route?.params?.directItem;
+  const cartItems = directItem ? [directItem] : contextCartItems;
+  
+  const { user, updateUser } = useAuth();
   const [addresses, setAddresses] = useState([]);
   const [step, setStep] = useState(0);
   const [selAddr, setSelAddr] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddr, setEditingAddr] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('RAZORPAY');
+
+  const [paymentHtml, setPaymentHtml] = useState('');
+  const [showWebView, setShowWebView] = useState(false);
+  const [pendingOrderDetails, setPendingOrderDetails] = useState(null);
 
 
   useEffect(() => {
@@ -198,7 +295,19 @@ export default function CheckoutScreen({ navigation }) {
 
       // Save to backend if logged in
       if (currentUserId) {
-        await userService.addAddress(currentUserId, formatted);
+        try {
+          await userService.addAddress(currentUserId, formatted);
+          // Also update user profile phone if missing or different
+          if (!user?.phone || user.phone !== formatted.phone) {
+            await userService.updateProfile(currentUserId, { phone: formatted.phone });
+          }
+        } catch (err) {
+          console.warn('Backend sync failed, state will still be updated locally:', err);
+        }
+        // Always update local context state
+        if (!user?.phone || user.phone !== formatted.phone) {
+          updateUser({ ...user, phone: formatted.phone });
+        }
       }
 
       let updated;
@@ -226,15 +335,76 @@ export default function CheckoutScreen({ navigation }) {
   };
 
 
+  const handleWebViewMessage = async (event) => {
+    try {
+      const result = JSON.parse(event.nativeEvent.data);
+      if (result.status === 'success') {
+        setShowWebView(false);
+        const { finalOrder, rzpOrderData } = pendingOrderDetails;
+        const paymentData = result;
+        const API_URL = 'https://cromsen-backend.onrender.com/api';
+        
+        // STEP 5: VERIFY PAYMENT & SAVE ORDER TO ADMIN (Done in one call now)
+        try {
+          await userService.verifyPayment({
+            razorpay_order_id: result.razorpay_order_id,
+            razorpay_payment_id: result.razorpay_payment_id,
+            razorpay_signature: result.razorpay_signature,
+          }, finalOrder);
+        } catch (vErr) {
+          console.warn('Verify Payment Error:', vErr);
+        }
+
+        // STEP 6: FINALIZE LOCAL STATE
+        const finalOrderWithPayment = {
+          ...finalOrder,
+          paymentStatus: 'Paid',
+          paymentId: result.razorpay_payment_id,
+          razorpay_order_id: result.razorpay_order_id,
+        };
+        
+        const storedOrders = await AsyncStorage.getItem('@UserOrders');
+        const orders = storedOrders ? JSON.parse(storedOrders) : [];
+        await AsyncStorage.setItem('@UserOrders', JSON.stringify([finalOrderWithPayment, ...orders]));
+
+        clearCart();
+        navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
+
+      } else if (result.status === 'cancelled') {
+        setShowWebView(false);
+        alert('Payment Cancelled by user.');
+      } else if (result.status === 'failed') {
+        setShowWebView(false);
+        alert('Payment Failed.');
+      }
+    } catch (e) {
+      console.error("WebView Message Error", e);
+      setShowWebView(false);
+      alert('An error occurred while processing the payment.');
+    }
+  };
+
+
   const subtotal = cartItems.reduce((acc, item) => {
     const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
     return acc + (price * (item.quantity || 1));
   }, 0);
-  const discount = 0; // Removing hardcoded discount for now to show correct amount
-  const total = subtotal - discount;
+  
+  // Align with CartScreen logic for consistency
+  const discount = Math.round(subtotal * 0.15); // 15% discount
+  const packagingFee = 7; // Packaging fee
+  const shippingFee = 20; // Shipping fee
+  const total = subtotal - discount + packagingFee;
+  const grandTotal = total + shippingFee;
 
 
   const next = async () => {
+    if (cartItems.length === 0) {
+      alert('Your cart is empty! Please add products before checking out.');
+      navigation.navigate('Main');
+      return;
+    }
+
     if (step === 0) {
       if (!selAddr) {
         alert('Please select or add a delivery address');
@@ -246,47 +416,251 @@ export default function CheckoutScreen({ navigation }) {
     } else if (step === 2) {
       // Place Order Logic
       try {
-        const selectedAddress = addresses.find(a => a.id === selAddr);
+        const selectedAddress = addresses.find(a => (a.id === selAddr || a._id === selAddr));
         const orderId = `#ORD-${Math.floor(1000 + Math.random() * 9000)}`;
         const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
         
         const firstItem = cartItems[0] || {};
+        
+        // Simulation of Razorpay Payment Process
+        let paymentId = 'COD';
+        let paymentStatus = 'Pending';
+        
+        if (paymentMethod === 'RAZORPAY') {
+          const API_URL = 'https://cromsen-backend.onrender.com/api';
+
+          try {
+            const finalAmount = Math.round(grandTotal);
+            console.log(`Initializing Razorpay Order: Amount ${finalAmount} (INR)`);
+
+            // STEP 1: CREATE ORDER FROM BACKEND
+            // Note: Sending amount in paise (Rupees * 100) to avoid Bad Request (400)
+            const rzpOrderRes = await fetch(`${API_URL}/payment/create-order`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amount: finalAmount }),
+            });
+
+            if (!rzpOrderRes.ok) {
+              const errTxt = await rzpOrderRes.text();
+              throw new Error(`Backend Payment Error ${rzpOrderRes.status}: ${errTxt}`);
+            }
+
+            const rzpOrderData = await rzpOrderRes.json();
+            console.log('Razorpay Order Data:', rzpOrderData);
+
+            if (!rzpOrderData?.id) {
+              throw new Error('No Razorpay Order ID returned');
+            }
+
+            // STEP 2: PREPARE ORDER FOR ADMIN TABLE
+            const finalOrder = {
+              id: orderId,
+              date: date,
+              status: 'Processing',
+              paymentStatus: 'Pending',
+              paymentId: rzpOrderData.id,
+              paymentMethod: 'RAZORPAY',
+              total: finalAmount,
+              itemsCount: cartItems.length,
+              mainProduct: sanitizeData(firstItem.name || 'Product', 'Product'),
+              image: getImageUrl(firstItem.image),
+              userId: user?._id || user?.id,
+              email: user?.email || '',
+              items: cartItems.map(item => ({
+                ...item,
+                _id: item._id || item.id || item.product || '',
+                name: sanitizeData(item.name || 'Product', 'Product'),
+                image: getImageUrl(item.image),
+                price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+              })),
+              address: selectedAddress,
+            };
+
+            // STEP 3: SAVE PENDING ORDER TO ADMIN
+            try {
+              await userService.createOrder(finalOrder);
+              console.log('Order synced to Admin Table');
+            } catch (syncErr) {
+              console.warn('Admin Sync Warning:', syncErr);
+            }
+
+            // STEP 4: CHOOSE METHOD (Native SDK vs Secure Browser)
+            // Strict check to ensure the Native Module is actually linked (prevents crashes in Expo Go)
+            const isNativeLinked = NativeModules && (NativeModules.RazorpayCheckout || NativeModules.RazorpayEventEmitter);
+            
+            if (RazorpayCheckout && isNativeLinked && typeof RazorpayCheckout.open === 'function') {
+              console.log('Opening Razorpay Native SDK...');
+              
+              const options = {
+                key: 'rzp_test_SNY1G9ELPHlY7P',
+                amount: (finalAmount * 100).toString(),
+                currency: 'INR',
+                order_id: rzpOrderData.id,
+                name: 'Cromsen',
+                prefill: {
+                  name: user?.name || selectedAddress?.name || 'Customer',
+                  email: user?.email || 'customer@example.com',
+                  contact: selectedAddress?.phone?.replace(/\D/g, '').slice(-10) || '9999999999',
+                },
+                theme: { color: '#004694' },
+                modal: { ondismiss: () => alert('Payment Cancelled') },
+              };
+
+              const paymentData = await RazorpayCheckout.open(options);
+              console.log('Payment Success:', paymentData);
+
+              // STEP 5: VERIFY PAYMENT & SAVE ORDER
+              // STEP 5: VERIFY PAYMENT & SAVE ORDER TO ADMIN
+              try {
+                await userService.verifyPayment({
+                  razorpay_order_id: paymentData.razorpay_order_id,
+                  razorpay_payment_id: paymentData.razorpay_payment_id,
+                  razorpay_signature: paymentData.razorpay_signature,
+                }, finalOrder);
+              } catch (vErr) {
+                console.warn('Verify Payment Error (Native):', vErr);
+              }
+
+              // STEP 6: FINALIZE LOCAL STATE
+              const finalOrderWithPayment = {
+                ...finalOrder,
+                paymentStatus: 'Paid',
+                paymentId: paymentData.razorpay_payment_id,
+                razorpay_order_id: paymentData.razorpay_order_id,
+              };
+
+              const storedOrders = await AsyncStorage.getItem('@UserOrders');
+              const orders = storedOrders ? JSON.parse(storedOrders) : [];
+              await AsyncStorage.setItem('@UserOrders', JSON.stringify([finalOrderWithPayment, ...orders]));
+ 
+              if (!directItem) clearCart();
+              navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
+            } else {
+              // METHOD B: WEBVIEW FALLBACK FOR EXPO GO
+              console.log('Native SDK not linked, injecting Razorpay via WebView...');
+              
+              setPendingOrderDetails({ finalOrder, rzpOrderData });
+              
+              const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+                </head>
+                <body style="background-color: #fff; height: 100vh; display: flex; justify-content: center; align-items: center; margin: 0;">
+                  <h3 style="text-align: center; font-family: sans-serif; color: #666;">Loading Secure Payment...</h3>
+                  <script>
+                    var options = {
+                      "key": "rzp_test_SNY1G9ELPHlY7P",
+                      "amount": "${Math.floor(finalAmount * 100)}",
+                      "currency": "INR",
+                      "name": "Cromsen",
+                      "description": "Order Payment",
+                      "order_id": "${rzpOrderData.id}",
+                      "prefill": {
+                        "name": "${user?.name || selectedAddress?.name || 'Customer'}",
+                        "email": "${user?.email || 'customer@example.com'}",
+                        "contact": "${selectedAddress?.phone?.replace(/\\D/g, '').slice(-10) || '9999999999'}"
+                      },
+                      "theme": {
+                        "color": "#004694"
+                      },
+                      "handler": function (response){
+                        window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                          status: 'success', 
+                          razorpay_payment_id: response.razorpay_payment_id,
+                          razorpay_order_id: response.razorpay_order_id,
+                          razorpay_signature: response.razorpay_signature 
+                        }));
+                      },
+                      "modal": {
+                        "ondismiss": function(){
+                          window.ReactNativeWebView.postMessage(JSON.stringify({ status: 'cancelled' }));
+                        }
+                      }
+                    };
+                    var rzp1 = new Razorpay(options);
+                    rzp1.on('payment.failed', function (response){
+                      window.ReactNativeWebView.postMessage(JSON.stringify({ status: 'failed' }));
+                    });
+                    
+                    setTimeout(function() {
+                      rzp1.open();
+                    }, 500);
+                  </script>
+                </body>
+                </html>
+              `;
+              
+              setPaymentHtml(html);
+              setShowWebView(true);
+            }
+
+          } catch (err) {
+            console.error('Razorpay Error:', err);
+            alert(err.message || 'Payment cancelled or failed');
+          }
+          return;
+        }
+
+        // COD Flow
         const newOrder = {
           id: orderId,
           date: date,
-          status: 'ORDER CONFIRMED',
-          total: total + 20, // total + shipping
+          status: 'Processing',
+          paymentStatus: 'Pending',
+          paymentId: 'COD',
+          paymentMethod: 'COD',
+          total: grandTotal,
           itemsCount: cartItems.length,
           mainProduct: sanitizeData(firstItem.name || 'Product', 'Product'),
           image: getImageUrl(firstItem.image),
           userId: user?._id || user?.id,
+          email: user?.email || '',
           items: cartItems.map(item => ({
             ...item,
+            _id: item._id || item.id || item.product || '',
             name: sanitizeData(item.name || 'Product', 'Product'),
             image: getImageUrl(item.image),
-            price: typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0)
+            price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0
           })),
           address: selectedAddress,
         };
 
-
-
+        const finalCODOrder = {
+          ...newOrder,
+          user: (user?._id || user?.id),
+          guestEmail: user?.email || '',
+          totalAmount: grandTotal,
+          shippingAddress: {
+            name: selectedAddress.name,
+            address: selectedAddress.full || selectedAddress.address,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            zip: selectedAddress.zip,
+            phone: selectedAddress.phone,
+            country: 'India'
+          }
+        };
+ 
+        try {
+          await userService.createOrder(finalCODOrder);
+          console.log('COD Order synced to Admin Table');
+        } catch (syncErr) {
+          console.warn('COD Admin Sync Warning:', syncErr);
+        }
         const storedOrders = await AsyncStorage.getItem('@UserOrders');
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
-        const updatedOrders = [newOrder, ...orders];
-        await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+        await AsyncStorage.setItem('@UserOrders', JSON.stringify([newOrder, ...orders]));
 
-        // Save to backend
-        await userService.createOrder(newOrder);
-
-        // Clear cart
-        clearCart();
-
+        if (!directItem) clearCart();
         alert('Order Placed Successfully!');
-        navigation.navigate('HomeTab');
+        navigation.navigate('Main');
       } catch (e) {
-        console.error('Error placing order:', e);
-        alert('Failed to place order. Please try again.');
+        console.error('Checkout Error:', e);
+        alert(`Failed to place order: ${e.message || 'Unknown error'}`);
       }
     }
   };
@@ -319,7 +693,7 @@ export default function CheckoutScreen({ navigation }) {
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={back}>
-          <BackIcon color={COLORS.text} size={20} />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>
           {showAddForm ? 'Add Address' : step === 0 ? 'Select Delivery Address' : step === 1 ? 'Order Summary' : 'Payment'}
@@ -330,7 +704,7 @@ export default function CheckoutScreen({ navigation }) {
       {!showAddForm && <StepBar />}
 
       {showAddForm ? (
-        <AddAddressForm onSave={handleSaveAddress} initialData={editingAddr?.raw} />
+        <AddAddressForm onSave={handleSaveAddress} initialData={editingAddr} />
       ) : step === 0 ? (
         <ScrollView contentContainerStyle={s.content}>
           {addresses.map((addr) => (
@@ -340,7 +714,7 @@ export default function CheckoutScreen({ navigation }) {
               onPress={() => setSelAddr(addr.id)}
             >
               <View style={s.addrCardHeader}>
-                <View style={[s.addrTypeBadge, { backgroundColor: COLORS.secondary }]}>
+                <View style={[s.addrTypeBadge, { backgroundColor: THEME_COLORS.primary }]}>
                   <Text style={s.addrTypeTxt}>{addr.type}</Text>
                 </View>
                 <View style={[s.radio, selAddr === addr.id && s.radioActive]}>
@@ -363,7 +737,7 @@ export default function CheckoutScreen({ navigation }) {
           ))}
           
           <TouchableOpacity style={s.addNewBtn} onPress={() => { setEditingAddr(null); setShowAddForm(true); }}>
-            <View style={s.plusCircle}><Plus size={16} color={COLORS.secondary} /></View>
+            <View style={s.plusCircle}><Plus size={16} color={THEME_COLORS.primary} /></View>
             <Text style={s.addNewTxt}>Add New Address</Text>
           </TouchableOpacity>
 
@@ -410,11 +784,12 @@ export default function CheckoutScreen({ navigation }) {
           {/* Price Summary */}
           <View style={s.priceSummary}>
             <View style={s.priceRow}><Text style={s.priceLbl}>Subtotal</Text><Text style={s.priceVal}>₹{subtotal}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹20</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>Discount</Text><Text style={[s.priceVal, {color: '#27AE60'}]}>-₹{discount}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{shippingFee}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{packagingFee}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Discount (15%)</Text><Text style={[s.priceVal, {color: '#27AE60'}]}>-₹{discount}</Text></View>
             <View style={[s.priceRow, {marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9'}]}>
               <Text style={s.totalLbl}>Order Total</Text>
-              <Text style={s.totalVal}>₹{total + 20}</Text>
+              <Text style={s.totalVal}>₹{grandTotal}</Text>
             </View>
           </View>
 
@@ -428,26 +803,23 @@ export default function CheckoutScreen({ navigation }) {
             <Text style={s.sectionTitle}>Payment Method</Text>
           </View>
           
-          <TouchableOpacity style={[s.paymentCard, {borderColor: COLORS.secondary}]}>
+          <View style={[s.paymentCard, {borderColor: THEME_COLORS.primary, borderWidth: 2}]}>
             <View style={s.paymentHeader}>
-              <Text style={s.paymentName}>Cash on Delivery (COD)</Text>
-              <View style={s.radioActive}><View style={s.radioInner} /></View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <CreditCard size={20} color={THEME_COLORS.primary} />
+                <Text style={s.paymentName}>Online Payment (Razorpay)</Text>
+              </View>
+              <View style={[s.radio, s.radioActive]}>
+                <View style={s.radioInner} />
+              </View>
             </View>
-            <Text style={s.paymentDesc}>Pay in cash when your order is delivered to your doorstep.</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[s.paymentCard, {opacity: 0.6}]} disabled>
-            <View style={s.paymentHeader}>
-              <Text style={s.paymentName}>Online Payment (Coming Soon)</Text>
-              <View style={s.radio} />
-            </View>
-            <Text style={s.paymentDesc}>Credit/Debit Cards, UPI, Netbanking.</Text>
-          </TouchableOpacity>
+            <Text style={s.paymentDesc}>Pay securely via Credit Card, Debit Card, UPI, or Netbanking using your Razorpay account.</Text>
+          </View>
 
           <View style={s.priceSummary}>
              <View style={s.priceRow}>
               <Text style={s.totalLbl}>Payable Amount</Text>
-              <Text style={s.totalVal}>₹{total + 20}</Text>
+              <Text style={s.totalVal}>₹{grandTotal}</Text>
             </View>
           </View>
 
@@ -456,6 +828,26 @@ export default function CheckoutScreen({ navigation }) {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Razorpay WebView Modal */}
+      <Modal visible={showWebView} animationType="slide" onRequestClose={() => setShowWebView(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ height: 50, backgroundColor: '#f8f9fa', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#ddd' }}>
+            <TouchableOpacity onPress={() => setShowWebView(false)}>
+              <Text style={{ fontSize: 16, color: THEME_COLORS.primary, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '600', marginRight: 40 }}>Secure Payment</Text>
+          </View>
+          <WebView
+            originWhitelist={['*']}
+            source={{ html: paymentHtml }}
+            onMessage={handleWebViewMessage}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            style={{ flex: 1 }}
+          />
+        </SafeAreaView>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -469,113 +861,87 @@ const s = StyleSheet.create({
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: COLORS.primary },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: THEME_COLORS.primary },
 
   stepBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFF', paddingVertical: 20, paddingHorizontal: 40,
-    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    backgroundColor: THEME_COLORS.surface, paddingVertical: 20, paddingHorizontal: 40,
+    borderBottomWidth: 1, borderBottomColor: THEME_COLORS.background,
   },
   stepItem: { alignItems: 'center' },
   stepCircle: {
     width: 24, height: 24, borderRadius: 12, backgroundColor: '#CBD5E1',
     justifyContent: 'center', alignItems: 'center', marginBottom: 4,
   },
-  stepCircleActive: { backgroundColor: COLORS.secondary },
+  stepCircleActive: { backgroundColor: THEME_COLORS.primary },
   stepLabel: { fontSize: 9, fontWeight: '700', color: '#94A3B8' },
-  stepLabelActive: { color: COLORS.text },
+  stepLabelActive: { color: THEME_COLORS.text },
   stepLine: { width: 40, height: 2, backgroundColor: '#CBD5E1', marginBottom: 15, marginHorizontal: 4 },
-  stepLineActive: { backgroundColor: COLORS.secondary },
+  stepLineActive: { backgroundColor: THEME_COLORS.primary },
 
   content: { padding: 20, paddingBottom: 40 },
   addrCard: {
     backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 16,
     borderWidth: 2, borderColor: 'transparent',
   },
-  addrCardActive: { borderColor: COLORS.secondary },
+  addrCardActive: { borderColor: THEME_COLORS.primary },
   addrCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   addrTypeBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
   addrTypeTxt: { fontSize: 10, fontWeight: '900', color: '#FFF' },
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#CBD5E1', justifyContent: 'center', alignItems: 'center' },
-  radioActive: { borderColor: COLORS.secondary },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.secondary },
-  addrName: { fontSize: 16, fontWeight: '900', color: COLORS.text, marginBottom: 4 },
-  addrPhone: { fontSize: 13, fontWeight: '700', color: COLORS.secondary, marginBottom: 8 },
+  radioActive: { borderColor: THEME_COLORS.primary },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: THEME_COLORS.primary },
+  addrName: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text, marginBottom: 4 },
+  addrPhone: { fontSize: 13, fontWeight: '700', color: THEME_COLORS.primary, marginBottom: 8 },
   addrFull: { fontSize: 13, color: '#64748B', lineHeight: 20 },
   addrActions: { flexDirection: 'row', marginTop: 12, gap: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 },
   addrActionBtn: { paddingVertical: 4 },
-  addrActionTxt: { fontSize: 13, fontWeight: '800', color: COLORS.primary },
+  addrActionTxt: { fontSize: 13, fontWeight: '800', color: THEME_COLORS.primary },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: '900', color: COLORS.text },
-  changeBtnTxt: { fontSize: 13, fontWeight: '700', color: COLORS.secondary },
-  itemCountTxt: { fontSize: 13, color: COLORS.textSecondary },
+  sectionTitle: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text },
+  changeBtnTxt: { fontSize: 13, fontWeight: '700', color: THEME_COLORS.primary },
+  itemCountTxt: { fontSize: 13, color: THEME_COLORS.textSecondary },
 
   summaryCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
-  summaryName: { fontSize: 15, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
-  summaryText: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
+  summaryName: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text, marginBottom: 6 },
+  summaryText: { fontSize: 13, color: THEME_COLORS.textSecondary, lineHeight: 18 },
 
   itemSummaryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, backgroundColor: '#FFF', padding: 12, borderRadius: 12 },
   itemThumb: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
   itemInfo: { flex: 1 },
-  itemName: { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  itemPrice: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  itemSubtotal: { fontSize: 14, fontWeight: '800', color: COLORS.text },
+  itemName: { fontSize: 14, fontWeight: '700', color: THEME_COLORS.text },
+  itemPrice: { fontSize: 12, color: THEME_COLORS.textSecondary, marginTop: 2 },
+  itemSubtotal: { fontSize: 14, fontWeight: '800', color: THEME_COLORS.text },
 
   priceSummary: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 24 },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  priceLbl: { fontSize: 14, color: COLORS.textSecondary },
-  priceVal: { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  totalLbl: { fontSize: 16, fontWeight: '900', color: COLORS.text },
-  totalVal: { fontSize: 18, fontWeight: '900', color: COLORS.secondary },
+  priceLbl: { fontSize: 14, color: THEME_COLORS.textSecondary },
+  priceVal: { fontSize: 14, fontWeight: '700', color: THEME_COLORS.text },
+  totalLbl: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text },
+  totalVal: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.primary },
 
   paymentCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 2, borderColor: '#F1F5F9' },
   paymentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  paymentName: { fontSize: 15, fontWeight: '800', color: COLORS.text },
-  paymentDesc: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 18 },
+  paymentName: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text },
+  paymentDesc: { fontSize: 12, color: THEME_COLORS.textSecondary, lineHeight: 18 },
 
   addNewBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#FFF', height: 56, borderRadius: 28, marginBottom: 24,
-    borderWidth: 1.5, borderColor: COLORS.secondary, borderStyle: 'dashed',
+    borderWidth: 1.5, borderColor: THEME_COLORS.primary, borderStyle: 'dashed',
   },
-  plusCircle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.secondary, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  addNewTxt: { fontSize: 14, fontWeight: '800', color: COLORS.secondary },
+  plusCircle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: THEME_COLORS.primary, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  addNewTxt: { fontSize: 14, fontWeight: '800', color: THEME_COLORS.primary },
 
   primaryBtn: {
-    backgroundColor: COLORS.secondary, height: 56, borderRadius: 28,
+    backgroundColor: THEME_COLORS.primary, height: 56, borderRadius: 28,
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: COLORS.secondary, shadowOffset: { width: 0, height: 4 },
+    shadowColor: THEME_COLORS.primary, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
   primaryBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 });
 
-const f = StyleSheet.create({
-  scroll: { backgroundColor: '#FFF', flexGrow: 1 },
-  formContainer: { padding: 20, paddingBottom: 150 },
-  row: { flexDirection: 'row' },
-
-  fieldGroup: { marginBottom: 16 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
-  field: {
-    height: 48, borderRadius: 12, backgroundColor: '#F8FAFC',
-    borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 16,
-    fontSize: 14, color: COLORS.text,
-  },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginTop: 8, marginBottom: 12 },
-  saveAsRow: { flexDirection: 'row', gap: 12, marginBottom: 32 },
-  saveAsChip: {
-    flex: 1, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  saveAsChipActive: { backgroundColor: COLORS.secondary },
-  saveAsTxt: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  saveBtn: {
-    backgroundColor: COLORS.secondary, height: 56, borderRadius: 28,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  saveBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-});

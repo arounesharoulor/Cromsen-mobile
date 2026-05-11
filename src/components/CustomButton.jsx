@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { COLORS, FONTS } from '../theme';
+import { THEME_COLORS, FONTS } from '../theme';
 
 export const CustomButton = ({ title, onPress, loading, variant = 'primary', style }) => {
   const isSecondary = variant === 'secondary';
@@ -16,7 +16,7 @@ export const CustomButton = ({ title, onPress, loading, variant = 'primary', sty
       disabled={loading}
     >
       {loading ? (
-        <ActivityIndicator color={isSecondary ? COLORS.primary : '#FFFFFF'} />
+        <ActivityIndicator color={isSecondary ? THEME_COLORS.primary : '#FFFFFF'} />
       ) : (
         <Text style={[
           styles.text, 
@@ -38,12 +38,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   buttonPrimary: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME_COLORS.primary,
   },
   buttonSecondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: THEME_COLORS.primary,
   },
   text: {
     fontSize: 16,
@@ -53,6 +53,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   textSecondary: {
-    color: COLORS.primary,
+    color: THEME_COLORS.primary,
   },
 });

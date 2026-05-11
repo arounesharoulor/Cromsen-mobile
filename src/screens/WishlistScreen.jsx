@@ -3,8 +3,8 @@ import {
   StyleSheet, Text, View, FlatList, Image, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ShoppingBag, Trash2 } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { ShoppingBag, Trash2, ArrowLeft } from 'lucide-react-native';
+import { THEME_COLORS } from '../theme';
 import { EmptyState, AppButton } from '../components';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
@@ -30,7 +30,7 @@ export default function WishlistScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon size={20} color="#FFF" />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Wishlist</Text>
         <Text style={styles.count}>{wishlistItems.length} items</Text>
@@ -38,7 +38,7 @@ export default function WishlistScreen({ navigation }) {
 
       {wishlistItems.length === 0 ? (
         <EmptyState
-          icon={<HeartIcon size={52} color={COLORS.border} />}
+          icon={<HeartIcon size={52} color={THEME_COLORS.border} />}
           title="Your wishlist is empty"
           subtitle="Save items you love and come back to them anytime."
           action={
@@ -62,7 +62,7 @@ export default function WishlistScreen({ navigation }) {
                 style={styles.removeBtn}
                 onPress={() => removeFromWishlist(item.id)}
               >
-                <Trash2 size={14} color={COLORS.error} />
+                <Trash2 size={14} color={THEME_COLORS.error} />
               </TouchableOpacity>
               <Image
                 source={{ uri: getImageUrl(item.image) }}
@@ -86,18 +86,18 @@ export default function WishlistScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF',
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    borderBottomWidth: 1, borderBottomColor: THEME_COLORS.border,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
-  count: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '600' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: THEME_COLORS.primary },
+  count: { fontSize: 13, color: THEME_COLORS.textSecondary, fontWeight: '600' },
 
   list: { padding: 16, paddingBottom: 110 },
   row: { justifyContent: 'space-between', marginBottom: 16 },
@@ -117,11 +117,11 @@ const styles = StyleSheet.create({
   },
   img: { width: '100%', height: 120, backgroundColor: '#F3F4F6' },
   info: { padding: 10 },
-  name: { fontSize: 12, fontWeight: '700', color: COLORS.text, marginBottom: 4, lineHeight: 16 },
-  price: { fontSize: 14, fontWeight: '900', color: COLORS.primary, marginBottom: 8 },
+  name: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.text, marginBottom: 4, lineHeight: 16 },
+  price: { fontSize: 14, fontWeight: '900', color: THEME_COLORS.primary, marginBottom: 8 },
   cartBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    backgroundColor: COLORS.secondary, borderRadius: 8, paddingVertical: 7,
+    backgroundColor: THEME_COLORS.secondary, borderRadius: 8, paddingVertical: 7,
   },
   cartBtnTxt: { color: '#FFF', fontSize: 11, fontWeight: '800' },
 });

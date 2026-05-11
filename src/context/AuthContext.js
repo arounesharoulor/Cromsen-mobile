@@ -38,7 +38,13 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setUser(null);
     if (AsyncStorage) {
-      await AsyncStorage.removeItem('@AuthData');
+      await AsyncStorage.multiRemove([
+        '@AuthData', 
+        '@UserAddresses', 
+        '@UserOrders', 
+        '@cart_items', 
+        '@wishlist_items'
+      ]);
     }
   };
 

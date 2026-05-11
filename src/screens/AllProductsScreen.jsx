@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Search, SlidersHorizontal } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { ProductCard, EmptyState, ErrorState } from '../components';
 import { productService, sanitizeData } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
@@ -48,7 +48,8 @@ export default function AllProductsScreen({ navigation, route }) {
       setLoading(true);
       setError(null);
       let params = {};
-      if (categoryId) params.categoryId = categoryId;
+      // Use 'category' as the standard parameter for filtering
+      if (categoryId) params.category = categoryId;
       else if (category) params.category = category;
 
       let data = await productService.getProducts(params);
@@ -59,11 +60,7 @@ export default function AllProductsScreen({ navigation, route }) {
         const fallback = await productService.getProducts({ keyword: category });
         list = Array.isArray(fallback) ? fallback : fallback.data || fallback.products || [];
       }
-      // Fallback: get all
-      if (list.length === 0) {
-        const all = await productService.getProducts({});
-        list = Array.isArray(all) ? all : all.data || all.products || [];
-      }
+
       setProducts(list);
     } catch (e) {
       setError(e.message);
@@ -74,13 +71,13 @@ export default function AllProductsScreen({ navigation, route }) {
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' }}>
-      <ActivityIndicator size="large" color={COLORS.secondary} />
+      <ActivityIndicator size="large" color={THEME_COLORS.secondary} />
     </View>
   );
 
 
   const SORT_OPTIONS = [
-    { key: 'default', label: 'Default' },
+    { key: 'ALL', label: 'All' },
     { key: 'price_asc', label: 'Price ↓' },
     { key: 'price_desc', label: 'Price ↑' },
     { key: 'rating', label: 'Rating' },
@@ -93,7 +90,7 @@ export default function AllProductsScreen({ navigation, route }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon size={20} color="#FFF" />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={{ width: 40 }} />
@@ -104,11 +101,11 @@ export default function AllProductsScreen({ navigation, route }) {
       {/* Search bar */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Search size={16} color={COLORS.textSecondary} />
+          <Search size={16} color={THEME_COLORS.textSecondary} />
           <TextInput
             style={styles.searchInput}
             placeholder={`Search in ${title}...`}
-            placeholderTextColor={COLORS.textSecondary}
+            placeholderTextColor={THEME_COLORS.textSecondary}
             value={search}
             onChangeText={setSearch}
           />
@@ -167,17 +164,17 @@ export default function AllProductsScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF',
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    borderBottomWidth: 1, borderBottomColor: THEME_COLORS.border,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: THEME_COLORS.primary, flex: 1, textAlign: 'center' },
 
   searchRow: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   searchBox: {
@@ -186,21 +183,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1, borderColor: '#E0E0E0',
   },
-  searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
+  searchInput: { flex: 1, fontSize: 14, color: THEME_COLORS.text },
 
   sortRow: {
     flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 8,
   },
   sortChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
-    backgroundColor: '#FFF', borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: '#FFF', borderWidth: 1, borderColor: THEME_COLORS.border,
   },
-  sortChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  sortTxt: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary },
+  sortChipActive: { backgroundColor: THEME_COLORS.primary, borderColor: THEME_COLORS.primary },
+  sortTxt: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.textSecondary },
   sortTxtActive: { color: '#FFF' },
 
   resultCount: {
-    paddingHorizontal: 20, fontSize: 12, color: COLORS.textSecondary,
+    paddingHorizontal: 20, fontSize: 12, color: THEME_COLORS.textSecondary,
     fontWeight: '600', marginBottom: 8,
   },
 

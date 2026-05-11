@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity,
-  TextInput, Keyboard, StatusBar,
+  TextInput, Keyboard, StatusBar, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, ArrowLeft, Clock, TrendingUp } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { ProductCard, LoadingState, EmptyState } from '../components';
 import { productService } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
@@ -80,25 +80,27 @@ export default function SearchScreen({ navigation }) {
       {/* Search Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon size={20} color="#FFF" />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
-        <View style={styles.searchBox}>
-          <Search size={16} color={COLORS.textSecondary} />
+        <View style={[styles.searchBox, inputRef.current?.isFocused() && styles.searchBoxFocused]}>
+          <Search size={18} color="#94A3B8" />
           <TextInput
             ref={inputRef}
             style={styles.input}
             placeholder="Search products..."
             autoFocus={true}
-            placeholderTextColor={COLORS.textSecondary}
+            placeholderTextColor="#94A3B8"
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={() => handleSearch()}
+            onFocus={() => {}} // Trigger re-render to apply focus style
+            onBlur={() => {}}
             returnKeyType="search"
             autoCapitalize="none"
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={clearSearch}>
-              <X size={16} color={COLORS.textSecondary} />
+              <X size={18} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
@@ -125,7 +127,7 @@ export default function SearchScreen({ navigation }) {
                     {recent.map((r, i) => (
                       <TouchableOpacity key={i} style={styles.chip} onPress={() => handleSuggestion(r)}>
                         <Text style={styles.chipTxt}>{r}</Text>
-                        <X size={12} color={COLORS.textSecondary} />
+                        <X size={12} color={THEME_COLORS.textSecondary} />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -136,14 +138,14 @@ export default function SearchScreen({ navigation }) {
               <View style={styles.section}>
                 <View style={styles.sectionRow}>
                   <View style={styles.sectionTitle}>
-                    <TrendingUp size={15} color={COLORS.secondary} />
+                    <TrendingUp size={15} color={THEME_COLORS.secondary} />
                     <Text style={styles.sectionTxt}>Trending Now</Text>
                   </View>
                 </View>
                 <View style={styles.chips}>
                   {TRENDING.map((t, i) => (
                     <TouchableOpacity key={i} style={[styles.chip, styles.trendChip]} onPress={() => handleSuggestion(t)}>
-                      <Text style={[styles.chipTxt, { color: COLORS.textSecondary }]}>{t}</Text>
+                      <Text style={[styles.chipTxt, { color: THEME_COLORS.textSecondary }]}>{t}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -186,54 +188,53 @@ export default function SearchScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
 
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    paddingTop: 26,
+    paddingTop: Platform.OS === 'ios' ? 10 : 16,
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    elevation: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    paddingBottom: 16,
     zIndex: 10,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
   searchBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FFFFFF', borderRadius: 24, height: 48,
-    paddingHorizontal: 20,
-    borderWidth: 1, borderColor: COLORS.primary,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F8FAFC', borderRadius: 30, height: 52,
+    paddingHorizontal: 16,
+    borderWidth: 1.5, borderColor: 'transparent',
   },
-  input: { flex: 1, fontSize: 15, color: COLORS.text },
+  searchBoxFocused: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    shadowColor: '#1E3C83', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15, shadowRadius: 10, elevation: 5,
+  },
+  input: { flex: 1, fontSize: 15, fontWeight: '500', color: '#05102D' },
 
   section: { paddingHorizontal: 16, paddingTop: 20 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionTxt: { fontSize: 15, fontWeight: '800', color: COLORS.text },
-  clearTxt: { fontSize: 13, color: COLORS.primary, fontWeight: '700' },
+  sectionTxt: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text },
+  clearTxt: { fontSize: 13, color: THEME_COLORS.primary, fontWeight: '700' },
 
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: '#FFF', borderRadius: 20,
     paddingHorizontal: 12, paddingVertical: 7,
-    borderWidth: 1, borderColor: COLORS.border,
+    borderWidth: 1, borderColor: THEME_COLORS.border,
   },
   trendChip: { borderWidth: 0, backgroundColor: '#F3F4F6' },
-  chipTxt: { fontSize: 13, fontWeight: '600', color: COLORS.text },
+  chipTxt: { fontSize: 13, fontWeight: '600', color: THEME_COLORS.text },
 
   resultCount: {
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8,
-    fontSize: 13, color: COLORS.textSecondary, fontWeight: '600',
+    fontSize: 13, color: THEME_COLORS.textSecondary, fontWeight: '600',
   },
   grid: { paddingHorizontal: 16, paddingBottom: 110 },
   row: { justifyContent: 'space-between', marginBottom: 16 },

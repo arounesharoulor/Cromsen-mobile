@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShoppingBag, ArrowRight, ArrowLeft } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { CartItem, AppButton, EmptyState } from '../components';
 import { useCart } from '../context/CartContext';
 import { BackIcon } from '../components/CustomIcons';
@@ -25,7 +25,7 @@ export default function CartScreen({ navigation }) {
         {/* Header Removed */}
 
         <EmptyState
-          icon={<ShoppingBag size={52} color={COLORS.border} />}
+          icon={<ShoppingBag size={52} color={THEME_COLORS.border} />}
           title="Your bag is empty"
           subtitle="Browse and add items to start shopping."
           action={
@@ -45,7 +45,7 @@ export default function CartScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon size={20} color="#FFF" />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Cart</Text>
         <View style={{ width: 40 }} /> 
@@ -88,7 +88,7 @@ export default function CartScreen({ navigation }) {
           onPress={() => navigation.navigate('Checkout')}
           size="lg"
           style={styles.checkoutBtn}
-          icon={<ArrowRight size={18} color="#FFF" />}
+          icon={<ArrowRight size={18} color={THEME_COLORS.surface} />}
           iconPosition="right"
         />
       </View>
@@ -107,35 +107,35 @@ function BillRow({ label, value, valueColor, bold }) {
 
 const bStyles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  label: { fontSize: 14, color: COLORS.textSecondary },
-  value: { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  bold: { fontWeight: '900', fontSize: 16, color: COLORS.text },
+  label: { fontSize: 14, color: THEME_COLORS.textSecondary },
+  value: { fontSize: 14, fontWeight: '700', color: THEME_COLORS.text },
+  bold: { fontWeight: '900', fontSize: 16, color: THEME_COLORS.text },
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF',
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: THEME_COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: THEME_COLORS.border,
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.primary, flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: THEME_COLORS.primary, flex: 1, textAlign: 'center' },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
 
   scroll: { padding: 16, paddingBottom: 20 },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  summaryLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  itemCount: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  summaryLabel: { fontSize: 16, fontWeight: '700', color: THEME_COLORS.text },
+  itemCount: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.primary },
 
   billCard: { marginTop: 8 },
-  totalDivider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 14, marginTop: 2 },
+  totalDivider: { height: 1, backgroundColor: THEME_COLORS.border, marginBottom: 14, marginTop: 2 },
 
   footer: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: 'transparent' },
   checkoutBtn: {
-    backgroundColor: '#004694',
+    backgroundColor: THEME_COLORS.primary,
     borderRadius: 12,
   },
 });

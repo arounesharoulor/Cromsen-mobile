@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Trash2, Plus, Minus } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { sanitizeData } from '../services/api';
 
 export default function CartItem({ item, onRemove, onIncrease, onDecrease }) {
@@ -31,16 +31,16 @@ export default function CartItem({ item, onRemove, onIncrease, onDecrease }) {
       {/* Bottom: remove + qty */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.removeBtn} onPress={onRemove}>
-          <Trash2 size={13} color={COLORS.error} />
+          <Trash2 size={13} color={THEME_COLORS.error} />
           <Text style={styles.removeTxt}>Remove</Text>
         </TouchableOpacity>
         <View style={styles.qtyBox}>
           <TouchableOpacity style={styles.qtyBtn} onPress={onDecrease}>
-            <Minus size={13} color={COLORS.text} />
+            <Minus size={13} color={THEME_COLORS.text} />
           </TouchableOpacity>
           <Text style={styles.qty}>{item.quantity}</Text>
           <TouchableOpacity style={styles.qtyBtn} onPress={onIncrease}>
-            <Plus size={13} color={COLORS.text} />
+            <Plus size={13} color={THEME_COLORS.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -65,14 +65,14 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', gap: 12, marginBottom: 10 },
   img: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#F3F4F6' },
   details: { flex: 1 },
-  name: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
-  meta: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 4 },
+  name: { fontSize: 14, fontWeight: '700', color: THEME_COLORS.text, marginBottom: 2 },
+  meta: { fontSize: 11, color: THEME_COLORS.textSecondary, marginBottom: 4 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   ratingTxt: { fontSize: 10, fontWeight: '700', color: '#27AE60' },
-  reviews: { fontSize: 10, color: COLORS.textSecondary },
+  reviews: { fontSize: 10, color: THEME_COLORS.textSecondary },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  price: { fontSize: 15, fontWeight: '800', color: COLORS.text },
-  mrp: { fontSize: 11, color: COLORS.textSecondary, textDecorationLine: 'line-through' },
+  price: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text },
+  mrp: { fontSize: 11, color: THEME_COLORS.textSecondary, textDecorationLine: 'line-through' },
   discount: { fontSize: 11, color: '#27AE60', fontWeight: '700' },
 
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 6, backgroundColor: '#FEF2F2',
   },
-  removeTxt: { fontSize: 12, fontWeight: '700', color: COLORS.error },
+  removeTxt: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.error },
   qtyBox: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6,

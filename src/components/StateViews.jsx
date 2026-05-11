@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 
 export function LoadingState({ message = 'Loading...' }) {
   return (
     <View style={styles.center}>
-      <ActivityIndicator size="large" color={COLORS.primary} />
+      <ActivityIndicator size="large" color={THEME_COLORS.primary} />
       <Text style={styles.msg}>{message}</Text>
     </View>
   );
@@ -50,19 +50,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME_COLORS.border,
   },
   errorIcon: { fontSize: 48, marginBottom: 16 },
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: COLORS.text,
+    color: THEME_COLORS.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -70,14 +70,14 @@ const styles = StyleSheet.create({
   msg: {
     marginTop: 12,
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     fontWeight: '600',
   },
   retry: {
     marginTop: 16,
     fontSize: 15,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: THEME_COLORS.primary,
     textDecorationLine: 'underline',
   },
 });

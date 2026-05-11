@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { ShoppingCart } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS, FONTS } from '../styling';
 import { getImageUrl, sanitizeData } from '../services/api';
 import { CartIcon, FrameIcon, HeartIcon } from './CustomIcons';
 import { useWishlist } from '../context/WishlistContext';
@@ -17,7 +17,16 @@ export default function ProductCard({ product, onPress, onAddToCart, style }) {
   const categoryObj = product?.category?.[0] || product?.categoryName || 'Item';
   const category = sanitizeData(categoryObj, 'Item');
   
-  const image = getImageUrl(product?.image || product?.thumbnail || product?.img || product?.images?.[0] || product?.images);
+  const image = getImageUrl(
+    product?.image || 
+    product?.images || 
+    product?.thumbnail || 
+    product?.img || 
+    product?.imageUrl || 
+    product?.imagePath || 
+    product?.pic || 
+    product?.photo
+  );
 
   const rating = typeof product?.ratings === 'number' ? product.ratings : 4.5;
 
@@ -29,7 +38,7 @@ export default function ProductCard({ product, onPress, onAddToCart, style }) {
         <TouchableOpacity style={styles.wishBtn} onPress={() => product && toggleWishlist(product)}>
           <HeartIcon 
             size={14} 
-            color={wishlisted ? COLORS.error : COLORS.textSecondary} 
+            color={wishlisted ? THEME_COLORS.error : THEME_COLORS.textSecondary} 
             filled={wishlisted} 
           />
         </TouchableOpacity>
@@ -57,13 +66,13 @@ const styles = StyleSheet.create({
   card: {
     width: 157,
     minHeight: 199,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     borderRadius: 12,
     borderWidth: 0.1,
-    borderColor: '#000000',
+    borderColor: THEME_COLORS.border,
     overflow: 'hidden',
     elevation: 3,
-    shadowColor: '#000000',
+    shadowColor: THEME_COLORS.text,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
@@ -71,7 +80,7 @@ const styles = StyleSheet.create({
   imgWrap: {
     width: '100%',
     height: 120,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME_COLORS.surface,
     position: 'relative',
   },
   img: {
@@ -99,15 +108,17 @@ const styles = StyleSheet.create({
   },
   category: {
     fontSize: 10,
-    color: COLORS.textSecondary,
+    color: THEME_COLORS.textSecondary,
     fontWeight: '600',
     marginBottom: 2,
+    fontFamily: FONTS.family,
   },
   name: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.text,
-    lineHeight: 16,
+    fontFamily: FONTS.family,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#05102D',
+    lineHeight: 14,
     marginBottom: 6,
     flex: 1,
   },
@@ -117,9 +128,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   price: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: COLORS.primary,
+    fontFamily: FONTS.family,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E3C83',
+    lineHeight: 16,
   },
   addBtn: {
     width: 28,

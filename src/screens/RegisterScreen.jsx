@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
 import { authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -69,7 +69,7 @@ export default function RegisterScreen({ navigation }) {
               value={form.name}
               onChangeText={v => set('name', v)}
               error={errors.name}
-              leftIcon={<User size={18} color={COLORS.textSecondary} />}
+              leftIcon={<User size={18} color={THEME_COLORS.textSecondary} />}
               autoCapitalize="words"
             />
             <AppInput
@@ -80,7 +80,7 @@ export default function RegisterScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               error={errors.email}
-              leftIcon={<Mail size={18} color={COLORS.textSecondary} />}
+              leftIcon={<Mail size={18} color={THEME_COLORS.textSecondary} />}
             />
             <AppInput
               label="Password"
@@ -89,8 +89,8 @@ export default function RegisterScreen({ navigation }) {
               onChangeText={v => set('password', v)}
               secureTextEntry={!showPwd}
               error={errors.password}
-              leftIcon={<Lock size={18} color={COLORS.textSecondary} />}
-              rightIcon={showPwd ? <EyeOff size={18} color={COLORS.textSecondary} /> : <Eye size={18} color={COLORS.textSecondary} />}
+              leftIcon={<Lock size={18} color={THEME_COLORS.textSecondary} />}
+              rightIcon={showPwd ? <EyeOff size={18} color={THEME_COLORS.textSecondary} /> : <Eye size={18} color={THEME_COLORS.textSecondary} />}
               onRightIconPress={() => setShowPwd(v => !v)}
               hint="Minimum 6 characters"
             />
@@ -101,7 +101,7 @@ export default function RegisterScreen({ navigation }) {
               onChangeText={v => set('confirm', v)}
               secureTextEntry={!showPwd}
               error={errors.confirm}
-              leftIcon={<Lock size={18} color={COLORS.textSecondary} />}
+              leftIcon={<Lock size={18} color={THEME_COLORS.textSecondary} />}
             />
 
             <Text style={styles.terms}>
@@ -115,7 +115,7 @@ export default function RegisterScreen({ navigation }) {
               onPress={handleRegister}
               loading={loading}
               size="lg"
-              style={[styles.submitBtn, { backgroundColor: COLORS.secondary }]}
+              style={styles.submitBtn}
             />
           </View>
 
@@ -134,34 +134,29 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
   scroll: { flexGrow: 1, padding: 24 },
 
   backBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: THEME_COLORS.primary, justifyContent: 'center', alignItems: 'center',
     marginTop: 4, marginBottom: 20,
   },
 
   header: { marginBottom: 32 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  logoText: { fontSize: 22, fontWeight: '900', letterSpacing: 3, color: COLORS.text },
-  logoDot: {
-    width: 7, height: 7, borderRadius: 3.5,
-    backgroundColor: COLORS.secondary, marginLeft: 4, marginTop: 6,
-  },
-  title: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
+  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: '800', color: THEME_COLORS.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: THEME_COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
 
   form: {},
   terms: {
-    fontSize: 12, color: COLORS.textSecondary,
+    fontSize: 12, color: THEME_COLORS.textSecondary,
     textAlign: 'center', lineHeight: 18, marginBottom: 24, marginTop: 4,
   },
-  link: { color: COLORS.primary, fontWeight: '700' },
+  link: { color: THEME_COLORS.primary, fontWeight: '700' },
   submitBtn: { width: '100%', borderRadius: 14 },
 
   footer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 28 },
-  footerTxt: { color: COLORS.textSecondary, fontSize: 14 },
-  linkTxt: { color: COLORS.primary, fontSize: 14, fontWeight: '800' },
+  footerTxt: { color: THEME_COLORS.textSecondary, fontSize: 14 },
+  linkTxt: { color: THEME_COLORS.primary, fontSize: 14, fontWeight: '800' },
 });

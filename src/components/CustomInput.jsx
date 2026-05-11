@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import { COLORS, SPACING, FONTS } from '../theme';
+import { THEME_COLORS, SPACING, FONTS } from '../theme';
 
 export const CustomInput = ({ label, placeholder, value, onChangeText, secureTextEntry, error }) => {
   return (
@@ -10,7 +10,7 @@ export const CustomInput = ({ label, placeholder, value, onChangeText, secureTex
         <TextInput
           style={styles.input}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textSecondary}
+          placeholderTextColor={THEME_COLORS.textSecondary}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
@@ -29,29 +29,29 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: COLORS.text,
+    color: THEME_COLORS.text,
     marginBottom: 8,
     fontWeight: FONTS.medium,
   },
   inputContainer: {
     height: 52,
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME_COLORS.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME_COLORS.border,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
   input: {
     fontSize: 16,
-    color: COLORS.text,
+    color: THEME_COLORS.text,
   },
   inputError: {
-    borderColor: COLORS.error,
+    borderColor: THEME_COLORS.error,
   },
   errorText: {
     fontSize: 12,
-    color: COLORS.error,
+    color: THEME_COLORS.error,
     marginTop: 4,
   },
 });

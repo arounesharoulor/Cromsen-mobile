@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
 import { authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -68,7 +68,7 @@ export default function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               error={errors.email}
-              leftIcon={<Mail size={18} color={COLORS.textSecondary} />}
+              leftIcon={<Mail size={18} color={THEME_COLORS.textSecondary} />}
             />
 
             <AppInput
@@ -78,8 +78,8 @@ export default function LoginScreen({ navigation }) {
               onChangeText={setPassword}
               secureTextEntry={!showPwd}
               error={errors.password}
-              leftIcon={<Lock size={18} color={COLORS.textSecondary} />}
-              rightIcon={showPwd ? <EyeOff size={18} color={COLORS.textSecondary} /> : <Eye size={18} color={COLORS.textSecondary} />}
+              leftIcon={<Lock size={18} color={THEME_COLORS.textSecondary} />}
+              rightIcon={showPwd ? <EyeOff size={18} color={THEME_COLORS.textSecondary} /> : <Eye size={18} color={THEME_COLORS.textSecondary} />}
               onRightIconPress={() => setShowPwd(v => !v)}
             />
 
@@ -92,7 +92,7 @@ export default function LoginScreen({ navigation }) {
               onPress={handleLogin}
               loading={loading}
               size="lg"
-              style={[styles.loginBtn, { backgroundColor: COLORS.secondary }]}
+              style={[styles.loginBtn, { backgroundColor: THEME_COLORS.primary }]}
             />
 
             {/* Divider */}
@@ -127,41 +127,36 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME_COLORS.background },
   scroll: { flexGrow: 1, padding: 24 },
 
   header: { marginTop: height * 0.06, marginBottom: 36 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  logoText: { fontSize: 24, fontWeight: '900', letterSpacing: 3, color: COLORS.text },
-  logoDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: COLORS.secondary, marginLeft: 4, marginTop: 8,
-  },
-  title: { fontSize: 30, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, color: COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
+  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  title: { fontSize: 30, fontWeight: '800', color: THEME_COLORS.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, color: THEME_COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
 
   form: { flex: 1 },
   forgotRow: { alignSelf: 'flex-end', marginBottom: 24, marginTop: -8 },
-  forgotTxt: { color: COLORS.primary, fontSize: 13, fontWeight: '700' },
+  forgotTxt: { color: THEME_COLORS.primary, fontSize: 13, fontWeight: '700' },
   loginBtn: { width: '100%', borderRadius: 14 },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 28 },
-  divider: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  divider: { flex: 1, height: 1, backgroundColor: THEME_COLORS.border },
   dividerTxt: {
-    marginHorizontal: 12, color: COLORS.textSecondary,
+    marginHorizontal: 12, color: THEME_COLORS.textSecondary,
     fontSize: 11, fontWeight: '700', letterSpacing: 1,
   },
 
   socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
   socialBtn: {
     width: 56, height: 56, borderRadius: 16,
-    borderWidth: 1, borderColor: COLORS.border,
+    borderWidth: 1, borderColor: THEME_COLORS.border,
     backgroundColor: '#FFF',
     justifyContent: 'center', alignItems: 'center',
   },
-  socialTxt: { fontSize: 16, fontWeight: '900', color: COLORS.text },
+  socialTxt: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text },
 
   footer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 32 },
-  footerTxt: { color: COLORS.textSecondary, fontSize: 14 },
-  linkTxt: { color: COLORS.primary, fontSize: 14, fontWeight: '800' },
+  footerTxt: { color: THEME_COLORS.textSecondary, fontSize: 14 },
+  linkTxt: { color: THEME_COLORS.primary, fontSize: 14, fontWeight: '800' },
 });

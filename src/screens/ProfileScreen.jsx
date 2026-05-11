@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 
 import { HeartIcon } from '../components/CustomIcons';
-import { COLORS } from '../theme';
+import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -107,10 +107,10 @@ export default function ProfileScreen({ navigation }) {
       {/* Top Header */}
       <View style={styles.topHeader}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={20} color={COLORS.primary} />
+          <ArrowLeft size={20} color={THEME_COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.topHeaderTitle}>Your Account</Text>
-        <Code size={20} color="#004694" />
+        <Code size={20} color={THEME_COLORS.primary} />
       </View>
 
 
@@ -224,42 +224,42 @@ const styles = StyleSheet.create({
   topHeaderTitle: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#004694',
+    color: THEME_COLORS.primary,
   },
 
   /* Profile Card */
   profileCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: THEME_COLORS.surface,
     margin: 20,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#004694',
+    borderColor: THEME_COLORS.primary,
   },
   cardHeaderTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#004694',
+    color: THEME_COLORS.primary,
     marginBottom: 20,
   },
   avatarWrap: { position: 'relative', marginBottom: 16 },
   avatar: {
     width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: THEME_COLORS.background,
     overflow: 'hidden',
-    borderWidth: 2, borderColor: '#FFF',
+    borderWidth: 2, borderColor: THEME_COLORS.surface,
   },
   avatarImg: { width: '100%', height: '100%' },
   editBadge: {
     position: 'absolute', bottom: 0, right: 0,
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: '#004694',
+    backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: '#FFF',
+    borderWidth: 2, borderColor: THEME_COLORS.surface,
   },
-  profileName: { fontSize: 20, fontWeight: '900', color: '#000', marginBottom: 4 },
-  profileEmail: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+  profileName: { fontSize: 20, fontWeight: '900', color: THEME_COLORS.text, marginBottom: 4 },
+  profileEmail: { fontSize: 13, color: THEME_COLORS.textSecondary, fontWeight: '500' },
 
   /* Sections */
   section: { paddingHorizontal: 20, marginTop: 15 },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   modalOptionTxt: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#004694',
+    color: THEME_COLORS.primary,
   },
   modalCancel: {
     borderBottomWidth: 0,
