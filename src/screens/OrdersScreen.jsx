@@ -9,6 +9,7 @@ import { EmptyState, AppButton } from '../components';
 import { sanitizeData, userService, getImageUrl } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +48,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 export default function OrdersScreen({ navigation }) {
   const { user } = useAuth();
+  const { addNotification, checkOrderUpdates } = useNotifications();
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +85,10 @@ export default function OrdersScreen({ navigation }) {
 
       if (backendOrders.length > 0) {
         const normalized = backendOrders.map(normalize);
+        
+        // Use centralized status change detection
+        checkOrderUpdates(currentUserId, userEmail);
         setOrders(normalized);
-        await AsyncStorage.setItem('@UserOrders', JSON.stringify(normalized));
       } else {
         // Fallback to local storage
         const stored = await AsyncStorage.getItem('@UserOrders');
@@ -134,6 +138,8 @@ export default function OrdersScreen({ navigation }) {
       return s !== 'DELIVERED' && s !== 'CANCELLED';
     } else if (activeTab === 'Delivered') {
       return s === 'DELIVERED';
+    } else if (activeTab === 'Cancelled') {
+      return s === 'CANCELLED';
     }
     return true; // 'All'
   });
@@ -145,6 +151,7 @@ export default function OrdersScreen({ navigation }) {
       return s !== 'DELIVERED' && s !== 'CANCELLED';
     }).length },
     { label: 'Delivered', count: orders.filter(o => String(o.status).toUpperCase() === 'DELIVERED').length },
+    { label: 'Cancelled', count: orders.filter(o => String(o.status).toUpperCase() === 'CANCELLED').length },
   ];
 
   return (
@@ -159,17 +166,19 @@ export default function OrdersScreen({ navigation }) {
 
       {/* TABS */}
       <View style={styles.tabsContainer}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.label}
-            style={[styles.tab, activeTab === tab.label && styles.activeTab]}
-            onPress={() => setActiveTab(tab.label)}
-          >
-            <Text style={[styles.tabText, activeTab === tab.label && styles.activeTabText]}>
-              {String(tab.label)}{tab.count !== null && tab.count !== undefined ? ` (${tab.count})` : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+          {TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.label}
+              style={[styles.tab, activeTab === tab.label && styles.activeTab]}
+              onPress={() => setActiveTab(tab.label)}
+            >
+              <Text style={[styles.tabText, activeTab === tab.label && styles.activeTabText]}>
+                {String(tab.label)}{tab.count !== null && tab.count !== undefined ? ` (${tab.count})` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {filteredOrders.length === 0 ? (
@@ -185,7 +194,10 @@ export default function OrdersScreen({ navigation }) {
           keyExtractor={o => o.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <View style={[
+              styles.card, 
+              (item.status === 'CANCELLED' || item.status === 'DELIVERED') && styles.disabledCard
+            ]}>
               <View style={styles.cardHeader}>
                 <View>
                   <Text style={styles.cardDate}>{item.date}</Text>
@@ -262,15 +274,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: THEME_COLORS.border,
   },
-  activeTab: { backgroundColor: THEME_COLORS.secondary },
+  activeTab: { backgroundColor: THEME_COLORS.primary },
   tabText: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.textSecondary },
   activeTabText: { color: THEME_COLORS.surface },
 
   list: { padding: 20, paddingBottom: 100 },
   card: {
-    backgroundColor: THEME_COLORS.surface, borderRadius: 16, padding: 16, marginBottom: 16,
-    shadowColor: THEME_COLORS.text, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
+    borderWidth: 1, borderColor: '#F1F5F9',
+  },
+  disabledCard: {
+    opacity: 0.7,
+    backgroundColor: '#FAFBFC',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   cardDate: { fontSize: 10, fontWeight: '700', color: '#94A3B8' },

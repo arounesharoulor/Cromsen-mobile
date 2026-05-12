@@ -4,6 +4,7 @@ import {
   TextInput, Platform, StatusBar, Image, Dimensions, KeyboardAvoidingView, Linking, NativeModules, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { WebView } from 'react-native-webview';
 
 import { THEME_COLORS } from '../theme';
@@ -29,6 +30,23 @@ const STEPS = [
 const f = StyleSheet.create({
   scroll: { flexGrow: 1, paddingBottom: 40 },
   formContainer: { padding: 20 },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: THEME_COLORS.primary + '10',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  mapBtnTxt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME_COLORS.primary,
+    marginLeft: 6,
+  },
+  btn: { flexDirection: 'row', marginBottom: 16 },
   row: { flexDirection: 'row', marginBottom: 16 },
   fieldGroup: { marginBottom: 16 },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
@@ -61,14 +79,24 @@ const f = StyleSheet.create({
 });
 
 /* ─── Add Address Form ─── */
-function AddAddressForm({ onSave, initialData }) {
+function AddAddressForm({ onSave, initialData, user }) {
   // Map incoming data (could be raw backend format or formatted app format)
   const getInitialForm = () => {
-    if (!initialData) return {
-      firstName: '', countryCode: '+91', mobile: '',
-      pincode: '', state: '', city: '',
-      line1: '', line2: '', saveAs: 'HOME',
-    };
+    if (!initialData) {
+      const name = user?.name || '';
+      const phone = user?.phone || '';
+      // Simple split for "+91 9876543210" format or just the number
+      const code = phone.startsWith('+') ? phone.split(' ')[0] : '+91';
+      const number = phone.includes(' ') ? phone.split(' ')[1] : (phone.startsWith('+91') ? phone.replace('+91', '') : phone);
+
+      return {
+        firstName: name,
+        countryCode: code,
+        mobile: number,
+        pincode: '', state: '', city: '',
+        line1: '', line2: '', saveAs: 'HOME',
+      };
+    }
 
     return {
       firstName: initialData.firstName || initialData.name || '',
@@ -86,7 +114,11 @@ function AddAddressForm({ onSave, initialData }) {
   const [form, setForm] = useState(getInitialForm());
   const [errors, setErrors] = useState({});
   const set = (k, v) => {
-    setForm(f => ({ ...f, [k]: v }));
+    let val = v;
+    if (k === 'mobile') val = v.replace(/[^0-9]/g, '').slice(0, 10);
+    if (k === 'pincode') val = v.replace(/[^0-9]/g, '').slice(0, 6);
+    
+    setForm(f => ({ ...f, [k]: val }));
     if (errors[k]) setErrors(e => ({ ...e, [k]: null }));
   };
 
@@ -94,8 +126,16 @@ function AddAddressForm({ onSave, initialData }) {
     const { firstName, mobile, pincode, state, city, line1 } = form;
     let newErrs = {};
     if (!firstName) newErrs.firstName = 'Required';
-    if (!mobile) newErrs.mobile = 'Required';
-    if (!pincode) newErrs.pincode = 'Required';
+    if (!mobile) {
+      newErrs.mobile = 'Required';
+    } else if (mobile.length !== 10) {
+      newErrs.mobile = 'Must be 10 digits';
+    }
+    if (!pincode) {
+      newErrs.pincode = 'Required';
+    } else if (pincode.length !== 6) {
+      newErrs.pincode = 'Must be 6 digits';
+    }
     if (!state) newErrs.state = 'Required';
     if (!city) newErrs.city = 'Required';
     if (!line1) newErrs.line1 = 'Required';
@@ -125,6 +165,31 @@ function AddAddressForm({ onSave, initialData }) {
           { label: 'Address Line 1', key: 'line1', placeholder: 'House No, Building Name' },
           { label: 'Address Line 2', key: 'line2', placeholder: 'Street, Area', required: false },
         ].reduce((acc, field, idx, arr) => {
+          if (field.key === 'line2') {
+            acc.push(
+              <View key={field.key} style={f.fieldGroup}>
+                <Text style={f.fieldLabel}>{field.label}{field.required !== false && <Text style={{color: THEME_COLORS.error}}>*</Text>}</Text>
+                <TextInput
+                  style={[f.field, errors[field.key] && f.fieldError]}
+                  placeholder={field.placeholder}
+                  placeholderTextColor={THEME_COLORS.textSecondary}
+                  value={form[field.key]}
+                  onChangeText={(v) => set(field.key, v)}
+                />
+                <TouchableOpacity 
+                  style={f.mapBtn} 
+                  onPress={() => {
+                    const addr = `${form.line1}, ${form.line2}, ${form.city}, ${form.state} ${form.pincode}`;
+                    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`);
+                  }}
+                >
+                  <MapPin size={14} color={THEME_COLORS.primary} />
+                  <Text style={f.mapBtnTxt}>Check Location on Google Maps</Text>
+                </TouchableOpacity>
+              </View>
+            );
+            return acc;
+          }
           if (field.half) {
             if (idx > 0 && arr[idx-1]?.half) return acc; // Already rendered as the right side
             const next = arr[idx+1];
@@ -245,9 +310,11 @@ export default function CheckoutScreen({ navigation, route }) {
   const [pendingOrderDetails, setPendingOrderDetails] = useState(null);
 
 
-  useEffect(() => {
-    loadAddresses();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadAddresses();
+    }, [])
+  );
 
   const loadAddresses = async () => {
     try {
@@ -296,17 +363,22 @@ export default function CheckoutScreen({ navigation, route }) {
       // Save to backend if logged in
       if (currentUserId) {
         try {
-          await userService.addAddress(currentUserId, formatted);
-          // Also update user profile phone if missing or different
-          if (!user?.phone || user.phone !== formatted.phone) {
-            await userService.updateProfile(currentUserId, { phone: formatted.phone });
+          await userService.addAddress(currentUserId, formatted, user?.storedPassword);
+          
+          // Also update user profile if name or phone changed
+          const profileUpdate = {};
+          if (!user?.phone || user.phone !== formatted.phone) profileUpdate.phone = formatted.phone;
+          if (!user?.name || user.name !== formatted.name) profileUpdate.name = formatted.name;
+
+          if (Object.keys(profileUpdate).length > 0) {
+            await userService.updateProfile(currentUserId, { 
+              ...profileUpdate,
+              currentPassword: user?.storedPassword
+            });
+            updateUser({ ...user, ...profileUpdate });
           }
         } catch (err) {
           console.warn('Backend sync failed, state will still be updated locally:', err);
-        }
-        // Always update local context state
-        if (!user?.phone || user.phone !== formatted.phone) {
-          updateUser({ ...user, phone: formatted.phone });
         }
       }
 
@@ -318,6 +390,7 @@ export default function CheckoutScreen({ navigation, route }) {
       }
       setAddresses(updated);
       await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
+      updateUser({ ...user, addresses: updated });
       setSelAddr(formatted.id);
       setShowAddForm(false);
       setEditingAddr(null);
@@ -332,6 +405,15 @@ export default function CheckoutScreen({ navigation, route }) {
     setAddresses(updated);
     await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
     if (selAddr === id) setSelAddr(updated.length > 0 ? updated[0].id : null);
+
+    const currentUserId = user?._id || user?.id;
+    if (currentUserId) {
+      try {
+        await userService.deleteAddress(currentUserId, id, user?.storedPassword);
+      } catch (err) {
+        console.warn('Backend address delete failed:', err);
+      }
+    }
   };
 
 
@@ -462,11 +544,14 @@ export default function CheckoutScreen({ navigation, route }) {
               paymentId: rzpOrderData.id,
               paymentMethod: 'RAZORPAY',
               total: finalAmount,
+              totalAmount: finalAmount, // Added for backend compatibility
               itemsCount: cartItems.length,
               mainProduct: sanitizeData(firstItem.name || 'Product', 'Product'),
               image: getImageUrl(firstItem.image),
+              user: user?._id || user?.id, // Changed from userId to user
               userId: user?._id || user?.id,
               email: user?.email || '',
+              guestEmail: user?.email || '', // Added for backend compatibility
               items: cartItems.map(item => ({
                 ...item,
                 _id: item._id || item.id || item.product || '',
@@ -475,6 +560,15 @@ export default function CheckoutScreen({ navigation, route }) {
                 price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
               })),
               address: selectedAddress,
+              shippingAddress: {
+                name: selectedAddress.name || user?.name || 'Guest',
+                address: selectedAddress.full || selectedAddress.address,
+                city: selectedAddress.city,
+                state: selectedAddress.state,
+                zip: selectedAddress.zip,
+                phone: selectedAddress.phone,
+                country: 'India'
+              },
             };
 
             // STEP 3: SAVE PENDING ORDER TO ADMIN
@@ -632,10 +726,12 @@ export default function CheckoutScreen({ navigation, route }) {
         const finalCODOrder = {
           ...newOrder,
           user: (user?._id || user?.id),
+          userId: (user?._id || user?.id),
           guestEmail: user?.email || '',
+          total: grandTotal,
           totalAmount: grandTotal,
           shippingAddress: {
-            name: selectedAddress.name,
+            name: selectedAddress.name || user?.name || 'Guest',
             address: selectedAddress.full || selectedAddress.address,
             city: selectedAddress.city,
             state: selectedAddress.state,
@@ -704,7 +800,7 @@ export default function CheckoutScreen({ navigation, route }) {
       {!showAddForm && <StepBar />}
 
       {showAddForm ? (
-        <AddAddressForm onSave={handleSaveAddress} initialData={editingAddr} />
+        <AddAddressForm onSave={handleSaveAddress} initialData={editingAddr} user={user} />
       ) : step === 0 ? (
         <ScrollView contentContainerStyle={s.content}>
           {addresses.map((addr) => (

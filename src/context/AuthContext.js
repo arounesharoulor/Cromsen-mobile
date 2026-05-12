@@ -28,10 +28,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (userData) => {
-    setUser(userData);
+  const login = async (userData, password = null) => {
+    const dataToStore = { ...userData };
+    if (password) dataToStore.storedPassword = password;
+    setUser(dataToStore);
     if (AsyncStorage) {
-      await AsyncStorage.setItem('@AuthData', JSON.stringify(userData));
+      await AsyncStorage.setItem('@AuthData', JSON.stringify(dataToStore));
     }
   };
 
@@ -48,10 +50,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateUser = async (newUserData) => {
-    setUser(newUserData);
+  const updateUser = async (newUserData, password = null) => {
+    const dataToStore = { ...newUserData };
+    if (password) dataToStore.storedPassword = password;
+    else if (user?.storedPassword) dataToStore.storedPassword = user.storedPassword;
+    
+    setUser(dataToStore);
     if (AsyncStorage) {
-      await AsyncStorage.setItem('@AuthData', JSON.stringify(newUserData));
+      await AsyncStorage.setItem('@AuthData', JSON.stringify(dataToStore));
     }
   };
 

@@ -43,12 +43,15 @@ import AllProductsScreen from './src/screens/AllProductsScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import AddressesScreen from './src/screens/AddressesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import HelpScreen from './src/screens/HelpScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 import TabNavigator from './src/navigation/TabNavigator';
 
 // Providers
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { CartProvider } from './src/context/CartContext';
 import { WishlistProvider } from './src/context/WishlistContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -75,8 +78,10 @@ function Navigation() {
           <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Addresses" component={AddressesScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Help" component={HelpScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'fade' }} />
           <Stack.Screen name="AllProducts" component={AllProductsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         <>
@@ -94,10 +99,12 @@ export default function App() {
       <AuthProvider>
         <CartProvider>
           <WishlistProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <Navigation />
-            </NavigationContainer>
+            <NotificationProvider>
+              <NavigationContainer>
+                <StatusBar style="dark" />
+                <Navigation />
+              </NavigationContainer>
+            </NotificationProvider>
           </WishlistProvider>
         </CartProvider>
       </AuthProvider>

@@ -4,7 +4,7 @@
     "slug": "cromsen-mobile",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
-
+   
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
@@ -12,23 +12,31 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cromsen.app"
+      "bundleIdentifier": "com.cromsen.app",
+      
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        
+        "backgroundColor": "#004694"
       },
-      "package": "com.cromsen.app"
+      "package": "com.cromsen.app",
+      "runtimeVersion": "1.0.0"
     },
     "web": {},
     "experiments": {
       "bridgeless": false
     },
     "extra": {
-
       "eas": {
         "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
     }
   }
 }

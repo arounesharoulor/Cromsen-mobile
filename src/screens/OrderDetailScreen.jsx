@@ -131,29 +131,52 @@ export default function OrderDetailScreen({ navigation, route }) {
           </View>
 
           {showTracking && (
-            <View style={styles.timeline}>
-              {ORDER_STATUS_STEPS.map((step, idx) => {
-                const s = String(currentOrder.status).toUpperCase();
-                let completed = false;
-                let active = false;
-                
-                if (s.includes('DELIVERED')) completed = true;
-                else if (s.includes('SHIPPED')) completed = idx <= 2;
-                else if (s.includes('PACKED')) completed = idx <= 1;
-                else completed = idx === 0;
+            <View style={styles.timelineWrapper}>
+              {/* Progress Line Background */}
+              <View style={styles.timelineLineBackground}>
+                {ORDER_STATUS_STEPS.slice(0, -1).map((_, idx) => {
+                  const s = String(currentOrder.status).toUpperCase();
+                  let lineCompleted = false;
+                  if (s.includes('DELIVERED')) lineCompleted = true;
+                  else if (s.includes('SHIPPED')) lineCompleted = idx < 2;
+                  else if (s.includes('PACKED')) lineCompleted = idx < 1;
+                  else lineCompleted = false;
 
-                active = (s.includes('DELIVERED') && idx === 3) ||
-                         (s.includes('SHIPPED') && idx === 2) ||
-                         (s.includes('PACKED') && idx === 1) ||
-                         (!s.includes('DELIVERED') && !s.includes('SHIPPED') && !s.includes('PACKED') && idx === 0);
+                  return (
+                    <View 
+                      key={`line-${idx}`} 
+                      style={[
+                        styles.timelineLine, 
+                        lineCompleted && styles.timelineLineCompleted
+                      ]} 
+                    />
+                  );
+                })}
+              </View>
 
-                return (
-                  <React.Fragment key={step.label}>
-                    <View style={styles.timelineStep}>
+              {/* Steps Foreground */}
+              <View style={styles.timelineStepsRow}>
+                {ORDER_STATUS_STEPS.map((step, idx) => {
+                  const s = String(currentOrder.status).toUpperCase();
+                  let completed = false;
+                  let active = false;
+                  
+                  if (s.includes('DELIVERED')) completed = true;
+                  else if (s.includes('SHIPPED')) completed = idx <= 2;
+                  else if (s.includes('PACKED')) completed = idx <= 1;
+                  else completed = idx === 0;
+
+                  active = (s.includes('DELIVERED') && idx === 3) ||
+                           (s.includes('SHIPPED') && idx === 2) ||
+                           (s.includes('PACKED') && idx === 1) ||
+                           (!s.includes('DELIVERED') && !s.includes('SHIPPED') && !s.includes('PACKED') && idx === 0);
+
+                  return (
+                    <View key={step.label} style={styles.timelineStep}>
                       <View style={[
                         styles.iconCircle, 
                         completed && styles.iconCircleCompleted,
-                        active && { backgroundColor: THEME_COLORS.secondary }
+                        active && styles.iconCircleActive
                       ]}>
                         {completed ? <CheckCircle2 size={16} color="#FFF" /> : step.icon}
                       </View>
@@ -162,12 +185,9 @@ export default function OrderDetailScreen({ navigation, route }) {
                         <Text style={styles.stepDate}>{completed ? 'Completed' : 'Pending'}</Text>
                       </View>
                     </View>
-                    {idx < ORDER_STATUS_STEPS.length - 1 && (
-                      <View style={[styles.timelineLine, completed && styles.timelineLineCompleted]} />
-                    )}
-                  </React.Fragment>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
           )}
           {!showTracking && (
@@ -289,28 +309,57 @@ const styles = StyleSheet.create({
   updatedTime: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
 
   statusBadge: {
-    backgroundColor: '#FFF9F3', alignSelf: 'flex-start',
+    backgroundColor: THEME_COLORS.primary + '10', alignSelf: 'flex-start',
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginBottom: 20,
   },
-  statusBadgeText: { color: '#F2994A', fontSize: 10, fontWeight: '800', fontFamily: 'Plus Jakarta Sans' },
+  statusBadgeText: { color: THEME_COLORS.primary, fontSize: 10, fontWeight: '800', fontFamily: 'Plus Jakarta Sans' },
 
-  timeline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  timelineStep: { alignItems: 'center', width: 60 },
+  timelineWrapper: {
+    marginTop: 10,
+    position: 'relative',
+    paddingBottom: 10,
+  },
+  timelineLineBackground: {
+    position: 'absolute',
+    top: 16, // Half of 32px circle
+    left: 35, // Half of 70px step
+    right: 35,
+    height: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 0,
+  },
+  timelineStepsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    zIndex: 1,
+  },
+  timelineStep: { 
+    alignItems: 'center', 
+    width: 70,
+  },
   iconCircle: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
     marginBottom: 8,
+    borderWidth: 2, borderColor: '#F1F5F9',
   },
-  iconCircleCompleted: { backgroundColor: '#F2994A' },
-  iconCircleActive: { borderWidth: 2, borderColor: '#F2994A' },
-  stepLabel: { fontSize: 8, fontWeight: '800', color: '#94A3B8', textAlign: 'center' },
+  iconCircleCompleted: { backgroundColor: THEME_COLORS.primary, borderColor: THEME_COLORS.primary },
+  iconCircleActive: { backgroundColor: THEME_COLORS.primary, borderColor: THEME_COLORS.primary },
+  stepInfo: { alignItems: 'center', marginTop: 4 },
+  stepLabel: { fontSize: 8, fontWeight: '800', color: '#94A3B8', textAlign: 'center', width: 70, textTransform: 'uppercase' },
   stepLabelActive: { color: THEME_COLORS.text },
-  timelineLine: { flex: 1, height: 2, backgroundColor: '#F1F5F9', marginTop: -20 },
-  timelineLineCompleted: { backgroundColor: '#F2994A' },
+  stepDate: { fontSize: 9, color: '#94A3B8', fontWeight: '600', marginTop: 1, textAlign: 'center' },
+  timelineLine: { 
+    flex: 1, 
+    height: 2, 
+    backgroundColor: '#F1F5F9', 
+  },
+  timelineLineCompleted: { backgroundColor: THEME_COLORS.primary },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: THEME_COLORS.text },
-  deliveryDate: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.secondary, marginBottom: 20, fontFamily: 'Plus Jakarta Sans' },
+  deliveryDate: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.primary, marginBottom: 20, fontFamily: 'Plus Jakarta Sans' },
 
   addressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   iconBox: {

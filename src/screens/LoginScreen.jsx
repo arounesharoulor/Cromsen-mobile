@@ -36,7 +36,7 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading(true);
       const data = await authService.login(email, password);
-      await authLogin(data.user || data.data || data);
+      await authLogin(data.user || data.data || data, password);
     } catch (err) {
       Alert.alert('Login Failed', err.message || 'Invalid email or password');
     } finally {

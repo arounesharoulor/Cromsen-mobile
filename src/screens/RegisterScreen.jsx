@@ -36,9 +36,15 @@ export default function RegisterScreen({ navigation }) {
     if (!validate()) return;
     try {
       setLoading(true);
-      await authService.register({ name: form.name, email: form.email, password: form.password });
-      Alert.alert('Success', 'Account created! Please sign in.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') }
+      const regData = { name: form.name, email: form.email, password: form.password };
+      const response = await authService.register(regData);
+      
+      // Auto-login after successful registration
+      const userData = response.user || response.data || response;
+      await authLogin(userData, form.password);
+      
+      Alert.alert('Success', 'Account created and logged in successfully!', [
+        { text: 'Great!', onPress: () => navigation.replace('Main') }
       ]);
     } catch (err) {
       Alert.alert('Registration Failed', err.message || 'Could not create account');

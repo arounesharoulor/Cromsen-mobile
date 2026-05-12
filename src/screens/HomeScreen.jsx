@@ -16,7 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FONTS, THEME_COLORS, SPACING } from '../styling';
 
-import { Search, Menu, Star, MapPin } from 'lucide-react-native';
+import { Search, Menu, Star, MapPin, Bell } from 'lucide-react-native';
+import { useNotifications } from '../context/NotificationContext';
 
 import { productService, categoryService, getImageUrl, sanitizeData } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -43,21 +44,21 @@ const STATIC_CATEGORIES = [
 const BANNER_DATA = [
   {
     id: 1,
-    title: "Beautiful\nFurniture for\nyour Home",
+    title: "Premium\nFurniture for\nYour Home",
     tag: "NEW COLLECTION",
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=900'
+    image: 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200'
   },
   {
     id: 2,
     title: "Modern\nInteriors for\nComfort",
     tag: "BEST SELLER",
-    image: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&q=80&w=900'
+    image: 'https://images.pexels.com/photos/1866149/pexels-photo-1866149.jpeg?auto=compress&cs=tinysrgb&w=1200'
   },
   {
     id: 3,
     title: "Exclusive\nDeals for\nYou",
     tag: "LIMITED TIME",
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=900'
+    image: 'https://images.pexels.com/photos/276724/pexels-photo-276724.jpeg?auto=compress&cs=tinysrgb&w=1200'
   }
 ];
 
@@ -70,51 +71,47 @@ export default function HomeScreen({ navigation, route }) {
   const [activeBanner, setActiveBanner] = useState(0);
   const { cartCount, addToCart } = useCart();
   const bannerRef = React.useRef(null);
-  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
-  const successAnim = useRef(new Animated.Value(-100)).current;
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      let nextSlide = activeBanner + 1;
-      if (nextSlide >= BANNER_DATA.length) nextSlide = 0;
-      bannerRef.current?.scrollTo({ x: nextSlide * (width - 40), animated: true });
-      setActiveBanner(nextSlide);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [activeBanner]);
+  const { notifications, addNotification, checkOrderUpdates, checkProductUpdates } = useNotifications();
 
   // Show success toast when redirected from a successful payment
   useEffect(() => {
     if (route?.params?.paymentSuccess) {
-      handleShowSuccess();
+      addNotification('success', 'Order Placed!', 'Payment received. Thank you for shopping.', 'Orders');
       // Clear the param so it doesn't fire again
       navigation.setParams({ paymentSuccess: undefined });
     }
   }, [route?.params?.paymentSuccess]);
 
-  const handleShowSuccess = () => {
-    setShowSuccessBanner(true);
-    Animated.spring(successAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      speed: 12,
-      bounciness: 4,
-    }).start();
+  // Global Order Update Polling
+  useEffect(() => {
+    if (user) {
+      const userId = user._id || user.id;
+      const userEmail = user.email || '';
+      
+      // Initial check
+      checkOrderUpdates(userId, userEmail);
+      checkProductUpdates();
+      
+      // Poll every 15 seconds for near-instant updates
+      const pollInterval = setInterval(() => {
+        checkOrderUpdates(userId, userEmail);
+        checkProductUpdates();
+        silentRefresh();
+      }, 15000);
 
-    // Auto hide after 3 seconds
-    const t = setTimeout(() => {
-      hideSuccessBanner();
-    }, 3000);
-    return () => clearTimeout(t);
-  };
+      // Auto-scroll for banner
+      const bannerTimer = setInterval(() => {
+        const nextIndex = (activeBanner + 1) % BANNER_DATA.length;
+        bannerRef.current?.scrollTo({ x: nextIndex * (width - 40), animated: true });
+        setActiveBanner(nextIndex);
+      }, 5000);
 
-  const hideSuccessBanner = () => {
-    Animated.timing(successAnim, {
-      toValue: -150,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setShowSuccessBanner(false));
-  };
+      return () => {
+        clearInterval(pollInterval);
+        clearInterval(bannerTimer);
+      };
+    }
+  }, [user, checkOrderUpdates, checkProductUpdates, activeBanner]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -135,6 +132,14 @@ export default function HomeScreen({ navigation, route }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const silentRefresh = async () => {
+    try {
+      const prods = await productService.getProducts({ limit: 8 });
+      const list = prods.products || prods.data || (Array.isArray(prods) ? prods : []);
+      if (list.length > 0) setProducts(list);
+    } catch (e) { console.warn('Background refresh failed', e); }
   };
 
   if (loading) return (
@@ -167,23 +172,7 @@ export default function HomeScreen({ navigation, route }) {
     <View style={{ flex: 1, backgroundColor: THEME_COLORS.background }}>
       <StatusBar barStyle="dark-content" backgroundColor={THEME_COLORS.surface} />
 
-      {/* ── PAYMENT SUCCESS TOAST ── */}
-      {showSuccessBanner && (
-        <Animated.View style={[styles.successToast, { transform: [{ translateY: successAnim }] }]}>
-          <View style={styles.successLeft}>
-            <View style={styles.successCheckCircle}>
-              <Text style={styles.successIcon}>✓</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.successTitle}>Order Placed Successfully!</Text>
-              <Text style={styles.successSub} numberOfLines={1}>Payment received. Thank you for shopping.</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.closeToastBtn} onPress={hideSuccessBanner}>
-            <Text style={styles.closeToastTxt}>✕</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      <StatusBar barStyle="dark-content" backgroundColor={THEME_COLORS.surface} />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
@@ -194,11 +183,11 @@ export default function HomeScreen({ navigation, route }) {
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={styles.headerIconBtn}
-                onPress={() => navigation.navigate('Cart')}
+                onPress={() => navigation.navigate('Notifications')}
               >
-                <CartIcon color={THEME_COLORS.text} size={24} />
-                {cartCount > 0 && (
-                  <View style={styles.badge}><Text style={styles.badgeTxt}>{String(cartCount)}</Text></View>
+                <Bell color={THEME_COLORS.text} size={24} />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <View style={styles.badge}><Text style={styles.badgeTxt}>{String(notifications.filter(n => !n.read).length)}</Text></View>
                 )}
               </TouchableOpacity>
             </View>
@@ -293,12 +282,15 @@ export default function HomeScreen({ navigation, route }) {
                     product={p}
                     style={{ marginRight: 14 }}
                     onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
-                    onAddToCart={() => addToCart({
-                      id: p._id || p.id,
-                      name: p.name,
-                      price: p.price || 0,
-                      image: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0]))
-                    }, 1)}
+                    onAddToCart={() => {
+                      addToCart({
+                        id: p._id || p.id,
+                        name: p.name,
+                        price: p.price || 0,
+                        image: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0]))
+                      }, 1);
+                      addNotification('cart', 'Added to Cart', `${p.name} added successfully!`, 'Cart');
+                    }}
                   />
                 ))}
               </ScrollView>

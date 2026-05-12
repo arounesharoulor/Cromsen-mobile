@@ -36,7 +36,7 @@ const MENU_SECTIONS = [
   {
     title: 'Support',
     items: [
-      { icon: HelpCircle, label: 'Support & Help', screen: null },
+      { icon: HelpCircle, label: 'Support & Help', screen: 'Help' },
     ],
   },
   {

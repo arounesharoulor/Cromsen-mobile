@@ -1,39 +1,114 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar, TextInput, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { 
+  StyleSheet, Text, View, TouchableOpacity, StatusBar, 
+  TextInput, Alert, ScrollView, ActivityIndicator,
+  KeyboardAvoidingView, Platform 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import { Settings, Save, MapPin, ArrowLeft } from 'lucide-react-native';
+import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save } from 'lucide-react-native';
 
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
-import { sanitizeData, userService } from '../services/api';
-import { Platform } from 'react-native';
+import { userService, authService } from '../services/api';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function SettingsScreen({ navigation }) {
   const { user, updateUser } = useAuth();
+  const { addNotification } = useNotifications();
   
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
-  const [password, setPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState(user?.storedPassword || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   
   // Address fields
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [zip, setZip] = useState('');
+  const [origAddr, setOrigAddr] = useState(null);
   
   const [loading, setLoading] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  const currentUserId = user?._id || user?.id;
+
+  // Fetch fresh profile on focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchProfile = async () => {
+        if (!currentUserId) return;
+        try {
+          const profile = await authService.getProfile(currentUserId);
+          const u = profile.user || profile.data || profile;
+          if (u) {
+            setName(u.name || '');
+            setEmail(u.email || '');
+            setPhone(u.phone || '');
+            
+            if (u.addresses && u.addresses.length > 0) {
+              const addr = u.addresses[u.addresses.length - 1]; // Latest address
+              setAddress(addr.street || addr.address || '');
+              setCity(addr.city || '');
+              setState(addr.state || '');
+              setZip(addr.zip || addr.pincode || '');
+            }
+            
+            // Keep context in sync
+            updateUser({ ...user, ...u });
+            return; // Success
+          }
+        } catch (err) {
+          console.warn('Failed to fetch fresh profile:', err);
+        }
+
+        // FALLBACK: If backend fails or has no address, try local storage
+        try {
+          const stored = await AsyncStorage.getItem('@UserAddresses');
+          if (stored) {
+            const addrs = JSON.parse(stored);
+            if (addrs && addrs.length > 0) {
+              const addr = addrs[addrs.length - 1];
+              setAddress(addr.address || addr.street || '');
+              setCity(addr.city || '');
+              setState(addr.state || '');
+              setZip(addr.zip || addr.pincode || '');
+            }
+          }
+        } catch (e) {
+          console.warn('Local address fallback failed:', e);
+        } finally {
+          setIsFirstLoad(false);
+        }
+      };
+      fetchProfile();
+    }, [currentUserId])
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadProfile();
+    }, [])
+  );
 
   const loadProfile = async () => {
     try {
       const currentUserId = user?._id || user?.id;
       if (!currentUserId) return;
+
+      // Fetch latest profile from backend
+      const profile = await authService.getProfile(currentUserId);
+      const userData = profile.user || profile.data || profile;
+      
+      if (userData) {
+        setName(userData.name || '');
+        setEmail(userData.email || '');
+        setPhone(userData.phone || '');
+      }
 
       const addrs = await userService.getAddresses(currentUserId);
       if (addrs && addrs.length > 0) {
@@ -42,24 +117,13 @@ export default function SettingsScreen({ navigation }) {
         setCity(first.city || '');
         setState(first.state || '');
         setZip(first.zip || '');
+        setOrigAddr(first);
         if (!phone && first.phone) {
           setPhone(first.phone);
         }
       }
     } catch (err) {
-      console.warn('Failed to load addresses for settings, trying local:', err);
-      const stored = await AsyncStorage.getItem('@UserAddresses');
-      if (stored) {
-        const addrs = JSON.parse(stored);
-        if (addrs.length > 0) {
-          const first = addrs[0];
-          setAddress(first.address || '');
-          setCity(first.city || '');
-          setState(first.state || '');
-          setZip(first.zip || '');
-          if (!phone && first.phone) setPhone(first.phone);
-        }
-      }
+      console.warn('Failed to load profile details:', err);
     }
   };
 
@@ -69,37 +133,72 @@ export default function SettingsScreen({ navigation }) {
       const currentUserId = user?._id || user?.id;
       if (!currentUserId) throw new Error('User not logged in');
 
-      // Update Profile
-      const updateData = { name, email, phone };
-      if (password.trim().length > 0) {
-        if (password.length < 6) {
-          Alert.alert('Error', 'Password must be at least 6 characters');
+      const nameChanged = name !== user?.name;
+      const emailChanged = email !== user?.email;
+      const phoneChanged = phone !== (user?.phone || '');
+      const pwdChanged = newPassword.trim().length > 0;
+      const addrChanged = address !== (origAddr?.address || '') || 
+                          city !== (origAddr?.city || '') || 
+                          state !== (origAddr?.state || '') || 
+                          zip !== (origAddr?.zip || '');
+      const anythingChanged = nameChanged || emailChanged || phoneChanged || pwdChanged || addrChanged;
+
+      if (anythingChanged && !currentPassword) {
+        Alert.alert('Authentication Required', 'Your current password is required to save changes. Please enter it below.');
+        setLoading(false);
+        return;
+      }
+
+      if (pwdChanged) {
+        if (newPassword.length < 6) {
+          Alert.alert('Error', 'New password must be at least 6 characters');
           setLoading(false);
           return;
         }
-        updateData.password = password;
-      }
-      try {
-        await userService.updateProfile(currentUserId, updateData);
-        if (address || city || zip) {
-          const addrData = {
-            name: name,
-            address: address,
-            city: city,
-            state: state,
-            zip: zip,
-            phone: phone,
-            type: 'HOME'
-          };
-          await userService.addAddress(currentUserId, addrData);
+        if (newPassword !== confirmPassword) {
+          Alert.alert('Error', 'Passwords do not match');
+          setLoading(false);
+          return;
         }
-      } catch (e) {
-        console.warn('Backend update failed, saving locally:', e);
       }
 
-      await updateUser({ ...user, ...updateData });
+      const updateData = { name, email, phone };
+      if (pwdChanged) {
+        updateData.currentPassword = currentPassword;
+        updateData.password = newPassword;
+      } else {
+        // Even if password didn't change, we might need it for auth
+        updateData.currentPassword = currentPassword;
+      }
+
+      // 1. Update Profile (Name, Email, Phone, Password)
+      await userService.updateProfile(currentUserId, updateData);
+
+      // 2. Update Address if provided
+      if (address || city || zip) {
+        const addrData = {
+          name: name,
+          address: address,
+          city: city,
+          state: state,
+          zip: zip,
+          phone: phone,
+          type: 'HOME'
+        };
+        try {
+          await userService.addAddress(currentUserId, addrData, currentPassword);
+        } catch (e) {
+          console.warn('Address sync failed:', e);
+        }
+      }
+
+      // 3. Update local auth context
+      // If password was changed, update storedPassword
+      const updatedPassword = pwdChanged ? newPassword : currentPassword;
+      await updateUser({ ...user, ...updateData, phone }, updatedPassword);
+      addNotification('success', 'Profile Updated', 'Your profile details have been saved successfully.', 'Settings');
       
-      Alert.alert('Success', 'Profile settings updated locally!');
+      Alert.alert('Success', 'Profile updated successfully!');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to update profile');
@@ -108,116 +207,119 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+  const renderInput = (label, value, onChange, icon, props = {}) => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputWrapper}>
+        <View style={styles.iconBox}>{icon}</View>
+        <TextInput 
+          style={styles.input}
+          value={value}
+          onChangeText={onChange}
+          placeholderTextColor="#94A3B8"
+          {...props}
+        />
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={20} color={THEME_COLORS.primary} />
+          <ArrowLeft size={22} color={THEME_COLORS.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Account Settings</Text>
-        <View style={{ width: 36 }} />
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <TouchableOpacity disabled={loading} onPress={handleSave}>
+          <Text style={[styles.headerSave, loading && { opacity: 0.5 }]}>Save</Text>
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.sectionHeading}>Personal Information</Text>
-        
-        <View style={styles.section}>
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput 
-            style={styles.input} 
-            value={name} 
-            onChangeText={setName} 
-            placeholder="Enter your full name" 
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Email Address</Text>
-          <TextInput 
-            style={styles.input} 
-            value={email} 
-            onChangeText={setEmail} 
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholder="Enter your email" 
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput 
-            style={styles.input} 
-            value={phone} 
-            onChangeText={setPhone} 
-            keyboardType="phone-pad"
-            placeholder="Enter your phone number" 
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>New Password (Optional)</Text>
-          <TextInput 
-            style={styles.input} 
-            value={password} 
-            onChangeText={setPassword} 
-            secureTextEntry
-            placeholder="Enter new password" 
-          />
-        </View>
-
-        <Text style={[styles.sectionHeading, { marginTop: 10 }]}>Primary Address</Text>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Street Address</Text>
-          <TextInput 
-            style={styles.input} 
-            value={address} 
-            onChangeText={setAddress} 
-            placeholder="House No, Street, Area" 
-          />
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View style={[styles.section, { flex: 1 }]}>
-            <Text style={styles.label}>City</Text>
-            <TextInput 
-              style={styles.input} 
-              value={city} 
-              onChangeText={setCity} 
-              placeholder="City" 
-            />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          
+          {/* Avatar Section */}
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarCircle}>
+              <User size={40} color={THEME_COLORS.primary} />
+              <TouchableOpacity style={styles.cameraBtn}>
+                <Camera size={14} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.avatarName}>{name || 'User'}</Text>
+            <Text style={styles.avatarRole}>Cromsen Member</Text>
           </View>
-          <View style={[styles.section, { flex: 1 }]}>
-            <Text style={styles.label}>ZIP Code</Text>
-            <TextInput 
-              style={styles.input} 
-              value={zip} 
-              onChangeText={setZip} 
-              keyboardType="number-pad"
-              placeholder="Pincode" 
-            />
+
+          {/* Profile Details */}
+          <Text style={styles.sectionTitle}>Profile Details</Text>
+          <View style={styles.card}>
+            {renderInput('Full Name', name, setName, <User size={18} color="#64748B" />, { placeholder: 'Your name' })}
+            {renderInput('Email Address', email, setEmail, <Mail size={18} color="#64748B" />, { 
+              placeholder: 'name@example.com',
+              keyboardType: 'email-address',
+              autoCapitalize: 'none'
+            })}
+            {renderInput('Phone Number', phone, (v) => setPhone(v.replace(/[^0-9]/g, '').slice(0, 10)), <Phone size={18} color="#64748B" />, { 
+              placeholder: '10-digit number',
+              keyboardType: 'phone-pad',
+              maxLength: 10
+            })}
           </View>
-        </View>
 
-        <TouchableOpacity 
-          style={[styles.saveBtn, loading && { opacity: 0.7 }]} 
-          onPress={handleSave}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Save size={18} color="#FFF" />
-              <Text style={styles.saveTxt}>Save Changes</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Security */}
+          <Text style={styles.sectionTitle}>Security & Password</Text>
+          <View style={styles.card}>
+            {renderInput('Current Password', currentPassword, setCurrentPassword, <Lock size={18} color="#64748B" />, { 
+              placeholder: 'Verify current password',
+              secureTextEntry: true
+            })}
+            {renderInput('New Password', newPassword, setNewPassword, <Lock size={18} color="#64748B" />, { 
+              placeholder: 'Minimum 6 characters',
+              secureTextEntry: true
+            })}
+            {renderInput('Confirm New Password', confirmPassword, setConfirmPassword, <Lock size={18} color="#64748B" />, { 
+              placeholder: 'Re-enter new password',
+              secureTextEntry: true
+            })}
+          </View>
 
+          {/* Address */}
+          <Text style={styles.sectionTitle}>Shipping Information</Text>
+          <View style={styles.card}>
+            {renderInput('Street Address', address, setAddress, <MapPin size={18} color="#64748B" />, { placeholder: 'House/Building/Street' })}
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1.5 }}>
+                {renderInput('City', city, setCity, null, { placeholder: 'City' })}
+              </View>
+              <View style={{ flex: 1 }}>
+                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP' })}
+              </View>
+            </View>
+            {renderInput('State', state, setState, null, { placeholder: 'State/Province' })}
+          </View>
 
+          <TouchableOpacity 
+            style={[styles.mainSaveBtn, loading && { opacity: 0.7 }]} 
+            onPress={handleSave}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Save size={20} color="#FFF" />
+                <Text style={styles.mainSaveTxt}>Update Profile</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -226,51 +328,61 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF',
+    paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#FFF',
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { 
-    fontSize: 16, 
-    fontWeight: '800', 
-    color: '#004694', 
-    fontFamily: 'Plus Jakarta Sans' 
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1E293B' },
+  headerSave: { fontSize: 16, fontWeight: '800', color: THEME_COLORS.secondary },
+  
+  scroll: { padding: 20, paddingBottom: 60 },
+
+  /* Avatar */
+  avatarSection: { alignItems: 'center', marginBottom: 30 },
+  avatarCircle: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12, position: 'relative',
   },
-  scroll: { padding: 20, paddingBottom: 50 },
-  sectionHeading: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: THEME_COLORS.primary,
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontFamily: 'Plus Jakarta Sans'
+  cameraBtn: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: THEME_COLORS.primary,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, borderColor: '#FFF',
   },
-  section: { marginBottom: 20 },
-  label: { 
-    fontSize: 13, 
-    fontWeight: '700', 
-    color: THEME_COLORS.textSecondary, 
-    marginBottom: 8,
-    fontFamily: 'Plus Jakarta Sans' 
+  avatarName: { fontSize: 18, fontWeight: '900', color: '#1E293B' },
+  avatarRole: { fontSize: 13, color: '#64748B', fontWeight: '600', marginTop: 2 },
+
+  /* Card and Inputs */
+  sectionTitle: { fontSize: 13, fontWeight: '900', color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  card: {
+    backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 25,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 10, elevation: 3,
   },
-  input: {
-    backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0',
-    borderRadius: 12, paddingHorizontal: 16, height: 50,
-    fontSize: 15, color: THEME_COLORS.text, fontWeight: '600',
-    fontFamily: 'Plus Jakarta Sans'
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 12, fontWeight: '800', color: '#475569', marginBottom: 8, marginLeft: 2 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F8FAFC', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
+    height: 52, paddingHorizontal: 12,
   },
-  saveBtn: {
+  iconBox: { width: 32, alignItems: 'center' },
+  input: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1E293B', marginLeft: 8 },
+
+  /* Main Button */
+  mainSaveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, height: 52, borderRadius: 14, backgroundColor: THEME_COLORS.secondary,
-    marginTop: 20
+    backgroundColor: THEME_COLORS.primary, height: 56, borderRadius: 16,
+    gap: 10, marginTop: 10,
+    shadowColor: THEME_COLORS.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 8,
   },
-  saveTxt: { 
-    fontSize: 16, 
-    fontWeight: '800', 
-    color: '#FFF',
-    fontFamily: 'Plus Jakarta Sans' 
-  }
+  mainSaveTxt: { color: '#FFF', fontSize: 17, fontWeight: '900' },
 });
+

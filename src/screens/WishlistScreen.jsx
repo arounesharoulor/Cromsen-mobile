@@ -8,12 +8,14 @@ import { THEME_COLORS } from '../theme';
 import { EmptyState, AppButton } from '../components';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
+import { useNotifications } from '../context/NotificationContext';
 import { getImageUrl, sanitizeData } from '../services/api';
 import { BackIcon, HeartIcon } from '../components/CustomIcons';
 
 export default function WishlistScreen({ navigation }) {
   const { wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const { addNotification } = useNotifications();
 
   const moveToCart = (item) => {
     addToCart({
@@ -23,6 +25,7 @@ export default function WishlistScreen({ navigation }) {
       image: item.image,
       variant: '',
     }, 1);
+    addNotification('cart', 'Added to Cart', `${item.name} moved to cart!`, 'Cart');
     removeFromWishlist(item.id);
   };
 

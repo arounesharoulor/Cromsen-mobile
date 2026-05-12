@@ -7,12 +7,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Search, SlidersHorizontal } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { ProductCard, EmptyState, ErrorState } from '../components';
-import { productService, sanitizeData } from '../services/api';
+import { productService, sanitizeData, getImageUrl } from '../services/api';
+import { useCart } from '../context/CartContext';
+import { useNotifications } from '../context/NotificationContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from 'react-native';
 import { BackIcon } from '../components/CustomIcons';
 
 export default function AllProductsScreen({ navigation, route }) {
+  const { addToCart } = useCart();
+  const { addNotification } = useNotifications();
   const { title = 'Products', category, categoryId } = route.params || {};
   const [products, setProducts] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -154,7 +158,15 @@ export default function AllProductsScreen({ navigation, route }) {
             <ProductCard
               product={item}
               onPress={() => navigation.navigate('ProductDetail', { productId: item._id || item.id })}
-              onAddToCart={() => navigation.navigate('ProductDetail', { productId: item._id || item.id })}
+              onAddToCart={() => {
+                addToCart({
+                  id: item._id || item.id,
+                  name: item.name,
+                  price: item.price || 0,
+                  image: getImageUrl(item.image || item.thumbnail || item.img || (item.images && item.images[0]))
+                }, 1);
+                addNotification('cart', 'Added to Cart', `${item.name} added successfully!`, 'Cart');
+              }}
             />
           )}
         />

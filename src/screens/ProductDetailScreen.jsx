@@ -5,7 +5,7 @@ import {
   TextInput, Animated,
 } from 'react-native';
 
-import { THEME_COLORS } from '../theme';
+import { THEME_COLORS, FONTS } from '../styling';
 import { ShoppingCart, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, ArrowLeft, Plus, Minus } from 'lucide-react-native';
 import { productService, getImageUrl, sanitizeData } from '../services/api';
 import { useCart } from '../context/CartContext';
@@ -296,8 +296,11 @@ export default function ProductDetailScreen({ navigation, route }) {
                 {sanitizeData(product.name, 'Product')}
               </Text>
             </View>
-            <View style={s.ratingChip}>
-              <Text style={s.ratingTxt}>★ {rating}</Text>
+            <View style={s.priceRatingRow}>
+              <Text style={s.priceTxt}>₹{price.toLocaleString()}</Text>
+              <View style={s.ratingChip}>
+                <Text style={s.ratingTxt}>★ {rating}</Text>
+              </View>
             </View>
           </View>
 
@@ -488,7 +491,13 @@ export default function ProductDetailScreen({ navigation, route }) {
                     <Text style={s.similarPrice}>₹{(p.price || 0).toLocaleString()}</Text>
                     <TouchableOpacity 
                       style={s.similarAdd}
-                      onPress={() => addToCart(p, 1)}
+                      onPress={() => {
+                        addToCart({
+                          ...p,
+                          id: p._id || p.id,
+                          image: getImageUrl(p.image || p.thumbnail)
+                        }, 1);
+                      }}
                     >
                       <FrameIcon size={20} />
                     </TouchableOpacity>
@@ -609,7 +618,26 @@ const s = StyleSheet.create({
   submitReviewTxt: { color: '#FFF', fontWeight: '900', fontSize: 14 },
 
   catName: { fontSize: 12, color: THEME_COLORS.textSecondary, fontWeight: '600', marginBottom: 2 },
-  productName: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.text },
+  productName: {
+    fontFamily: FONTS.family,
+    fontSize: 20,
+    fontWeight: '700',
+    color: THEME_COLORS.text,
+    marginTop: 4,
+  },
+  priceRatingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  priceTxt: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: THEME_COLORS.primary,
+    fontFamily: FONTS.family,
+  },
   ratingChip: {
     backgroundColor: '#F0FFF4', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 4,

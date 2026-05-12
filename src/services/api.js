@@ -186,11 +186,8 @@ export const userService = {
       const errData = await response.json().catch(() => ({}));
       const errMsg = errData.message || '';
 
-      // Check if this is the "Password Required" error we've been seeing
       if (response.status === 400 && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('required'))) {
-        console.warn(`[BACKEND SYNC SKIPPED] The server requires a password for profile updates. Saving locally only.`);
-        // Return dummy success to prevent the red error box in the UI
-        return { success: true, localOnly: true, message: "Handled locally due to backend password requirement" };
+        throw new Error('Current password is required to update your profile.');
       }
 
       // If it's a 404 or other error, handle it properly
@@ -252,7 +249,7 @@ export const userService = {
     }
   },
 
-  addAddress: async (userId, addressData) => {
+  addAddress: async (userId, addressData, password = null) => {
     const backendAddr = {
       name: addressData.name || addressData.firstName || '',
       street: addressData.address || addressData.line1 || '',
@@ -287,10 +284,13 @@ export const userService = {
       // 2. Push updated addresses to backend
       const updateUrl = `${BASE_URL}/users/${userId}/profile`;
       console.log(`[SYNC] Syncing Addresses: PUT ${updateUrl}`);
+      const updateBody = { addresses: updatedAddresses };
+      if (password) updateBody.currentPassword = password;
+      
       const updateResp = await fetch(updateUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addresses: updatedAddresses }),
+        body: JSON.stringify(updateBody),
       });
 
       if (updateResp.ok) {
@@ -298,11 +298,10 @@ export const userService = {
         return await handleResponse(updateResp);
       }
 
-      // Handle the "Password Required" case specifically
       const errData = await updateResp.json().catch(() => ({}));
       const errMsg = errData.message || '';
       if (updateResp.status === 400 && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('required'))) {
-        console.warn(`[BACKEND SYNC SKIPPED] Server requires password for updates. Address saved locally.`);
+        console.warn('[SYNC] Backend requires password for profile address update. Skipping backend sync, using local state.');
         return { success: true, localOnly: true };
       }
 
@@ -316,7 +315,7 @@ export const userService = {
     }
   },
 
-  deleteAddress: async (userId, addressId) => {
+  deleteAddress: async (userId, addressId, password = null) => {
     const usersResp = await fetch(`${BASE_URL}/users`);
     const usersData = await usersResp.json();
     const users = Array.isArray(usersData) ? usersData : usersData.users || [];
@@ -326,16 +325,19 @@ export const userService = {
     const updatedAddresses = (user.addresses || []).filter(
       a => String(a._id) !== String(addressId) && String(a.id) !== String(addressId)
     );
+    const updateBody = { addresses: updatedAddresses };
+    if (password) updateBody.currentPassword = password;
+
     const patchResp = await fetch(`${BASE_URL}/users/${userId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ addresses: updatedAddresses }),
+      body: JSON.stringify(updateBody),
     });
     if (patchResp.status === 404) {
       const fbResp = await fetch(`${BASE_URL}/users/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addresses: updatedAddresses }),
+        body: JSON.stringify(updateBody),
       });
       return handleResponse(fbResp);
     }
@@ -349,8 +351,16 @@ export const userService = {
       if (!response.ok) return [];
       const data = await response.json();
       const allOrders = Array.isArray(data) ? data : data.orders || [];
-      if (!userEmail) return [];
-      return allOrders.filter(o => o.guestEmail === userEmail);
+      
+      if (!userEmail && !userId) return [];
+      
+      const email = userEmail?.toLowerCase();
+      
+      return allOrders.filter(o => {
+        const oEmail = (o.guestEmail || o.email || '').toLowerCase();
+        const oUserId = String(o.userId || o.user || '');
+        return (email && oEmail === email) || (userId && oUserId === String(userId));
+      });
     } catch (e) {
       console.warn('Orders fetch failed:', e);
       return [];
