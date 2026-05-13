@@ -1,0 +1,9 @@
+# EAS Ignore
+node_modules/
+.expo/
+dist/
+build/
+android/
+ios/
+*.log
+.git/
