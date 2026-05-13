@@ -5,9 +5,11 @@ import { THEME_COLORS, FONTS } from '../styling';
 import { getImageUrl, sanitizeData } from '../services/api';
 import { CartIcon, FrameIcon, HeartIcon } from './CustomIcons';
 import { useWishlist } from '../context/WishlistContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ProductCard({ product, onPress, onAddToCart, style }) {
   const { toggleWishlist, isWishlisted } = useWishlist();
+  const { isDarkMode, theme } = useTheme();
   const wishlisted = product && isWishlisted(product._id || product.id);
 
   const name = sanitizeData(product?.name, 'Product');
@@ -28,34 +30,40 @@ export default function ProductCard({ product, onPress, onAddToCart, style }) {
     product?.photo
   );
 
-  const rating = typeof product?.ratings === 'number' ? product.ratings : 4.5;
-
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity 
+      style={[
+        styles.card, 
+        { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: isDarkMode ? '#000' : '#E2E8F0' },
+        style
+      ]} 
+      onPress={onPress} 
+      activeOpacity={0.85}
+    >
       {/* Image */}
-      <View style={styles.imgWrap}>
+      <View style={[styles.imgWrap, { backgroundColor: theme.surface }]}>
         <Image source={{ uri: image }} style={styles.img} resizeMode="cover" />
-        <TouchableOpacity style={styles.wishBtn} onPress={() => product && toggleWishlist(product)}>
+        <TouchableOpacity 
+          style={[styles.wishBtn, { backgroundColor: isDarkMode ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.9)' }]} 
+          onPress={() => product && toggleWishlist(product)}
+        >
           <HeartIcon 
             size={14} 
-            color={wishlisted ? THEME_COLORS.error : THEME_COLORS.textSecondary} 
+            color={wishlisted ? theme.error : theme.textSecondary} 
             filled={wishlisted} 
           />
         </TouchableOpacity>
-
       </View>
 
       {/* Details */}
       <View style={styles.body}>
-        <Text style={styles.category} numberOfLines={1}>{category}</Text>
-        <Text style={styles.name} numberOfLines={2}>{name}</Text>
+        <Text style={[styles.category, { color: theme.textSecondary }]} numberOfLines={1}>{category}</Text>
+        <Text style={[styles.name, { color: theme.text }]} numberOfLines={2}>{name}</Text>
         <View style={styles.footer}>
-          <Text style={styles.price}>₹{price.toLocaleString()}</Text>
+          <Text style={[styles.price, { color: theme.primary }]}>₹{price.toLocaleString()}</Text>
           <TouchableOpacity onPress={onAddToCart}>
-            <FrameIcon size={30} />
+            <FrameIcon size={30} color={theme.primary} />
           </TouchableOpacity>
-
-
         </View>
       </View>
     </TouchableOpacity>
@@ -66,13 +74,10 @@ const styles = StyleSheet.create({
   card: {
     width: 157,
     minHeight: 199,
-    backgroundColor: THEME_COLORS.surface,
     borderRadius: 12,
-    borderWidth: 0.1,
-    borderColor: THEME_COLORS.border,
+    borderWidth: 1,
     overflow: 'hidden',
     elevation: 3,
-    shadowColor: THEME_COLORS.text,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
@@ -80,7 +85,6 @@ const styles = StyleSheet.create({
   imgWrap: {
     width: '100%',
     height: 120,
-    backgroundColor: THEME_COLORS.surface,
     position: 'relative',
   },
   img: {
@@ -96,7 +100,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -108,7 +111,6 @@ const styles = StyleSheet.create({
   },
   category: {
     fontSize: 10,
-    color: THEME_COLORS.textSecondary,
     fontWeight: '600',
     marginBottom: 2,
     fontFamily: FONTS.family,
@@ -117,7 +119,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     fontSize: 14,
     fontWeight: '500',
-    color: '#05102D',
     lineHeight: 14,
     marginBottom: 6,
     flex: 1,
@@ -131,15 +132,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E3C83',
     lineHeight: 16,
-  },
-  addBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

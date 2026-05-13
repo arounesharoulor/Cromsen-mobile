@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { THEME_COLORS } from '../styling';
+import { useTheme } from '../context/ThemeContext';
 
 /**
  * Primary CTA button. Variants: 'primary' | 'secondary' | 'outline' | 'ghost'
@@ -17,10 +17,15 @@ export default function AppButton({
   style,
   textStyle,
 }) {
+  const { theme } = useTheme();
+
   const btnStyle = [
     styles.base,
     styles[`size_${size}`],
     styles[`variant_${variant}`],
+    variant === 'primary' && { backgroundColor: theme.primary, shadowColor: theme.primary },
+    variant === 'secondary' && { backgroundColor: theme.secondary, shadowColor: theme.secondary },
+    variant === 'outline' && { borderColor: theme.primary },
     (disabled || loading) && styles.disabled,
     style,
   ];
@@ -28,13 +33,14 @@ export default function AppButton({
     styles.baseText,
     styles[`text_${size}`],
     styles[`textVariant_${variant}`],
+    (variant === 'outline' || variant === 'ghost') && { color: theme.primary },
     textStyle,
   ];
 
   return (
     <TouchableOpacity style={btnStyle} onPress={onPress} disabled={disabled || loading} activeOpacity={0.85}>
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' || variant === 'ghost' ? THEME_COLORS.primary : '#FFF'} />
+        <ActivityIndicator color={variant === 'outline' || variant === 'ghost' ? theme.primary : '#FFF'} />
       ) : (
         <View style={styles.row}>
           {icon && iconPosition === 'left' && <View style={styles.iconLeft}>{icon}</View>}
@@ -61,19 +67,15 @@ const styles = StyleSheet.create({
   size_md: { height: 48, paddingHorizontal: 20 },
   size_lg: { height: 56, paddingHorizontal: 24 },
 
-  // Variants
+  // Variants (Dynamic colors applied in JS)
   variant_primary: {
-    backgroundColor: THEME_COLORS.primary,
     elevation: 4,
-    shadowColor: THEME_COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
   variant_secondary: {
-    backgroundColor: THEME_COLORS.secondary,
     elevation: 4,
-    shadowColor: THEME_COLORS.secondary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -81,7 +83,6 @@ const styles = StyleSheet.create({
   variant_outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: THEME_COLORS.primary,
   },
   variant_ghost: {
     backgroundColor: 'transparent',
@@ -95,8 +96,8 @@ const styles = StyleSheet.create({
 
   textVariant_primary: { color: '#FFFFFF' },
   textVariant_secondary: { color: '#FFFFFF' },
-  textVariant_outline: { color: THEME_COLORS.primary },
-  textVariant_ghost: { color: THEME_COLORS.primary },
+  textVariant_outline: { },
+  textVariant_ghost: { },
 
   disabled: { opacity: 0.5 },
 });

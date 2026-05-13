@@ -5,24 +5,24 @@
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "icon": "./assets/icons/Cromsen-Appicon.png",
-   
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "icon": "./assets/icons/Cromsen-Appicon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.cromsen.app",
-      
       "runtimeVersion": {
         "policy": "appVersion"
       }
     },
     "android": {
+      "icon": "./assets/icons/Cromsen-Appicon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/Cromsen-Appicon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
       "package": "com.cromsen.app",
       "runtimeVersion": "1.0.0"
@@ -38,6 +38,9 @@
     },
     "updates": {
       "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

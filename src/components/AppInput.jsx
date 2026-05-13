@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
-import { THEME_COLORS } from '../styling';
+import { useTheme } from '../context/ThemeContext';
 
 const AppInput = forwardRef(({
   label,
@@ -13,17 +13,29 @@ const AppInput = forwardRef(({
   inputStyle,
   ...props
 }, ref) => {
+  const { theme } = useTheme();
+
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: theme.text }]}>{label}</Text>}
 
-      <View style={[styles.inputWrap, error && styles.inputWrapError]}>
+      <View style={[
+        styles.inputWrap, 
+        { borderColor: theme.border, backgroundColor: theme.input },
+        error && { borderColor: theme.error }
+      ]}>
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
 
         <TextInput
           ref={ref}
-          style={[styles.input, leftIcon && styles.inputWithLeft, rightIcon && styles.inputWithRight, inputStyle]}
-          placeholderTextColor={THEME_COLORS.textSecondary}
+          style={[
+            styles.input, 
+            { color: theme.text },
+            leftIcon && styles.inputWithLeft, 
+            rightIcon && styles.inputWithRight, 
+            inputStyle
+          ]}
+          placeholderTextColor={theme.textSecondary}
           {...props}
         />
 
@@ -34,8 +46,8 @@ const AppInput = forwardRef(({
         )}
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-      {!error && hint && <Text style={styles.hint}>{hint}</Text>}
+      {error && <Text style={[styles.error, { color: theme.error }]}>{error}</Text>}
+      {!error && hint && <Text style={[styles.hint, { color: theme.textSecondary }]}>{hint}</Text>}
     </View>
   );
 });
@@ -47,20 +59,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: THEME_COLORS.text,
     marginBottom: 6,
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: THEME_COLORS.border,
     borderRadius: 24,
-    backgroundColor: '#FFFFFF',
     minHeight: 48,
-  },
-  inputWrapError: {
-    borderColor: THEME_COLORS.error,
   },
   leftIcon: {
     paddingLeft: 14,
@@ -75,7 +81,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     fontSize: 14,
-    color: THEME_COLORS.text,
     fontWeight: '500',
   },
   inputWithLeft: { paddingLeft: 4 },
@@ -83,12 +88,10 @@ const styles = StyleSheet.create({
   error: {
     marginTop: 4,
     fontSize: 12,
-    color: THEME_COLORS.error,
     fontWeight: '600',
   },
   hint: {
     marginTop: 4,
     fontSize: 12,
-    color: THEME_COLORS.textSecondary,
   },
 });

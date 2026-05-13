@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, StatusBar, Image, Dimensions, KeyboardAvoidingView, Linking, NativeModules, Modal
+  TextInput, Platform, StatusBar, Image, Dimensions, KeyboardAvoidingView, Linking, NativeModules, Modal, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { WebView } from 'react-native-webview';
 
 import { THEME_COLORS } from '../theme';
-import { ArrowLeft, Check, ChevronRight, Plus, Trash2, MapPin, ClipboardList, CreditCard } from 'lucide-react-native';
+import { ArrowLeft, Check, ChevronRight, Plus, Trash2, MapPin, ClipboardList, CreditCard, ChevronDown, Search } from 'lucide-react-native';
+import * as Location from 'expo-location';
+import { Modal as RNModal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
 import { getImageUrl, sanitizeData, userService } from '../services/api';
@@ -16,6 +18,19 @@ import RazorpayCheckout from 'react-native-razorpay';
 import { useAuth } from '../context/AuthContext';
 
 
+
+const COUNTRIES = [
+  { name: 'India', code: '+91', flag: '🇮🇳' },
+  { name: 'United States', code: '+1', flag: '🇺🇸' },
+  { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
+  { name: 'Canada', code: '+1', flag: '🇨🇦' },
+  { name: 'Australia', code: '+61', flag: '🇦🇺' },
+  { name: 'United Arab Emirates', code: '+971', flag: '🇦🇪' },
+  { name: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
+  { name: 'Singapore', code: '+65', flag: '🇸🇬' },
+  { name: 'Germany', code: '+49', flag: '🇩🇪' },
+  { name: 'France', code: '+33', flag: '🇫🇷' },
+];
 
 const { width } = Dimensions.get('window');
 
@@ -101,7 +116,7 @@ function AddAddressForm({ onSave, initialData, user }) {
     return {
       firstName: initialData.firstName || initialData.name || '',
       countryCode: initialData.countryCode || (initialData.phone?.startsWith('+') ? initialData.phone.split(' ')[0] : '+91'),
-      mobile: initialData.mobile || (initialData.phone?.includes(' ') ? initialData.phone.split(' ')[1] : initialData.phone) || '',
+      mobile: initialData.mobile || (initialData.phone?.includes(' ') ? initialData.phone.split(' ')[1] : initialData.phone?.replace(/^\+\d+\s?/, '')) || '',
       pincode: initialData.pincode || initialData.zip || '',
       state: initialData.state || '',
       city: initialData.city || '',
@@ -113,6 +128,10 @@ function AddAddressForm({ onSave, initialData, user }) {
 
   const [form, setForm] = useState(getInitialForm());
   const [errors, setErrors] = useState({});
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(
+    COUNTRIES.find(c => c.code === form.countryCode) || COUNTRIES[0]
+  );
   const set = (k, v) => {
     let val = v;
     if (k === 'mobile') val = v.replace(/[^0-9]/g, '').slice(0, 10);
@@ -142,11 +161,11 @@ function AddAddressForm({ onSave, initialData, user }) {
 
     if (Object.keys(newErrs).length > 0) {
       setErrors(newErrs);
-      alert('Please fill out all the required fields in red.');
+      Alert.alert('Missing Info', 'Please fill out all the required fields in red.');
       return;
     }
 
-    onSave(form);
+    onSave({ ...form, countryCode: selectedCountry.code });
   };
 
   return (
@@ -157,14 +176,41 @@ function AddAddressForm({ onSave, initialData, user }) {
 
         {[
           { label: 'First name', key: 'firstName', placeholder: 'Enter full name' },
-          { label: 'Country Code', key: 'countryCode', placeholder: 'Select your country' },
-          { label: 'Mobile Number', key: 'mobile', placeholder: 'Enter mobile number', keyType: 'phone-pad' },
+          { label: 'Mobile Number', key: 'mobile', placeholder: 'Enter mobile number', keyType: 'phone-pad', isPhone: true },
           { label: 'Pincode', key: 'pincode', placeholder: 'Enter pincode', keyType: 'number-pad', half: true },
           { label: 'State', key: 'state', placeholder: 'Enter State', half: true },
           { label: 'City', key: 'city', placeholder: 'Enter city' },
           { label: 'Address Line 1', key: 'line1', placeholder: 'House No, Building Name' },
           { label: 'Address Line 2', key: 'line2', placeholder: 'Street, Area', required: false },
         ].reduce((acc, field, idx, arr) => {
+          if (field.isPhone) {
+            acc.push(
+              <View key={field.key} style={f.fieldGroup}>
+                <Text style={f.fieldLabel}>{field.label}<Text style={{color: THEME_COLORS.error}}>*</Text></Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity 
+                    style={[f.field, { width: 90, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 4 }]}
+                    onPress={() => setShowCountryModal(true)}
+                  >
+                    <Text style={{ fontSize: 16 }}>{selectedCountry.flag}</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B' }}>{selectedCountry.code}</Text>
+                    <ChevronDown size={14} color="#64748B" />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[f.field, { flex: 1 }, errors[field.key] && f.fieldError]}
+                    placeholder={field.placeholder}
+                    placeholderTextColor={THEME_COLORS.textSecondary}
+                    value={form[field.key]}
+                    onChangeText={(v) => set(field.key, v)}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                {errors[field.key] && <Text style={f.errorTxt}>{errors[field.key]}</Text>}
+              </View>
+            );
+            return acc;
+          }
+
           if (field.key === 'line2') {
             acc.push(
               <View key={field.key} style={f.fieldGroup}>
@@ -190,6 +236,7 @@ function AddAddressForm({ onSave, initialData, user }) {
             );
             return acc;
           }
+
           if (field.half) {
             if (idx > 0 && arr[idx-1]?.half) return acc; // Already rendered as the right side
             const next = arr[idx+1];
@@ -233,30 +280,32 @@ function AddAddressForm({ onSave, initialData, user }) {
           style={f.locateMeBtn} 
           onPress={async () => {
             try {
-              alert('Fetching your current location...');
-              navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                  const { latitude, longitude } = position.coords;
-                  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-                  const data = await res.json();
-                  if (data.address) {
-                    const a = data.address;
-                    setForm(f => ({
-                      ...f,
-                      pincode: a.postcode || f.pincode,
-                      state: a.state || a.state_district || f.state,
-                      city: a.city || a.town || a.village || f.city,
-                      line1: a.road || a.suburb || a.pedestrian || f.line1,
-                      line2: a.neighbourhood || a.suburb || f.line2,
-                    }));
-                    alert('Address updated from location!');
-                  }
-                },
-                (err) => alert('Location access denied or unavailable.'),
-                { enableHighAccuracy: true, timeout: 20000 }
-              );
+              let { status } = await Location.requestForegroundPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Please enable location permissions to use this feature.');
+                return;
+              }
+
+              Alert.alert('Fetching Location', 'Please wait while we get your current address...');
+              let location = await Location.getCurrentPositionAsync({});
+              const { latitude, longitude } = location.coords;
+              
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+              const data = await res.json();
+              if (data.address) {
+                const a = data.address;
+                setForm(f => ({
+                  ...f,
+                  pincode: a.postcode || f.pincode,
+                  state: a.state || a.state_district || f.state,
+                  city: a.city || a.town || a.village || f.city,
+                  line1: a.road || a.suburb || a.pedestrian || f.line1,
+                  line2: a.neighbourhood || a.suburb || f.line2,
+                }));
+                Alert.alert('Success', 'Address auto-filled from your current location!');
+              }
             } catch (e) {
-              alert('Failed to get location.');
+              Alert.alert('Error', 'Failed to fetch location. Please check your GPS and internet connection.');
             }
           }}
         >
@@ -287,6 +336,38 @@ function AddAddressForm({ onSave, initialData, user }) {
 
         </View>
       </ScrollView>
+
+      {/* Country Modal */}
+      <RNModal visible={showCountryModal} animationType="slide" transparent>
+        <View style={s.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowCountryModal(false)} />
+          <View style={s.countryModalSheet}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Select Country</Text>
+              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
+                <Text style={s.closeBtn}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={COUNTRIES}
+              keyExtractor={item => item.name}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={s.countryItem}
+                  onPress={() => {
+                    setSelectedCountry(item);
+                    setShowCountryModal(false);
+                  }}
+                >
+                  <Text style={s.countryFlagLarge}>{item.flag}</Text>
+                  <Text style={s.countryName}>{item.name}</Text>
+                  <Text style={s.countryCodeVal}>{item.code}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </RNModal>
     </KeyboardAvoidingView>
   );
 }
@@ -356,7 +437,8 @@ export default function CheckoutScreen({ navigation, route }) {
         city: newAddr.city,
         state: newAddr.state,
         zip: newAddr.pincode,
-        phone: `${newAddr.countryCode} ${newAddr.mobile}`,
+        phone: newAddr.mobile, // Store only mobile number to avoid truncation
+        countryCode: newAddr.countryCode, // Store code separately
         full: `${newAddr.line1}, ${newAddr.line2 ? newAddr.line2 + ', ' : ''}${newAddr.city}, ${newAddr.state} - ${newAddr.pincode}`,
       };
 

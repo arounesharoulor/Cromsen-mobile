@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import {
-  StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView
+  StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView, Alert, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, ChevronRight, X, ArrowLeft } from 'lucide-react-native';
@@ -10,6 +10,7 @@ import { sanitizeData, userService, getImageUrl } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -49,6 +50,7 @@ import { useFocusEffect } from '@react-navigation/native';
 export default function OrdersScreen({ navigation }) {
   const { user } = useAuth();
   const { addNotification, checkOrderUpdates } = useNotifications();
+  const { isDarkMode, theme } = useTheme();
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,25 +112,38 @@ export default function OrdersScreen({ navigation }) {
   };
 
   const handleCancelOrder = async (orderId) => {
-    try {
-      setLoading(true);
-      
-      // Only call backend if it's a real MongoDB ObjectId (not our local fallback #ORD- string)
-      if (!String(orderId).startsWith('#')) {
-        await userService.updateOrderStatus(orderId, 'Cancelled');
-      }
-      
-      const updatedOrders = orders.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'CANCELLED' } : o);
-      setOrders(updatedOrders);
-      await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
-      
-      alert('Order cancelled successfully.');
-    } catch (e) {
-      console.error('Error cancelling order:', e);
-      alert('Failed to cancel order. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this order?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              
+              // Only call backend if it's a real MongoDB ObjectId (not our local fallback #ORD- string)
+              if (!String(orderId).startsWith('#')) {
+                await userService.updateOrderStatus(orderId, 'Cancelled');
+              }
+              
+              const updatedOrders = orders.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'CANCELLED' } : o);
+              setOrders(updatedOrders);
+              await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+              
+              Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+            } catch (e) {
+              console.error('Error cancelling order:', e);
+              Alert.alert('Error', 'Failed to cancel order. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getOrdersForTab = (tabLabel) => {
@@ -171,25 +186,26 @@ export default function OrdersScreen({ navigation }) {
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={20} color={THEME_COLORS.primary} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.surface }]}>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#2C3E50' : '#F8FAFC' }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={20} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>My Orders</Text>
         <View style={{ width: 36 }} />
       </View>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
 
       {/* TABS */}
-      <View style={styles.tabsContainer}>
+      <View style={[styles.tabsContainer, { backgroundColor: theme.surface }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {TABS.map((tab, index) => (
             <TouchableOpacity
               key={tab.label}
-              style={[styles.tab, activeTab === tab.label && styles.activeTab]}
+              style={[styles.tab, { backgroundColor: theme.border }, activeTab === tab.label && { backgroundColor: theme.primary }]}
               onPress={() => handleTabPress(index, tab.label)}
             >
-              <Text style={[styles.tabText, activeTab === tab.label && styles.activeTabText]}>
+              <Text style={[styles.tabText, { color: theme.textSecondary }, activeTab === tab.label && { color: '#FFF' }]}>
                 {String(tab.label)}{tab.count !== null && tab.count !== undefined ? ` (${tab.count})` : ''}
               </Text>
             </TouchableOpacity>
@@ -226,7 +242,8 @@ export default function OrdersScreen({ navigation }) {
                   renderItem={({ item }) => (
                     <View style={[
                       styles.card, 
-                      (item.status === 'CANCELLED' || item.status === 'DELIVERED') && styles.disabledCard
+                      { backgroundColor: theme.surface, borderColor: theme.border },
+                      (item.status === 'CANCELLED' || item.status === 'DELIVERED') && { opacity: 0.85 }
                     ]}>
                       <View style={styles.cardHeader}>
                         <View>

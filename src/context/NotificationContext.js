@@ -125,10 +125,12 @@ export const NotificationProvider = ({ children }) => {
           const oldOrder = localOrders.find(o => o.id === newOrder.id);
           if (oldOrder && oldOrder.status !== newOrder.status) {
             console.log(`[Order Polling] Status change detected for ${newOrder.id}`);
+            const isCancelled = newOrder.status.includes('CANCELLED') || newOrder.status.includes('CANCEL');
+            
             addNotification(
-              'success', 
-              'Order Status Updated', 
-              `Order ${newOrder.id.slice(-6)} is now ${newOrder.status}`, 
+              isCancelled ? 'error' : 'success', 
+              `Order ${newOrder.status}`, 
+              `Status for Order #${newOrder.id.slice(-6)} has been updated to ${newOrder.status}.`, 
               'Orders'
             );
           }

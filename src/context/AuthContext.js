@@ -19,12 +19,51 @@ export const AuthProvider = ({ children }) => {
         if (authDataSerialized) {
           const _authData = JSON.parse(authDataSerialized);
           setUser(_authData);
+          // Background sync on app launch
+          syncUserData(_authData._id || _authData.id, _authData.email);
         }
       }
     } catch (error) {
       console.error('Error loading auth data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncUserData = async (userId, userEmail) => {
+    if (!userId) return;
+    try {
+      const { authService, userService } = require('../services/api');
+      
+      // 1. Sync Profile
+      try {
+        const profile = await authService.getProfile(userId);
+        const u = profile.user || profile.data || profile;
+        if (u) {
+          const updated = { ...user, ...u };
+          setUser(updated);
+          await AsyncStorage.setItem('@AuthData', JSON.stringify(updated));
+        }
+      } catch (e) {}
+
+      // 2. Sync Addresses
+      try {
+        const addrs = await userService.getAddresses(userId);
+        if (addrs && addrs.length > 0) {
+          await AsyncStorage.setItem('@UserAddresses', JSON.stringify(addrs));
+        }
+      } catch (e) {}
+
+      // 3. Sync Orders
+      try {
+        const orders = await userService.getOrders(userId, userEmail);
+        if (orders && orders.length > 0) {
+          await AsyncStorage.setItem('@UserOrders', JSON.stringify(orders));
+        }
+      } catch (e) {}
+
+    } catch (e) {
+      console.warn('Background sync failed:', e);
     }
   };
 
@@ -35,18 +74,15 @@ export const AuthProvider = ({ children }) => {
     if (AsyncStorage) {
       await AsyncStorage.setItem('@AuthData', JSON.stringify(dataToStore));
     }
+    // Background sync
+    syncUserData(userData._id || userData.id, userData.email);
   };
 
   const logout = async () => {
     setUser(null);
     if (AsyncStorage) {
-      await AsyncStorage.multiRemove([
-        '@AuthData', 
-        '@UserAddresses', 
-        '@UserOrders', 
-        '@cart_items', 
-        '@wishlist_items'
-      ]);
+      // Per user request, we keep addresses, orders, etc. permanent
+      await AsyncStorage.removeItem('@AuthData');
     }
   };
 
@@ -62,7 +98,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, syncUserData, loading }}>
       {children}
 
     </AuthContext.Provider>

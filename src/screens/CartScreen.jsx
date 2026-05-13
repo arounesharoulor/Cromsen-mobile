@@ -1,16 +1,18 @@
 import React from 'react';
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform,
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShoppingBag, ArrowRight, ArrowLeft } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { CartItem, AppButton, EmptyState } from '../components';
 import { useCart } from '../context/CartContext';
+import { useTheme } from '../context/ThemeContext';
 import { BackIcon } from '../components/CustomIcons';
 
 export default function CartScreen({ navigation }) {
   const { cartItems: items, removeFromCart: remove, updateQuantity: updateQty } = useCart();
+  const { isDarkMode, theme } = useTheme();
 
   const subtotal = Array.isArray(items) 
     ? items.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.quantity) || 0), 0)
@@ -21,8 +23,8 @@ export default function CartScreen({ navigation }) {
 
   if (items.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        {/* Header Removed */}
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
 
         <EmptyState
           icon={<ShoppingBag size={52} color={THEME_COLORS.border} />}
@@ -41,13 +43,14 @@ export default function CartScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={20} color={THEME_COLORS.primary} />
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: isDarkMode ? '#2C3E50' : '#F8FAFC' }]}>
+          <ArrowLeft size={20} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Cart</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>My Cart</Text>
         <View style={{ width: 40 }} /> 
       </View>
 
@@ -56,8 +59,8 @@ export default function CartScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Order summary label */}
         <View style={styles.summaryHeader}>
-          <Text style={styles.summaryLabel}>Order Summary</Text>
-          <Text style={styles.itemCount}>{items.length} ITEMS</Text>
+          <Text style={[styles.summaryLabel, { color: theme.text }]}>Order Summary</Text>
+          <Text style={[styles.itemCount, { color: theme.primary }]}>{items.length} ITEMS</Text>
         </View>
 
         {/* Cart Items */}

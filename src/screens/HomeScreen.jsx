@@ -18,6 +18,7 @@ import { FONTS, THEME_COLORS, SPACING } from '../styling';
 
 import { Search, Menu, Star, MapPin, Bell } from 'lucide-react-native';
 import { useNotifications } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 
 import { productService, categoryService, getImageUrl, sanitizeData } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -70,6 +71,7 @@ export default function HomeScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [activeBanner, setActiveBanner] = useState(0);
   const { cartCount, addToCart } = useCart();
+  const { isDarkMode, theme } = useTheme();
   const bannerRef = React.useRef(null);
   const { notifications, addNotification, checkOrderUpdates, checkProductUpdates } = useNotifications();
 
@@ -143,8 +145,8 @@ export default function HomeScreen({ navigation, route }) {
   };
 
   if (loading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME_COLORS.surface }}>
-      <ActivityIndicator size="large" color={THEME_COLORS.secondary} />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background }}>
+      <ActivityIndicator size="large" color={theme.secondary} />
     </View>
   );
 
@@ -169,44 +171,42 @@ export default function HomeScreen({ navigation, route }) {
     : STATIC_CATEGORIES;
 
   return (
-    <View style={{ flex: 1, backgroundColor: THEME_COLORS.background }}>
-      <StatusBar barStyle="dark-content" backgroundColor={THEME_COLORS.surface} />
-
-      <StatusBar barStyle="dark-content" backgroundColor={THEME_COLORS.surface} />
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* ── HEADER ── */}
-        <View style={styles.headerContainer}>
+        <View style={[styles.headerContainer, { backgroundColor: theme.surface, shadowColor: isDarkMode ? '#000' : '#E2E8F0' }]}>
           <View style={styles.headerTop}>
             <LogoIcon size={44} />
             <View style={styles.headerActions}>
               <TouchableOpacity
-                style={styles.headerIconBtn}
+                style={[styles.headerIconBtn, { backgroundColor: isDarkMode ? '#2C3E50' : '#F8FAFC', borderRadius: 12 }]}
                 onPress={() => navigation.navigate('Notifications')}
               >
-                <Bell color={THEME_COLORS.text} size={24} />
+                <Bell color={theme.text} size={24} />
                 {notifications.filter(n => !n.read).length > 0 && (
-                  <View style={styles.badge}><Text style={styles.badgeTxt}>{String(notifications.filter(n => !n.read).length)}</Text></View>
+                  <View style={[styles.badge, { backgroundColor: theme.secondary }]}><Text style={styles.badgeTxt}>{String(notifications.filter(n => !n.read).length)}</Text></View>
                 )}
               </TouchableOpacity>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.searchBar}
+            style={[styles.searchBar, { backgroundColor: theme.background, borderColor: theme.border }]}
             onPress={() => navigation.navigate('Search')}
             activeOpacity={0.85}
           >
-            <Search color={THEME_COLORS.textSecondary} size={18} />
-            <Text style={styles.searchHint}>Search for Products...</Text>
+            <Search color={theme.textSecondary} size={18} />
+            <Text style={[styles.searchHint, { color: theme.textSecondary }]}>Search for Products...</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── MAIN SCROLL ── */}
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollBody}
+          contentContainerStyle={[styles.scrollBody, { backgroundColor: theme.background }]}
           showsVerticalScrollIndicator={false}
         >
           {/* HERO BANNER CAROUSEL */}
@@ -262,9 +262,9 @@ export default function HomeScreen({ navigation, route }) {
           {/* ── BEST SELLERS ── */}
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Best Sellers</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Best Sellers</Text>
               <TouchableOpacity onPress={() => navigation.navigate('AllProducts', { title: 'Best Sellers', category: 'Best Sellers' })}>
-                <Text style={styles.seeAll}>See All</Text>
+                <Text style={[styles.seeAll, { color: theme.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
 
@@ -300,9 +300,9 @@ export default function HomeScreen({ navigation, route }) {
           {/* ── CATEGORIES (Switch Tabs) ── */}
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Category</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Category</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Category')}>
-                <Text style={styles.seeAll}>See All</Text>
+                <Text style={[styles.seeAll, { color: theme.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
 

@@ -15,6 +15,7 @@ import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useTheme } from '../context/ThemeContext';
 import { sanitizeData } from '../services/api';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -55,18 +56,42 @@ const MENU_SECTIONS = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout: authLogout } = useAuth();
+  const { user, logout: authLogout, updateUser } = useAuth();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
-  const [profileImage, setProfileImage] = useState(null);
+  const { isDarkMode, theme } = useTheme();
+  const [profileImage, setProfileImage] = useState(user?.image || null);
+
+  React.useEffect(() => {
+    if (user?.image) setProfileImage(user.image);
+    else loadLocalAvatar();
+  }, [user]);
+
+  const loadLocalAvatar = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@ProfileImage');
+      if (stored) setProfileImage(stored);
+    } catch (e) {}
+  };
+
+  const saveAvatar = async (uri) => {
+    try {
+      setProfileImage(uri);
+      await AsyncStorage.setItem('@ProfileImage', uri);
+      // Also update global auth context
+      updateUser({ ...user, image: uri });
+    } catch (e) {}
+  };
 
   const [showImageOptions, setShowImageOptions] = useState(false);
 
   const userName = sanitizeData(user?.name, 'Abishek Kevin');
   const userEmail = user?.email || 'kevin@madhuratechnologies.com';
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = async () => {
     setProfileImage(null);
+    await AsyncStorage.removeItem('@ProfileImage');
+    updateUser({ ...user, image: null });
     setShowImageOptions(false);
   };
 
@@ -90,7 +115,7 @@ export default function ProfileScreen({ navigation }) {
       });
 
       if (!result.canceled) {
-        setProfileImage(result.assets[0].uri);
+        saveAvatar(result.assets[0].uri);
       }
     } catch (error) {
       Alert.alert("Error", "Failed to pick image from device.");
@@ -101,52 +126,52 @@ export default function ProfileScreen({ navigation }) {
 
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
       
       {/* Top Header */}
-      <View style={styles.topHeader}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={20} color={THEME_COLORS.primary} />
+      <View style={[styles.topHeader, { backgroundColor: theme.surface }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: isDarkMode ? '#2C3E50' : '#F8FAFC' }]}>
+          <ArrowLeft size={20} color={theme.primary} />
         </TouchableOpacity>
-        <Text style={styles.topHeaderTitle}>Your Account</Text>
-        <Code size={20} color={THEME_COLORS.primary} />
+        <Text style={[styles.topHeaderTitle, { color: theme.primary }]}>Your Account</Text>
+        <View style={{ width: 36 }} />
       </View>
 
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         {/* Profile Header Card */}
-        <View style={styles.profileCard}>
-          <Text style={styles.cardHeaderTitle}>Your Account</Text>
+        <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
+          <Text style={[styles.cardHeaderTitle, { color: theme.primary }]}>Your Account</Text>
           <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: theme.background, borderColor: theme.surface }]}>
               {profileImage ? (
                 <Image 
                   source={{ uri: profileImage }} 
                   style={styles.avatarImg} 
                 />
               ) : (
-                <View style={[styles.avatarImg, { backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' }]}>
-                  <User size={40} color="#94A3B8" />
+                <View style={[styles.avatarImg, { backgroundColor: isDarkMode ? '#2C3E50' : '#E2E8F0', justifyContent: 'center', alignItems: 'center' }]}>
+                  <User size={40} color={theme.textSecondary} />
                 </View>
               )}
             </View>
-            <TouchableOpacity style={styles.editBadge} onPress={() => setShowImageOptions(true)}>
+            <TouchableOpacity style={[styles.editBadge, { backgroundColor: theme.primary, borderColor: theme.surface }]} onPress={() => setShowImageOptions(true)}>
               <Pencil size={12} color="#FFF" />
             </TouchableOpacity>
 
           </View>
 
-          <Text style={styles.profileName}>{userName}</Text>
-          <Text style={styles.profileEmail}>{userEmail}</Text>
+          <Text style={[styles.profileName, { color: theme.text }]}>{userName}</Text>
+          <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{userEmail}</Text>
         </View>
 
         {/* Menu Sections */}
         {MENU_SECTIONS.map((section, si) => (
           <View key={si} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
-            <View style={styles.sectionCard}>
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{section.title.toUpperCase()}</Text>
+            <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               {section.items.map((item, ii) => (
                 <TouchableOpacity
                   key={ii}
@@ -155,20 +180,20 @@ export default function ProfileScreen({ navigation }) {
                     if (item.screen === 'LogoutAction') authLogout();
                     else if (item.screen) navigation.navigate(item.screen);
                   }}
-                  activeOpacity={0.7}
+                   activeOpacity={0.7}
                 >
-                  <View style={styles.menuIconWrap}>
-                    <item.icon size={18} color="#000" />
+                  <View style={[styles.menuIconWrap, { backgroundColor: theme.background }]}>
+                    <item.icon size={18} color={theme.text} />
                   </View>
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                  <ArrowRight size={16} color="#000" />
+                  <Text style={[styles.menuLabel, { color: theme.text }]}>{item.label}</Text>
+                  <ArrowRight size={16} color={theme.text} />
                 </TouchableOpacity>
               ))}
             </View>
           </View>
         ))}
 
-        <Text style={styles.version}>CROMSEN • v1.0.4</Text>
+        <Text style={[styles.version, { color: theme.textSecondary, opacity: 0.5 }]}>CROMSEN • v1.0.4</Text>
 
       </ScrollView>
 
@@ -180,18 +205,18 @@ export default function ProfileScreen({ navigation }) {
         onRequestClose={() => setShowImageOptions(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowImageOptions(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Profile Photo</Text>
-            <TouchableOpacity style={styles.modalOption} onPress={handlePickImage}>
-              <Text style={styles.modalOptionTxt}>Change Photo</Text>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Profile Photo</Text>
+            <TouchableOpacity style={[styles.modalOption, { borderBottomColor: theme.border }]} onPress={handlePickImage}>
+              <Text style={[styles.modalOptionTxt, { color: theme.primary }]}>Change Photo</Text>
             </TouchableOpacity>
             {profileImage && (
-              <TouchableOpacity style={styles.modalOption} onPress={handleRemoveImage}>
+              <TouchableOpacity style={[styles.modalOption, { borderBottomColor: theme.border }]} onPress={handleRemoveImage}>
                 <Text style={[styles.modalOptionTxt, { color: '#EF4444' }]}>Remove Photo</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.modalOption, styles.modalCancel]} onPress={() => setShowImageOptions(false)}>
-              <Text style={styles.modalOptionTxt}>Cancel</Text>
+              <Text style={[styles.modalOptionTxt, { color: theme.primary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

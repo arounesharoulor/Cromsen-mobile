@@ -45,6 +45,7 @@ import AddressesScreen from './src/screens/AddressesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import HelpScreen from './src/screens/HelpScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import TabNavigator from './src/navigation/TabNavigator';
 
 // Providers
@@ -53,15 +54,18 @@ import { CartProvider } from './src/context/CartContext';
 import { WishlistProvider } from './src/context/WishlistContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+
 const Stack = createNativeStackNavigator();
 
 function Navigation() {
   const { user, loading } = useAuth();
+  const { isDarkMode, theme } = useTheme();
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: CR_APP_THEME.surface }}>
-        <ActivityIndicator size="large" color={CR_APP_THEME.primary} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.surface }}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
@@ -87,27 +91,37 @@ function Navigation() {
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ animation: 'slide_from_right' }} />
         </>
       )}
     </Stack.Navigator>
   );
 }
 
+function AppContent() {
+  const { isDarkMode } = useTheme();
+  return (
+    <NavigationContainer>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <Navigation />
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <NotificationProvider>
-              <NavigationContainer>
-                <StatusBar style="dark" />
-                <Navigation />
-              </NavigationContainer>
-            </NotificationProvider>
-          </WishlistProvider>
-        </CartProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <NotificationProvider>
+                <AppContent />
+              </NotificationProvider>
+            </WishlistProvider>
+          </CartProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

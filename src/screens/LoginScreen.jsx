@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Dimensions, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, Dimensions, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
@@ -9,12 +9,14 @@ import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
 import { authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { LogoIcon } from '../components/CustomIcons';
 
 const { height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
   const { login: authLogin } = useAuth();
+  const { isDarkMode, theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -45,17 +47,17 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
           {/* Brand Header */}
           <View style={styles.header}>
             <View style={styles.logoRow}>
-              <LogoIcon size={56} />
+              <LogoIcon size={56} color={theme.primary} />
             </View>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your account to continue</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Welcome Back</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Sign in to your account to continue</Text>
           </View>
 
           {/* Form */}
@@ -68,7 +70,7 @@ export default function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               error={errors.email}
-              leftIcon={<Mail size={18} color={THEME_COLORS.textSecondary} />}
+              leftIcon={<Mail size={18} color={theme.textSecondary} />}
             />
 
             <AppInput
@@ -78,13 +80,15 @@ export default function LoginScreen({ navigation }) {
               onChangeText={setPassword}
               secureTextEntry={!showPwd}
               error={errors.password}
-              leftIcon={<Lock size={18} color={THEME_COLORS.textSecondary} />}
-              rightIcon={showPwd ? <EyeOff size={18} color={THEME_COLORS.textSecondary} /> : <Eye size={18} color={THEME_COLORS.textSecondary} />}
+              leftIcon={<Lock size={18} color={theme.textSecondary} />}
+              rightIcon={showPwd ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
               onRightIconPress={() => setShowPwd(v => !v)}
+              contextMenuHidden={true}
+              selectTextOnFocus={false}
             />
 
-            <TouchableOpacity style={styles.forgotRow}>
-              <Text style={styles.forgotTxt}>Forgot Password?</Text>
+            <TouchableOpacity style={styles.forgotRow} onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={[styles.forgotTxt, { color: theme.primary }]}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <AppButton
@@ -92,32 +96,16 @@ export default function LoginScreen({ navigation }) {
               onPress={handleLogin}
               loading={loading}
               size="lg"
-              style={[styles.loginBtn, { backgroundColor: THEME_COLORS.primary }]}
+              style={[styles.loginBtn, { backgroundColor: theme.primary }]}
             />
 
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerTxt}>OR CONTINUE WITH</Text>
-              <View style={styles.divider} />
+            {/* Footer moved below button */}
+            <View style={styles.footer}>
+              <Text style={[styles.footerTxt, { color: theme.textSecondary }]}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={[styles.linkTxt, { color: theme.primary }]}>Create Account</Text>
+              </TouchableOpacity>
             </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialRow}>
-              {['G', 'A', 'in'].map((s, i) => (
-                <TouchableOpacity key={i} style={styles.socialBtn}>
-                  <Text style={styles.socialTxt}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerTxt}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.linkTxt}>Create Account</Text>
-            </TouchableOpacity>
           </View>
 
         </ScrollView>
@@ -140,23 +128,7 @@ const styles = StyleSheet.create({
   forgotTxt: { color: THEME_COLORS.primary, fontSize: 13, fontWeight: '700' },
   loginBtn: { width: '100%', borderRadius: 14 },
 
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 28 },
-  divider: { flex: 1, height: 1, backgroundColor: THEME_COLORS.border },
-  dividerTxt: {
-    marginHorizontal: 12, color: THEME_COLORS.textSecondary,
-    fontSize: 11, fontWeight: '700', letterSpacing: 1,
-  },
-
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
-  socialBtn: {
-    width: 56, height: 56, borderRadius: 16,
-    borderWidth: 1, borderColor: THEME_COLORS.border,
-    backgroundColor: '#FFF',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  socialTxt: { fontSize: 16, fontWeight: '900', color: THEME_COLORS.text },
-
-  footer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 32 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24, marginBottom: 32 },
   footerTxt: { color: THEME_COLORS.textSecondary, fontSize: 14 },
   linkTxt: { color: THEME_COLORS.primary, fontSize: 14, fontWeight: '800' },
 });

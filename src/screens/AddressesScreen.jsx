@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, FlatList, TouchableOpacity, StatusBar, Modal, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MapPin, Plus, Trash2, X, ArrowLeft } from 'lucide-react-native';
+import { MapPin, Plus, Trash2, X, ArrowLeft, ChevronDown } from 'lucide-react-native';
 import { sanitizeData, userService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { THEME_COLORS } from '../theme';
@@ -81,16 +81,26 @@ export default function AddressesScreen({ navigation }) {
     const currentUserId = user?._id || user?.id;
     const fullAddr = `${form.address}, ${form.line2 ? form.line2 + ', ' : ''}${form.city}, ${form.state} - ${form.zip}`;
     const raw = {
-      firstName: form.name, countryCode: '+91', mobile: form.phone.replace('+91 ', ''),
+      firstName: form.name, countryCode: '+91', mobile: form.phone.replace(/^\+91\s?/, ''),
       pincode: form.zip, state: form.state, city: form.city, line1: form.address, line2: form.line2, saveAs: form.type
     };
-
-    const newAddr = { ...form, id: editingId || Date.now().toString(), full: fullAddr, raw };
+    
+    // Ensure phone has the prefix when saving
+    // Ensure phone stores only digits, country code is separate
+    const mobileDigits = form.phone.replace(/[^0-9]/g, '').slice(-10);
+    const newAddr = { 
+      ...form, 
+      phone: mobileDigits, 
+      countryCode: '+91', // Defaulting to India for this screen as well
+      id: editingId || Date.now().toString(), 
+      full: fullAddr, 
+      raw 
+    };
 
     try {
       if (currentUserId) {
         try {
-          await userService.addAddress(currentUserId, newAddr);
+          await userService.addAddress(currentUserId, newAddr, user?.storedPassword);
         } catch (err) {
           console.warn('Backend save failed, saving locally:', err);
         }
@@ -216,7 +226,19 @@ export default function AddressesScreen({ navigation }) {
               <TextInput style={styles.input} value={form.zip} onChangeText={v => setForm({...form, zip: v})} keyboardType="number-pad" placeholder="Pincode" />
               
               <Text style={styles.label}>Phone Number *</Text>
-              <TextInput style={styles.input} value={form.phone} onChangeText={v => setForm({...form, phone: v})} keyboardType="phone-pad" placeholder="Phone Number" />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={[styles.input, { width: 80, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 4 }]}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: THEME_COLORS.text }}>+91</Text>
+                  <ChevronDown size={14} color={THEME_COLORS.textSecondary} />
+                </View>
+                <TextInput 
+                  style={[styles.input, { flex: 1 }]} 
+                  value={form.phone.replace(/^\+91\s?/, '')} 
+                  onChangeText={v => setForm({...form, phone: v})} 
+                  keyboardType="phone-pad" 
+                  placeholder="98765 43210" 
+                />
+              </View>
               
               <TouchableOpacity style={styles.saveModalBtn} onPress={handleSave}>
                 <Text style={styles.saveModalTxt}>Save Address</Text>

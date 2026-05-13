@@ -4,22 +4,24 @@ import HomeScreen from '../screens/HomeScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import CartScreen from '../screens/CartScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import { THEME_COLORS } from '../styling';
 import { View, StyleSheet, Platform, Text, Dimensions, TouchableOpacity } from 'react-native';
-import { Home, ShoppingCart, UserCircle } from 'lucide-react-native';
+import { Home, UserCircle } from 'lucide-react-native';
 import { useCart } from '../context/CartContext';
 import { CategoryIcon, CartIcon } from '../components/CustomIcons';
+import { useTheme } from '../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const Tab = createMaterialTopTabNavigator();
 
 function CustomTabBar({ state, descriptors, navigation }) {
+  const { theme } = useTheme();
+
   return (
-    <View style={styles.floatingBar}>
+    <View style={[styles.floatingBar, { backgroundColor: theme.surface }]}>
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
-        const color = isFocused ? THEME_COLORS.secondary : THEME_COLORS.textSecondary;
+        const color = isFocused ? theme.secondary : theme.textSecondary;
 
         const onPress = () => {
           const event = navigation.emit({
@@ -56,6 +58,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
 
 export default function TabNavigator() {
   const { cartCount } = useCart();
+  const { theme } = useTheme();
 
   return (
     <Tab.Navigator
@@ -92,7 +95,7 @@ export default function TabNavigator() {
             <View>
               <CartIcon color={color} size={24} />
               {cartCount > 0 && (
-                <View style={styles.badge}>
+                <View style={[styles.badge, { backgroundColor: theme.secondary, borderColor: theme.surface }]}>
                   <Text style={styles.badgeTxt}>{cartCount}</Text>
                 </View>
               )}
@@ -123,7 +126,6 @@ const styles = StyleSheet.create({
     width: 338,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FFFFFF',
     elevation: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -147,14 +149,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -5,
     right: -10,
-    backgroundColor: THEME_COLORS.secondary,
     borderRadius: 8,
     width: 16,
     height: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFF',
   },
   badgeTxt: {
     color: '#FFF',

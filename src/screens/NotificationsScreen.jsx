@@ -4,7 +4,7 @@ import {
   StatusBar, Animated, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, ShoppingCart, CheckCircle, Info, Trash2, Clock, X } from 'lucide-react-native';
+import { ArrowLeft, Bell, ShoppingCart, CheckCircle, Info, Trash2, Clock, X, AlertCircle } from 'lucide-react-native';
 import { THEME_COLORS } from '../styling';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -35,11 +35,14 @@ export default function NotificationsScreen({ navigation }) {
   }, [notifications]);
 
   const getIcon = (type, read) => {
-    const color = read ? '#94A3B8' : THEME_COLORS.primary;
+    let color = read ? '#94A3B8' : THEME_COLORS.primary;
     const size = 22;
+    if (type === 'error' && !read) color = '#EF4444'; // Red for errors/cancellations
+    
     switch (type) {
       case 'cart': return <ShoppingCart size={size} color={color} />;
       case 'success': return <CheckCircle size={size} color={color} />;
+      case 'error': return <AlertCircle size={size} color={color} />;
       default: return <Bell size={size} color={color} />;
     }
   };
@@ -63,7 +66,10 @@ export default function NotificationsScreen({ navigation }) {
         onPress={() => handlePress(item)}
         activeOpacity={0.7}
       >
-        <View style={[styles.iconBox, !item.read && styles.unreadIconBox]}>
+        <View style={[
+          styles.iconBox, 
+          !item.read && (item.type === 'error' ? { backgroundColor: '#FEE2E2' } : styles.unreadIconBox)
+        ]}>
           {getIcon(item.type, item.read)}
         </View>
         <View style={styles.notifContent}>

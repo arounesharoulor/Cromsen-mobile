@@ -10,6 +10,7 @@ import { LoadingState, ErrorState, EmptyState } from '../components';
 import { categoryService, productService, getImageUrl, sanitizeData } from '../services/api';
 import { CategoryIcon, BoldPlusIcon, OtherMachineriesIcon, PvcDoorsIcon, UmbrellaIcon, UpvcHardwareIcon, UpvcToolsIcon, HoneycombIcon, MagicScreenIcon, CurtainsIcon, MosquitoIcon, FencingIcon, BalconyIcon, PvcCurtainIcon, PleatedIcon, CabinetHingesIcon } from '../components/CustomIcons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -41,6 +42,7 @@ export default function CategoryScreen({ navigation }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const { isDarkMode, theme } = useTheme();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -94,25 +96,25 @@ export default function CategoryScreen({ navigation }) {
   };
 
   if (loading) return (
-    <View style={styles.centerLoading}>
-      <ActivityIndicator color={THEME_COLORS.secondary} size="large" />
-      <Text style={styles.loadingTxt}>Loading categories...</Text>
+    <View style={[styles.centerLoading, { backgroundColor: theme.background }]}>
+      <ActivityIndicator color={theme.secondary} size="large" />
+      <Text style={[styles.loadingTxt, { color: theme.textSecondary }]}>Loading categories...</Text>
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         
         {/* Search Header */}
-        <View style={styles.header}>
-          <View style={styles.searchBar}>
-            <Search size={18} color={THEME_COLORS.textSecondary} />
+        <View style={[styles.header, { backgroundColor: theme.surface }]}>
+          <View style={[styles.searchBar, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Search size={18} color={theme.textSecondary} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.text }]}
               placeholder="Type to Search..."
-              placeholderTextColor={THEME_COLORS.textSecondary}
+              placeholderTextColor={theme.textSecondary}
               value={search}
               onChangeText={setSearch}
             />
@@ -121,7 +123,7 @@ export default function CategoryScreen({ navigation }) {
 
         <View style={styles.main}>
           {/* Sidebar */}
-          <View style={styles.sidebar}>
+          <View style={[styles.sidebar, { backgroundColor: theme.surface, borderRightColor: theme.border }]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
               {categories.map((cat) => {
                 const catId = cat._id || cat.id;
@@ -130,17 +132,17 @@ export default function CategoryScreen({ navigation }) {
                 return (
                   <TouchableOpacity
                     key={cat._id || cat.id}
-                    style={[styles.sideItem, isActive && styles.sideItemActive]}
+                    style={[styles.sideItem, isActive && { backgroundColor: isDarkMode ? '#2C3E50' : '#EFF6FF' }]}
                     onPress={() => handleSelectCat(cat)}
                   >
-                    {isActive && <View style={styles.activeIndicator} />}
-                    <View style={styles.iconCircle}>
+                    {isActive && <View style={[styles.activeIndicator, { backgroundColor: theme.secondary }]} />}
+                    <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' }]}>
                        {getCategoryIcon(
                         sanitizeData(cat.name, ''),
-                        isActive ? THEME_COLORS.secondary : THEME_COLORS.primary
+                        isActive ? theme.secondary : theme.primary
                       )}
                     </View>
-                    <Text style={[styles.sideLabel, isActive && styles.sideLabelActive]} numberOfLines={2}>
+                    <Text style={[styles.sideLabel, { color: isActive ? theme.secondary : theme.textSecondary, fontWeight: isActive ? '900' : '700' }]} numberOfLines={2}>
                       {sanitizeData(cat.name, 'Category')}
                     </Text>
                   </TouchableOpacity>
@@ -150,7 +152,7 @@ export default function CategoryScreen({ navigation }) {
           </View>
 
           {/* Content Area */}
-          <View style={styles.content}>
+          <View style={[styles.content, { backgroundColor: theme.background }]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
               {selectedCat && (
                 <>
@@ -167,12 +169,12 @@ export default function CategoryScreen({ navigation }) {
 
                   {/* Section Title */}
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>{selectedCat.name}</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>{selectedCat.name}</Text>
                   </View>
 
                   {/* Products Grid */}
                   {detailLoading ? (
-                    <ActivityIndicator color={THEME_COLORS.primary} style={{ marginTop: 20 }} />
+                    <ActivityIndicator color={theme.primary} style={{ marginTop: 20 }} />
                   ) : products.length > 0 ? (
                     <View style={styles.grid}>
                       {products.slice(0, 4).map((p, idx) => (
@@ -181,20 +183,20 @@ export default function CategoryScreen({ navigation }) {
                           style={styles.gridItem}
                           onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                         >
-                          <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={styles.gridImg} />
-                          <Text style={styles.gridName} numberOfLines={1}>{sanitizeData(p.name)}</Text>
+                          <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
+                          <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={1}>{sanitizeData(p.name)}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                   ) : (
-                    <Text style={styles.emptyTxt}>No items in this category</Text>
+                    <Text style={[styles.emptyTxt, { color: theme.textSecondary }]}>No items in this category</Text>
                   )}
 
                   {/* Popular Section */}
                   <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                    <Text style={styles.sectionTitle}>POPULAR IN THIS CATEGORY</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>POPULAR IN THIS CATEGORY</Text>
                     <TouchableOpacity onPress={navigateToAll}>
-                      <Text style={styles.viewAll}>View all</Text>
+                      <Text style={[styles.viewAll, { color: theme.primary }]}>View all</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -202,7 +204,7 @@ export default function CategoryScreen({ navigation }) {
                     {products.slice(0, 5).map((p, idx) => (
                       <TouchableOpacity 
                         key={'pop-' + (p._id || p.id || idx)} 
-                        style={styles.popItem}
+                        style={[styles.popItem, { backgroundColor: theme.surface }]}
                         onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                       >
                         <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={styles.popImg} />

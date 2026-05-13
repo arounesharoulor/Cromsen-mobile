@@ -2,17 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity, StatusBar, 
   TextInput, Alert, ScrollView, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Switch
+  KeyboardAvoidingView, Platform, Switch, Modal, FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield } from 'lucide-react-native';
+import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield, ChevronDown, Search, Pencil } from 'lucide-react-native';
 
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { userService, authService } from '../services/api';
 import { useNotifications } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function SettingsScreen({ navigation }) {
   const { user, updateUser } = useAuth();
@@ -35,10 +36,32 @@ export default function SettingsScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
+  // Country Code Logic
+  const COUNTRIES = [
+    { name: 'India', code: '+91', flag: '🇮🇳' },
+    { name: 'United Arab Emirates', code: '+971', flag: '🇦🇪' },
+    { name: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
+    { name: 'United States', code: '+1', flag: '🇺🇸' },
+    { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
+    { name: 'Qatar', code: '+974', flag: '🇶🇦' },
+    { name: 'Kuwait', code: '+965', flag: '🇰🇼' },
+    { name: 'Oman', code: '+968', flag: '🇴🇲' },
+    { name: 'Bahrain', code: '+973', flag: '🇧🇭' },
+  ];
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredCountries = COUNTRIES.filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    c.code.includes(searchQuery)
+  );
+
   // App Settings States
   const [pushEnabled, setPushEnabled] = useState(true);
   const [promoEnabled, setPromoEnabled] = useState(false);
-  const [darkEnabled, setDarkEnabled] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const { isDarkMode, toggleTheme, theme } = useTheme();
 
   const currentUserId = user?._id || user?.id;
 
@@ -74,7 +97,18 @@ export default function SettingsScreen({ navigation }) {
             if (u) {
               setName(u.name || '');
               setEmail(u.email || '');
-              if (u.phone) setPhone(u.phone);
+              if (u.phone) {
+                // Strip existing country code if present to avoid duplication in UI
+                let cleanPhone = u.phone.replace(/^\+\d+\s?/, '').replace(/\D/g, '');
+                setPhone(cleanPhone);
+                
+                // Try to match country from prefix if possible
+                const prefixMatch = u.phone.match(/^\+(\d+)/);
+                if (prefixMatch) {
+                  const found = COUNTRIES.find(c => c.code === `+${prefixMatch[1]}`);
+                  if (found) setSelectedCountry(found);
+                }
+              }
               updateUser({ ...user, ...u });
             }
           } catch (err) {
@@ -91,7 +125,10 @@ export default function SettingsScreen({ navigation }) {
               setState(latest.state || state);
               setZip(latest.zip || latest.pincode || zip);
               setOrigAddr(latest);
-              if (!phone && latest.phone) setPhone(latest.phone);
+              if (!phone && latest.phone) {
+                let cleanPhone = latest.phone.replace(/^\+\d+\s?/, '').replace(/\D/g, '');
+                setPhone(cleanPhone);
+              }
               
               // Sync backend addresses to local storage
               await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
@@ -127,26 +164,16 @@ export default function SettingsScreen({ navigation }) {
                           zip !== (origAddr?.zip || '');
       const anythingChanged = nameChanged || emailChanged || phoneChanged || pwdChanged || addrChanged;
 
-      if (anythingChanged && !currentPassword) {
-        Alert.alert('Authentication Required', 'Your current password is required to save changes. Please enter it below.');
-        setLoading(false);
-        return;
-      }
+      // Automatically use stored password if available, so user doesn't have to type it
+      const autoPassword = currentPassword || user?.storedPassword;
 
-      if (pwdChanged) {
-        if (newPassword.length < 6) {
-          Alert.alert('Error', 'New password must be at least 6 characters');
-          setLoading(false);
-          return;
-        }
-        if (newPassword !== confirmPassword) {
-          Alert.alert('Error', 'Passwords do not match');
-          setLoading(false);
-          return;
-        }
-      }
-
-      const updateData = { name, email, phone };
+      const updateData = { 
+        name, 
+        email, 
+        phone: `${selectedCountry.code}${phone.replace(/\s/g, '')}`, 
+        countryCode: selectedCountry.code,
+        currentPassword: autoPassword // Pass it automatically
+      };
       if (pwdChanged) {
         updateData.currentPassword = currentPassword;
         updateData.password = newPassword;
@@ -170,7 +197,7 @@ export default function SettingsScreen({ navigation }) {
           type: 'HOME'
         };
         try {
-          await userService.addAddress(currentUserId, addrData, currentPassword);
+          await userService.addAddress(currentUserId, addrData, autoPassword);
         } catch (e) {
           console.warn('Address sync failed:', e);
         }
@@ -193,14 +220,19 @@ export default function SettingsScreen({ navigation }) {
 
   const renderInput = (label, value, onChange, icon, props = {}) => (
     <View style={styles.inputGroup}>
-      <Text style={[styles.label, darkEnabled && darkStyles.label]}>{label}</Text>
-      <View style={[styles.inputWrapper, darkEnabled && darkStyles.inputWrapper]}>
+      <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
+      <View style={[
+        styles.inputWrapper, 
+        { backgroundColor: theme.background, borderColor: theme.border },
+        !isEditing && { opacity: 0.7, backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9' }
+      ]}>
         <View style={styles.iconBox}>{icon}</View>
         <TextInput 
-          style={[styles.input, darkEnabled && darkStyles.input]}
+          style={[styles.input, { color: theme.text }]}
           value={value}
           onChangeText={onChange}
-          placeholderTextColor={darkEnabled ? "#888" : "#94A3B8"}
+          placeholderTextColor={theme.textSecondary}
+          editable={isEditing}
           {...props}
         />
       </View>
@@ -208,16 +240,16 @@ export default function SettingsScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, darkEnabled && darkStyles.container]}>
-      <StatusBar barStyle={darkEnabled ? "light-content" : "dark-content"} backgroundColor={darkEnabled ? "#1E1E1E" : "#FFF"} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.surface} />
       
-      <View style={[styles.header, darkEnabled && darkStyles.header]}>
-        <TouchableOpacity style={[styles.backBtn, darkEnabled && darkStyles.backBtn]} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={THEME_COLORS.primary} />
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#2C3E50' : '#F8FAFC' }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, darkEnabled && darkStyles.headerTitle]}>Edit Profile</Text>
-        <TouchableOpacity disabled={loading} onPress={handleSave}>
-          <Text style={[styles.headerSave, loading && { opacity: 0.5 }]}>Save</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Edit Profile</Text>
+        <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
+          <Pencil size={20} color={isEditing ? theme.secondary : theme.primary} />
         </TouchableOpacity>
       </View>
 
@@ -229,130 +261,198 @@ export default function SettingsScreen({ navigation }) {
           
           {/* Avatar Section */}
           <View style={styles.avatarSection}>
-            <View style={[styles.avatarCircle, darkEnabled && darkStyles.avatarCircle]}>
-              <User size={40} color={THEME_COLORS.primary} />
-              <TouchableOpacity style={styles.cameraBtn}>
+            <View style={[styles.avatarCircle, { backgroundColor: isDarkMode ? '#2C3E50' : '#E2E8F0' }]}>
+              <User size={40} color={theme.primary} />
+              <TouchableOpacity style={[styles.cameraBtn, { borderColor: theme.surface, backgroundColor: theme.primary }]}>
                 <Camera size={14} color="#FFF" />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.avatarName, darkEnabled && darkStyles.avatarName]}>{name || 'User'}</Text>
-            <Text style={styles.avatarRole}>Cromsen Member</Text>
+            <Text style={[styles.avatarName, { color: theme.text }]}>{name || 'User'}</Text>
+            <Text style={[styles.avatarRole, { color: theme.textSecondary }]}>Cromsen Member</Text>
           </View>
 
           {/* Profile Details */}
-          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Profile Details</Text>
-          <View style={[styles.card, darkEnabled && darkStyles.card]}>
-            {renderInput('Full Name', name, setName, <User size={18} color="#64748B" />, { placeholder: 'Your name', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
-            {renderInput('Email Address', email, setEmail, <Mail size={18} color="#64748B" />, { 
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Profile Details</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {renderInput('Full Name', name, setName, <User size={18} color={theme.textSecondary} />, { placeholder: 'Your name' })}
+            {renderInput('Email Address', email, setEmail, <Mail size={18} color={theme.textSecondary} />, { 
               placeholder: 'name@example.com',
               keyboardType: 'email-address',
               autoCapitalize: 'none'
             })}
-            {renderInput('Phone Number', phone, (v) => setPhone(v.replace(/[^0-9]/g, '').slice(0, 10)), <Phone size={18} color="#64748B" />, { 
-              placeholder: '10-digit number',
-              keyboardType: 'phone-pad',
-              maxLength: 10
-            })}
+            
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Phone Number</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity 
+                   style={[styles.inputWrapper, { width: 90, justifyContent: 'center', backgroundColor: theme.background, borderColor: theme.border }]}
+                  onPress={() => setShowCountryModal(true)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 16 }}>{selectedCountry.flag}</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>{selectedCountry.code}</Text>
+                    <ChevronDown size={14} color={theme.textSecondary} />
+                  </View>
+                </TouchableOpacity>
+                <View style={[styles.inputWrapper, { flex: 1, backgroundColor: theme.background, borderColor: theme.border }]}>
+                  <View style={styles.iconBox}><Phone size={18} color={theme.textSecondary} /></View>
+                  <TextInput 
+                    style={[styles.input, { color: theme.text }]}
+                    value={phone}
+                    onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, '').slice(0, 10))}
+                    placeholder="10-digit number"
+                    placeholderTextColor={theme.textSecondary}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    editable={isEditing}
+                  />
+                </View>
+              </View>
+            </View>
           </View>
 
           {/* Security */}
-          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Security</Text>
-          <View style={[styles.card, darkEnabled && darkStyles.card]}>
-            {renderInput('Current Password', currentPassword, setCurrentPassword, <Lock size={18} color="#64748B" />, { 
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Security</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {renderInput('Current Password', currentPassword, setCurrentPassword, <Lock size={18} color={theme.textSecondary} />, { 
               placeholder: 'Required for changes',
-              secureTextEntry: true,
-              placeholderTextColor: darkEnabled ? '#888' : '#94A3B8'
+              secureTextEntry: true
             })}
-            {renderInput('New Password', newPassword, setNewPassword, <Shield size={18} color="#64748B" />, { 
+            {renderInput('New Password', newPassword, setNewPassword, <Shield size={18} color={theme.textSecondary} />, { 
               placeholder: 'Leave blank to keep current',
-              secureTextEntry: true,
-              placeholderTextColor: darkEnabled ? '#888' : '#94A3B8'
+              secureTextEntry: true
             })}
           </View>
 
           {/* Address */}
-          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Shipping Information</Text>
-          <View style={[styles.card, darkEnabled && darkStyles.card]}>
-            {renderInput('Street Address', address, setAddress, <MapPin size={18} color="#64748B" />, { placeholder: 'House/Building/Street', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Shipping Information</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {renderInput('Street Address', address, setAddress, <MapPin size={18} color={theme.textSecondary} />, { placeholder: 'House/Building/Street' })}
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1.5 }}>
-                {renderInput('City', city, setCity, null, { placeholder: 'City', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
+              <View style={{ flex: 1.2 }}>
+                {renderInput('City', city, setCity, null, { placeholder: 'City' })}
               </View>
               <View style={{ flex: 1 }}>
-                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
+                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP', maxLength: 6 })}
               </View>
             </View>
-            {renderInput('State', state, setState, null, { placeholder: 'State/Province', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
+            {renderInput('State', state, setState, null, { placeholder: 'State/Province' })}
           </View>
           {/* App Preferences */}
-          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>App Preferences</Text>
-          <View style={[styles.card, darkEnabled && darkStyles.card]}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>App Preferences</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.settingRow}>
-              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
-                <Bell size={18} color={THEME_COLORS.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
+                <Bell size={18} color={theme.primary} />
               </View>
               <View style={styles.settingTextWrap}>
-                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Push Notifications</Text>
-                <Text style={styles.settingSub}>Order updates & delivery status</Text>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Push Notifications</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Order updates & delivery status</Text>
               </View>
               <Switch
                 value={pushEnabled}
                 onValueChange={setPushEnabled}
-                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                trackColor={{ false: theme.border, true: theme.secondary }}
                 thumbColor="#FFF"
               />
             </View>
 
-            <View style={[styles.settingRow, styles.settingRowBorder, darkEnabled && darkStyles.settingRowBorder]}>
-              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
-                <Tag size={18} color={THEME_COLORS.primary} />
+            <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: theme.border }]}>
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
+                <Tag size={18} color={theme.primary} />
               </View>
               <View style={styles.settingTextWrap}>
-                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Promotional Offers</Text>
-                <Text style={styles.settingSub}>Receive sales & discount alerts</Text>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Promotional Offers</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Receive sales & discount alerts</Text>
               </View>
               <Switch
                 value={promoEnabled}
                 onValueChange={setPromoEnabled}
-                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                trackColor={{ false: theme.border, true: theme.secondary }}
                 thumbColor="#FFF"
               />
             </View>
 
-            <View style={[styles.settingRow, styles.settingRowBorder, darkEnabled && darkStyles.settingRowBorder]}>
-              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
-                <Moon size={18} color={THEME_COLORS.primary} />
+            <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: theme.border }]}>
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
+                <Moon size={18} color={theme.primary} />
               </View>
               <View style={styles.settingTextWrap}>
-                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Dark Mode</Text>
-                <Text style={styles.settingSub}>Match system theme</Text>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Dark Mode</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Match system theme</Text>
               </View>
               <Switch
-                value={darkEnabled}
-                onValueChange={setDarkEnabled}
-                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                value={isDarkMode}
+                onValueChange={toggleTheme}
+                trackColor={{ false: theme.border, true: theme.secondary }}
                 thumbColor="#FFF"
               />
             </View>
           </View>
 
-          <TouchableOpacity 
-            style={[styles.mainSaveBtn, loading && { opacity: 0.7 }]} 
-            onPress={handleSave}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Save size={20} color="#FFF" />
-                <Text style={styles.mainSaveTxt}>Update Profile</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {isEditing && (
+            <TouchableOpacity 
+              style={[styles.mainSaveBtn, { backgroundColor: theme.primary }, loading && { opacity: 0.7 }]} 
+              onPress={handleSave}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Save size={20} color="#FFF" />
+                  <Text style={styles.mainSaveTxt}>Update Profile</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Country Modal */}
+      <Modal visible={showCountryModal} animationType="slide" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: theme.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '80%', padding: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: theme.text }}>Select Country</Text>
+              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
+                <Text style={{ color: theme.primary, fontWeight: '700' }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, marginBottom: 15 }}>
+              <Search size={18} color={theme.textSecondary} />
+              <TextInput 
+                style={{ flex: 1, height: 44, marginLeft: 8, color: theme.text }} 
+                placeholder="Search country..." 
+                placeholderTextColor={theme.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={item => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                  onPress={() => {
+                    setSelectedCountry(item);
+                    setShowCountryModal(false);
+                    setSearchQuery('');
+                  }}
+                >
+                  <Text style={{ fontSize: 24, marginRight: 15 }}>{item.flag}</Text>
+                  <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: theme.text }}>{item.name}</Text>
+                  <Text style={{ fontSize: 16, color: theme.textSecondary, fontWeight: '700' }}>{item.code}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -11,6 +11,7 @@ import { productService, getImageUrl, sanitizeData } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CartIcon, CartPlusIcon, FrameIcon, BackIcon, ShareIcon, HeartIcon } from '../components/CustomIcons';
 
@@ -49,6 +50,7 @@ export default function ProductDetailScreen({ navigation, route }) {
   const { addToCart } = useCart();
   const { toggleWishlist, isWishlisted: checkWishlisted } = useWishlist();
   const { user } = useAuth();
+  const { isDarkMode, theme } = useTheme();
 
   useEffect(() => { if (productId) load(); }, [productId]);
 
@@ -160,15 +162,15 @@ export default function ProductDetailScreen({ navigation, route }) {
   };
 
   if (loading) return (
-    <View style={[s.center, { backgroundColor: '#FFF' }]}>
-      <ActivityIndicator color={THEME_COLORS.secondary} size="large" />
+    <View style={[s.center, { backgroundColor: theme.background }]}>
+      <ActivityIndicator color={theme.secondary} size="large" />
     </View>
   );
   if (!product) return (
-    <View style={s.center}>
-      <Text style={{ color: THEME_COLORS.textSecondary }}>Product not found</Text>
+    <View style={[s.center, { backgroundColor: theme.background }]}>
+      <Text style={{ color: theme.textSecondary }}>Product not found</Text>
       <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 12 }}>
-        <Text style={{ color: THEME_COLORS.primary, fontWeight: '700' }}>← Go Back</Text>
+        <Text style={{ color: theme.primary, fontWeight: '700' }}>← Go Back</Text>
       </TouchableOpacity>
     </View>
   );
@@ -209,24 +211,24 @@ export default function ProductDetailScreen({ navigation, route }) {
   ];
 
   return (
-    <View style={s.root}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+    <View style={[s.root, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       {/* Floating header */}
       <View style={[s.floatBar, { paddingTop: Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight || 24) + 10 }]}>
-        <TouchableOpacity style={s.fab} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={20} color={THEME_COLORS.text} />
+        <TouchableOpacity style={[s.fab, { backgroundColor: isDarkMode ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.9)' }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={20} color={theme.text} />
         </TouchableOpacity>
         <View style={s.fabRow}>
-          <TouchableOpacity style={s.fab} onPress={() => product && toggleWishlist(product)}>
+          <TouchableOpacity style={[s.fab, { backgroundColor: isDarkMode ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.9)' }]} onPress={() => product && toggleWishlist(product)}>
             <HeartIcon 
               size={16} 
-              color={product && checkWishlisted(product._id || product.id) ? THEME_COLORS.error : THEME_COLORS.text} 
+              color={product && checkWishlisted(product._id || product.id) ? theme.error : theme.text} 
               filled={product && checkWishlisted(product._id || product.id)} 
             />
           </TouchableOpacity>
-          <TouchableOpacity style={s.fab}>
-            <ShareIcon color={THEME_COLORS.text} size={16} />
+          <TouchableOpacity style={[s.fab, { backgroundColor: isDarkMode ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.9)' }]}>
+            <ShareIcon color={theme.text} size={16} />
           </TouchableOpacity>
         </View>
       </View>
@@ -250,18 +252,18 @@ export default function ProductDetailScreen({ navigation, route }) {
           />
           
           {/* Dot indicators inside/below image */}
-          <View style={s.dots}>
+          <View style={[s.dots, { backgroundColor: theme.background }]}>
             {imgs.map((_, i) => (
-              <View key={i} style={[s.dot, i === activeImg && s.dotActive]} />
+              <View key={i} style={[s.dot, { backgroundColor: theme.border }, i === activeImg && { backgroundColor: theme.primary, width: 18 }]} />
             ))}
           </View>
         </View>
 
 
-        <View style={s.card}>
+        <View style={[s.card, { backgroundColor: theme.background }]}>
           {/* Color selector */}
-          <Text style={s.colorLabel}>
-            Color: <Text style={s.colorVal}>{COLOR_LABELS[selColor]}</Text>
+          <Text style={[s.colorLabel, { color: theme.textSecondary }]}>
+            Color: <Text style={[s.colorVal, { color: theme.text }]}>{COLOR_LABELS[selColor]}</Text>
           </Text>
           <View style={s.colorRow}>
             {DEMO_THEME_COLORS.map((c, i) => (
@@ -291,15 +293,15 @@ export default function ProductDetailScreen({ navigation, route }) {
           {/* Product name & rating */}
           <View style={s.nameRow}>
             <View style={{ flex: 1 }}>
-              <Text style={s.catName}>Cabinet Hinges Series</Text>
-              <Text style={s.productName}>
+              <Text style={[s.catName, { color: theme.textSecondary }]}>Cabinet Hinges Series</Text>
+              <Text style={[s.productName, { color: theme.text }]}>
                 {sanitizeData(product.name, 'Product')}
               </Text>
             </View>
             <View style={s.priceRatingRow}>
-              <Text style={s.priceTxt}>₹{price.toLocaleString()}</Text>
-              <View style={s.ratingChip}>
-                <Text style={s.ratingTxt}>★ {rating}</Text>
+              <Text style={[s.priceTxt, { color: theme.primary }]}>₹{price.toLocaleString()}</Text>
+              <View style={[s.ratingChip, { backgroundColor: isDarkMode ? '#064E3B' : '#F0FFF4' }]}>
+                <Text style={[s.ratingTxt, { color: isDarkMode ? '#10B981' : '#22C55E' }]}>★ {rating}</Text>
               </View>
             </View>
           </View>
