@@ -34,6 +34,7 @@
     },
     "plugins": [
       "expo-web-browser",
+      "expo-dev-client",
       [
         "expo-build-properties",
         {
