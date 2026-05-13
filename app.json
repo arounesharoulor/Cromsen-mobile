@@ -5,64 +5,34 @@
     "scheme": "cromsen-mobile",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
-
     "icon": "./assets/icons/Cromsen-Appicon.png",
-
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-
     "splash": {
       "backgroundColor": "#ffffff"
     },
-
-    "runtimeVersion": "1.0.0",
-
-    "updates": {
-      "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe",
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
-    },
-
     "ios": {
       "icon": "./assets/icons/Cromsen-Appicon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.cromsen.app"
     },
-
     "android": {
+      "package": "com.cromsen.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/Cromsen-Appicon.png",
         "backgroundColor": "#000000"
-      },
-      "package": "com.cromsen.app"
+      }
     },
-
-    "web": {},
-
-    "experiments": {
-      "bridgeless": false
+    "updates": {
+      "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
     },
-
     "extra": {
       "eas": {
         "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
       }
     },
-
     "plugins": [
-      "expo-web-browser",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "kotlinVersion": "1.9.24",
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
-          }
-        }
-      ]
+      "expo-web-browser"
     ]
   }
 }
