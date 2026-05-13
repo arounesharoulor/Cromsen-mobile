@@ -2,6 +2,7 @@
   "expo": {
     "name": "Cromsen",
     "slug": "cromsen-mobile",
+    "scheme": "cromsen-mobile",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
 
@@ -14,9 +15,7 @@
       "backgroundColor": "#ffffff"
     },
 
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
 
     "updates": {
       "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe",
