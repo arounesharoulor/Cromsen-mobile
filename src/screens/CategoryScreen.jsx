@@ -8,10 +8,30 @@ import { ArrowLeft, Search, ChevronRight } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { LoadingState, ErrorState, EmptyState } from '../components';
 import { categoryService, productService, getImageUrl, sanitizeData } from '../services/api';
-import { CategoryIcon, BoldPlusIcon } from '../components/CustomIcons';
+import { CategoryIcon, BoldPlusIcon, OtherMachineriesIcon, PvcDoorsIcon, UmbrellaIcon, UpvcHardwareIcon, UpvcToolsIcon, HoneycombIcon, MagicScreenIcon, CurtainsIcon, MosquitoIcon, FencingIcon, BalconyIcon, PvcCurtainIcon, PleatedIcon, CabinetHingesIcon } from '../components/CustomIcons';
 import { useFocusEffect } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
+
+// Map category name keywords → icon component
+const getCategoryIcon = (name, color) => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('upvc hardware') || n.includes('upvc hardwares')) return <UpvcHardwareIcon size={24} color={color} />;
+  if (n.includes('upvc tool') || n.includes('tool')) return <UpvcToolsIcon size={24} color={color} />;
+  if (n.includes('pvc door') || n.includes('door')) return <PvcDoorsIcon size={24} color={color} />;
+  if (n.includes('pvc curtain') || n.includes('pvccurtain')) return <PvcCurtainIcon size={24} color={color} />;
+  if (n.includes('honeycomb')) return <HoneycombIcon size={24} color={color} />;
+  if (n.includes('magic screen') || n.includes('magicscreen')) return <MagicScreenIcon size={24} color={color} />;
+  if (n.includes('curtain')) return <CurtainsIcon size={24} color={color} />;
+  if (n.includes('mosquito') || n.includes('net')) return <MosquitoIcon size={24} color={color} />;
+  if (n.includes('fencing') || n.includes('fence')) return <FencingIcon size={24} color={color} />;
+  if (n.includes('balcony')) return <BalconyIcon size={24} color={color} />;
+  if (n.includes('pleated')) return <PleatedIcon size={24} color={color} />;
+  if (n.includes('cabinet hinge') || n.includes('hinge')) return <CabinetHingesIcon size={24} color={color} />;
+  if (n.includes('umbrella')) return <UmbrellaIcon size={24} color={color} />;
+  if (n.includes('machin') || n.includes('other')) return <OtherMachineriesIcon size={24} color={color} />;
+  return <CategoryIcon size={20} color={color} />;
+};
 
 export default function CategoryScreen({ navigation }) {
   const [categories, setCategories] = useState([]);
@@ -115,10 +135,9 @@ export default function CategoryScreen({ navigation }) {
                   >
                     {isActive && <View style={styles.activeIndicator} />}
                     <View style={styles.iconCircle}>
-                       {cat.image ? (
-                        <Image source={{ uri: getImageUrl(cat.image) }} style={styles.sideImg} />
-                      ) : (
-                        <CategoryIcon size={20} color={isActive ? THEME_COLORS.secondary : THEME_COLORS.textSecondary} />
+                       {getCategoryIcon(
+                        sanitizeData(cat.name, ''),
+                        isActive ? THEME_COLORS.secondary : THEME_COLORS.primary
                       )}
                     </View>
                     <Text style={[styles.sideLabel, isActive && styles.sideLabelActive]} numberOfLines={2}>

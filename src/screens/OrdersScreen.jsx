@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView
 } from 'react-native';
@@ -131,18 +131,19 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // Derived state for filtered orders
-  const filteredOrders = orders.filter(o => {
-    const s = String(o.status).toUpperCase();
-    if (activeTab === 'Active') {
-      return s !== 'DELIVERED' && s !== 'CANCELLED';
-    } else if (activeTab === 'Delivered') {
-      return s === 'DELIVERED';
-    } else if (activeTab === 'Cancelled') {
-      return s === 'CANCELLED';
-    }
-    return true; // 'All'
-  });
+  const getOrdersForTab = (tabLabel) => {
+    return orders.filter(o => {
+      const s = String(o.status).toUpperCase();
+      if (tabLabel === 'Active') {
+        return s !== 'DELIVERED' && s !== 'CANCELLED';
+      } else if (tabLabel === 'Delivered') {
+        return s === 'DELIVERED';
+      } else if (tabLabel === 'Cancelled') {
+        return s === 'CANCELLED';
+      }
+      return true; // 'All'
+    });
+  };
 
   const TABS = [
     { label: 'All', count: orders.length },
@@ -153,6 +154,21 @@ export default function OrdersScreen({ navigation }) {
     { label: 'Delivered', count: orders.filter(o => String(o.status).toUpperCase() === 'DELIVERED').length },
     { label: 'Cancelled', count: orders.filter(o => String(o.status).toUpperCase() === 'CANCELLED').length },
   ];
+
+  const flatListRef = useRef(null);
+
+  const handleTabPress = (index, label) => {
+    setActiveTab(label);
+    flatListRef.current?.scrollToIndex({ index, animated: true });
+  };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems && viewableItems.length > 0) {
+      setActiveTab(viewableItems[0].item.label);
+    }
+  }).current;
+  
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -167,11 +183,11 @@ export default function OrdersScreen({ navigation }) {
       {/* TABS */}
       <View style={styles.tabsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-          {TABS.map((tab) => (
+          {TABS.map((tab, index) => (
             <TouchableOpacity
               key={tab.label}
               style={[styles.tab, activeTab === tab.label && styles.activeTab]}
-              onPress={() => setActiveTab(tab.label)}
+              onPress={() => handleTabPress(index, tab.label)}
             >
               <Text style={[styles.tabText, activeTab === tab.label && styles.activeTabText]}>
                 {String(tab.label)}{tab.count !== null && tab.count !== undefined ? ` (${tab.count})` : ''}
@@ -181,75 +197,93 @@ export default function OrdersScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {filteredOrders.length === 0 ? (
-        <EmptyState
-          icon={<Package size={52} color={THEME_COLORS.border} />}
-          title="No orders found"
-          subtitle="You have no orders matching this filter."
-          action={<AppButton title="Start Shopping" onPress={() => navigation.navigate('HomeTab')} />}
-        />
-      ) : (
-        <FlatList
-          data={filteredOrders}
-          keyExtractor={o => o.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={[
-              styles.card, 
-              (item.status === 'CANCELLED' || item.status === 'DELIVERED') && styles.disabledCard
-            ]}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardDate}>{item.date}</Text>
-                  <Text style={styles.cardId}>{item.id}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6' }]}>
-                  <Text style={[styles.statusText, { color: STATUS_CONFIG[String(item.status).toUpperCase()]?.color || '#6B7280' }]}>
-                    {item.status}
-                  </Text>
-                </View>
-              </View>
+      <FlatList
+        ref={flatListRef}
+        data={TABS}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        keyExtractor={t => t.label}
+        renderItem={({ item: tab }) => {
+          const tabOrders = getOrdersForTab(tab.label);
+          return (
+            <View style={{ width }}>
+              {tabOrders.length === 0 ? (
+                <EmptyState
+                  icon={<Package size={52} color={THEME_COLORS.border} />}
+                  title={`No ${tab.label.toLowerCase()} orders`}
+                  subtitle="You have no orders matching this filter."
+                  action={<AppButton title="Start Shopping" onPress={() => navigation.navigate('HomeTab')} />}
+                />
+              ) : (
+                <FlatList
+                  data={tabOrders}
+                  keyExtractor={o => o.id}
+                  contentContainerStyle={styles.list}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <View style={[
+                      styles.card, 
+                      (item.status === 'CANCELLED' || item.status === 'DELIVERED') && styles.disabledCard
+                    ]}>
+                      <View style={styles.cardHeader}>
+                        <View>
+                          <Text style={styles.cardDate}>{item.date}</Text>
+                          <Text style={styles.cardId}>{item.id}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6' }]}>
+                          <Text style={[styles.statusText, { color: STATUS_CONFIG[String(item.status).toUpperCase()]?.color || '#6B7280' }]}>
+                            {item.status}
+                          </Text>
+                        </View>
+                      </View>
 
-              <View style={styles.cardBody}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: 120 }}>
-                  {item.items && item.items.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingRight: 4 }}>
-                      {item.items.map((prod, idx) => {
-                        const uri = getImageUrl(prod?.image || prod?.product?.image || item?.image);
-                        return <Image key={idx} source={{ uri }} style={styles.productImg} />;
-                      })}
-                    </ScrollView>
-                  ) : (
-                    <Image source={{ uri: getImageUrl(item?.image) }} style={styles.productImg} />
+                      <View style={styles.cardBody}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: 120 }}>
+                          {item.items && item.items.length > 0 ? (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingRight: 4 }}>
+                              {item.items.map((prod, idx) => {
+                                const uri = getImageUrl(prod?.image || prod?.product?.image || item?.image);
+                                return <Image key={idx} source={{ uri }} style={styles.productImg} />;
+                              })}
+                            </ScrollView>
+                          ) : (
+                            <Image source={{ uri: getImageUrl(item?.image) }} style={styles.productImg} />
+                          )}
+                        </View>
+                        <View style={styles.productInfo}>
+                          <Text style={styles.productName} numberOfLines={1}>{String(item.mainProduct)}</Text>
+                          {item.itemsCount > 1 && (
+                            <Text style={styles.itemsCount}>{String(item.itemsCount)} items</Text>
+                          )}
+                        </View>
+                        <Text style={styles.cardPrice}>₹{item.total.toFixed(2)}</Text>
+                      </View>
+
+                      <View style={styles.cardActions}>
+                        {item.status !== 'CANCELLED' && item.status !== 'DELIVERED' && item.status !== 'Refund Tracking' && (
+                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
+                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity 
+                          style={styles.detailsBtn}
+                          onPress={() => navigation.navigate('OrderDetail', { order: item })}
+                        >
+                          <Text style={styles.detailsBtnText}>View Details</Text>
+                        </TouchableOpacity>
+
+                      </View>
+                    </View>
                   )}
-                </View>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName} numberOfLines={1}>{String(item.mainProduct)}</Text>
-                  {item.itemsCount > 1 && (
-                    <Text style={styles.itemsCount}>{String(item.itemsCount)} items</Text>
-                  )}
-                </View>
-                <Text style={styles.cardPrice}>₹{item.total.toFixed(2)}</Text>
-              </View>
-
-              <View style={styles.cardActions}>
-                {item.status !== 'CANCELLED' && item.status !== 'DELIVERED' && item.status !== 'Refund Tracking' && (
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
-                    <Text style={styles.cancelBtnText}>Cancel</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity 
-                  style={styles.detailsBtn}
-                  onPress={() => navigation.navigate('OrderDetail', { order: item })}
-                >
-                  <Text style={styles.detailsBtnText}>View Details</Text>
-                </TouchableOpacity>
-
-              </View>
+                />
+              )}
             </View>
-          )}
-        />
-      )}
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -270,7 +270,8 @@ const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 16,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    shadowOpacity: 0.05, shadowRadius: 8,
+    borderWidth: 1, borderColor: '#F1F5F9',
   },
   menuRow: {
     flexDirection: 'row', alignItems: 'center',

@@ -1,51 +1,67 @@
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import HomeScreen from '../screens/HomeScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import CartScreen from '../screens/CartScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { THEME_COLORS } from '../styling';
-import { View, StyleSheet, Platform, Text, Dimensions } from 'react-native';
+import { View, StyleSheet, Platform, Text, Dimensions, TouchableOpacity } from 'react-native';
 import { Home, ShoppingCart, UserCircle } from 'lucide-react-native';
 import { useCart } from '../context/CartContext';
 import { CategoryIcon, CartIcon } from '../components/CustomIcons';
 
 const { width } = Dimensions.get('window');
-const Tab = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
+
+function CustomTabBar({ state, descriptors, navigation }) {
+  return (
+    <View style={styles.floatingBar}>
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+        const color = isFocused ? THEME_COLORS.secondary : THEME_COLORS.textSecondary;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <TouchableOpacity
+            key={index}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            accessibilityLabel={options.tabBarAccessibilityLabel}
+            testID={options.tabBarTestID}
+            onPress={onPress}
+            style={styles.tabItem}
+          >
+            {options.tabBarIcon && options.tabBarIcon({ color, focused: isFocused })}
+            <Text style={[styles.tabLabel, { color }]}>
+              {options.tabBarLabel}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function TabNavigator() {
   const { cartCount } = useCart();
 
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: THEME_COLORS.secondary, // Orange for active
-        tabBarInactiveTintColor: THEME_COLORS.textSecondary, // Slate for inactive
-        tabBarStyle: {
-          position: 'absolute',
-          bottom: 20,
-          left: (width - 338) / 2,
-          width: 338,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 0,
-          paddingHorizontal: 10,
-          paddingTop: 4,
-          paddingBottom: 4,
-          elevation: 4,
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.25,
-          shadowRadius: 4,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-          marginBottom: 0,
-        },
-      }}
+      tabBarPosition="bottom"
+      tabBar={props => <CustomTabBar {...props} />}
+      screenOptions={{ swipeEnabled: true }}
     >
       <Tab.Screen 
         name="HomeTab" 
@@ -99,6 +115,34 @@ export default function TabNavigator() {
 }
 
 const styles = StyleSheet.create({
+  floatingBar: {
+    position: 'absolute',
+    flexDirection: 'row',
+    bottom: 20,
+    left: (width - 338) / 2,
+    width: 338,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    paddingHorizontal: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tabItem: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   badge: {
     position: 'absolute',
     top: -5,

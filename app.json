@@ -4,6 +4,7 @@
     "slug": "cromsen-mobile",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
+    "icon": "./assets/icons/Cromsen-Appicon.png",
    
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -20,8 +21,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        
-        "backgroundColor": "#004694"
+        "foregroundImage": "./assets/icons/Cromsen-Appicon.png",
+        "backgroundColor": "#ffffff"
       },
       "package": "com.cromsen.app",
       "runtimeVersion": "1.0.0"

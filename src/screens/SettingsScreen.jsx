@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity, StatusBar, 
   TextInput, Alert, ScrollView, ActivityIndicator,
-  KeyboardAvoidingView, Platform 
+  KeyboardAvoidingView, Platform, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save } from 'lucide-react-native';
+import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield } from 'lucide-react-native';
 
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
@@ -35,97 +35,81 @@ export default function SettingsScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
+  // App Settings States
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [promoEnabled, setPromoEnabled] = useState(false);
+  const [darkEnabled, setDarkEnabled] = useState(false);
+
   const currentUserId = user?._id || user?.id;
 
   // Fetch fresh profile on focus
+  // Fetch profile and addresses on focus
   useFocusEffect(
     React.useCallback(() => {
-      const fetchProfile = async () => {
-        if (!currentUserId) return;
+      const loadData = async () => {
         try {
-          const profile = await authService.getProfile(currentUserId);
-          const u = profile.user || profile.data || profile;
-          if (u) {
-            setName(u.name || '');
-            setEmail(u.email || '');
-            setPhone(u.phone || '');
-            
-            if (u.addresses && u.addresses.length > 0) {
-              const addr = u.addresses[u.addresses.length - 1]; // Latest address
-              setAddress(addr.street || addr.address || '');
-              setCity(addr.city || '');
-              setState(addr.state || '');
-              setZip(addr.zip || addr.pincode || '');
-            }
-            
-            // Keep context in sync
-            updateUser({ ...user, ...u });
-            return; // Success
-          }
-        } catch (err) {
-          console.warn('Failed to fetch fresh profile:', err);
-        }
-
-        // FALLBACK: If backend fails or has no address, try local storage
-        try {
-          const stored = await AsyncStorage.getItem('@UserAddresses');
-          if (stored) {
-            const addrs = JSON.parse(stored);
+          // 1. First, attempt to load local addresses so the UI feels fast and reflects Checkout immediately
+          const storedAddrs = await AsyncStorage.getItem('@UserAddresses');
+          if (storedAddrs) {
+            const addrs = JSON.parse(storedAddrs);
             if (addrs && addrs.length > 0) {
-              const addr = addrs[addrs.length - 1];
-              setAddress(addr.address || addr.street || '');
-              setCity(addr.city || '');
-              setState(addr.state || '');
-              setZip(addr.zip || addr.pincode || '');
+              const latest = addrs[addrs.length - 1];
+              setAddress(latest.address || latest.street || '');
+              setCity(latest.city || '');
+              setState(latest.state || '');
+              setZip(latest.zip || latest.pincode || '');
+              setOrigAddr(latest);
             }
           }
+          
+          if (!currentUserId) {
+            setIsFirstLoad(false);
+            return;
+          }
+
+          // 2. Fetch fresh profile from backend
+          try {
+            const profile = await authService.getProfile(currentUserId);
+            const u = profile.user || profile.data || profile;
+            if (u) {
+              setName(u.name || '');
+              setEmail(u.email || '');
+              if (u.phone) setPhone(u.phone);
+              updateUser({ ...user, ...u });
+            }
+          } catch (err) {
+            console.warn('Backend profile fetch failed:', err);
+          }
+
+          // 3. Fetch addresses from backend and override if they exist
+          try {
+            const backendAddrs = await userService.getAddresses(currentUserId);
+            if (backendAddrs && backendAddrs.length > 0) {
+              const latest = backendAddrs[backendAddrs.length - 1];
+              setAddress(latest.address || latest.street || address);
+              setCity(latest.city || city);
+              setState(latest.state || state);
+              setZip(latest.zip || latest.pincode || zip);
+              setOrigAddr(latest);
+              if (!phone && latest.phone) setPhone(latest.phone);
+              
+              // Sync backend addresses to local storage
+              await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
+            }
+          } catch (err) {
+            console.warn('Backend address fetch failed:', err);
+          }
+          
         } catch (e) {
-          console.warn('Local address fallback failed:', e);
+          console.warn('Error in Settings loadData:', e);
         } finally {
           setIsFirstLoad(false);
         }
       };
-      fetchProfile();
+
+      loadData();
     }, [currentUserId])
   );
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadProfile();
-    }, [])
-  );
-
-  const loadProfile = async () => {
-    try {
-      const currentUserId = user?._id || user?.id;
-      if (!currentUserId) return;
-
-      // Fetch latest profile from backend
-      const profile = await authService.getProfile(currentUserId);
-      const userData = profile.user || profile.data || profile;
-      
-      if (userData) {
-        setName(userData.name || '');
-        setEmail(userData.email || '');
-        setPhone(userData.phone || '');
-      }
-
-      const addrs = await userService.getAddresses(currentUserId);
-      if (addrs && addrs.length > 0) {
-        const first = addrs[0];
-        setAddress(first.address || '');
-        setCity(first.city || '');
-        setState(first.state || '');
-        setZip(first.zip || '');
-        setOrigAddr(first);
-        if (!phone && first.phone) {
-          setPhone(first.phone);
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to load profile details:', err);
-    }
-  };
 
   const handleSave = async () => {
     try {
@@ -209,14 +193,14 @@ export default function SettingsScreen({ navigation }) {
 
   const renderInput = (label, value, onChange, icon, props = {}) => (
     <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputWrapper}>
+      <Text style={[styles.label, darkEnabled && darkStyles.label]}>{label}</Text>
+      <View style={[styles.inputWrapper, darkEnabled && darkStyles.inputWrapper]}>
         <View style={styles.iconBox}>{icon}</View>
         <TextInput 
-          style={styles.input}
+          style={[styles.input, darkEnabled && darkStyles.input]}
           value={value}
           onChangeText={onChange}
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={darkEnabled ? "#888" : "#94A3B8"}
           {...props}
         />
       </View>
@@ -224,14 +208,14 @@ export default function SettingsScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <SafeAreaView style={[styles.container, darkEnabled && darkStyles.container]}>
+      <StatusBar barStyle={darkEnabled ? "light-content" : "dark-content"} backgroundColor={darkEnabled ? "#1E1E1E" : "#FFF"} />
       
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+      <View style={[styles.header, darkEnabled && darkStyles.header]}>
+        <TouchableOpacity style={[styles.backBtn, darkEnabled && darkStyles.backBtn]} onPress={() => navigation.goBack()}>
           <ArrowLeft size={22} color={THEME_COLORS.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={[styles.headerTitle, darkEnabled && darkStyles.headerTitle]}>Edit Profile</Text>
         <TouchableOpacity disabled={loading} onPress={handleSave}>
           <Text style={[styles.headerSave, loading && { opacity: 0.5 }]}>Save</Text>
         </TouchableOpacity>
@@ -245,20 +229,20 @@ export default function SettingsScreen({ navigation }) {
           
           {/* Avatar Section */}
           <View style={styles.avatarSection}>
-            <View style={styles.avatarCircle}>
+            <View style={[styles.avatarCircle, darkEnabled && darkStyles.avatarCircle]}>
               <User size={40} color={THEME_COLORS.primary} />
               <TouchableOpacity style={styles.cameraBtn}>
                 <Camera size={14} color="#FFF" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarName}>{name || 'User'}</Text>
+            <Text style={[styles.avatarName, darkEnabled && darkStyles.avatarName]}>{name || 'User'}</Text>
             <Text style={styles.avatarRole}>Cromsen Member</Text>
           </View>
 
           {/* Profile Details */}
-          <Text style={styles.sectionTitle}>Profile Details</Text>
-          <View style={styles.card}>
-            {renderInput('Full Name', name, setName, <User size={18} color="#64748B" />, { placeholder: 'Your name' })}
+          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Profile Details</Text>
+          <View style={[styles.card, darkEnabled && darkStyles.card]}>
+            {renderInput('Full Name', name, setName, <User size={18} color="#64748B" />, { placeholder: 'Your name', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
             {renderInput('Email Address', email, setEmail, <Mail size={18} color="#64748B" />, { 
               placeholder: 'name@example.com',
               keyboardType: 'email-address',
@@ -272,35 +256,84 @@ export default function SettingsScreen({ navigation }) {
           </View>
 
           {/* Security */}
-          <Text style={styles.sectionTitle}>Security & Password</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Security</Text>
+          <View style={[styles.card, darkEnabled && darkStyles.card]}>
             {renderInput('Current Password', currentPassword, setCurrentPassword, <Lock size={18} color="#64748B" />, { 
-              placeholder: 'Verify current password',
-              secureTextEntry: true
+              placeholder: 'Required for changes',
+              secureTextEntry: true,
+              placeholderTextColor: darkEnabled ? '#888' : '#94A3B8'
             })}
-            {renderInput('New Password', newPassword, setNewPassword, <Lock size={18} color="#64748B" />, { 
-              placeholder: 'Minimum 6 characters',
-              secureTextEntry: true
-            })}
-            {renderInput('Confirm New Password', confirmPassword, setConfirmPassword, <Lock size={18} color="#64748B" />, { 
-              placeholder: 'Re-enter new password',
-              secureTextEntry: true
+            {renderInput('New Password', newPassword, setNewPassword, <Shield size={18} color="#64748B" />, { 
+              placeholder: 'Leave blank to keep current',
+              secureTextEntry: true,
+              placeholderTextColor: darkEnabled ? '#888' : '#94A3B8'
             })}
           </View>
 
           {/* Address */}
-          <Text style={styles.sectionTitle}>Shipping Information</Text>
-          <View style={styles.card}>
-            {renderInput('Street Address', address, setAddress, <MapPin size={18} color="#64748B" />, { placeholder: 'House/Building/Street' })}
+          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>Shipping Information</Text>
+          <View style={[styles.card, darkEnabled && darkStyles.card]}>
+            {renderInput('Street Address', address, setAddress, <MapPin size={18} color="#64748B" />, { placeholder: 'House/Building/Street', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ flex: 1.5 }}>
-                {renderInput('City', city, setCity, null, { placeholder: 'City' })}
+                {renderInput('City', city, setCity, null, { placeholder: 'City', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
               </View>
               <View style={{ flex: 1 }}>
-                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP' })}
+                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
               </View>
             </View>
-            {renderInput('State', state, setState, null, { placeholder: 'State/Province' })}
+            {renderInput('State', state, setState, null, { placeholder: 'State/Province', placeholderTextColor: darkEnabled ? '#888' : '#94A3B8' })}
+          </View>
+          {/* App Preferences */}
+          <Text style={[styles.sectionTitle, darkEnabled && darkStyles.sectionTitle]}>App Preferences</Text>
+          <View style={[styles.card, darkEnabled && darkStyles.card]}>
+            <View style={styles.settingRow}>
+              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
+                <Bell size={18} color={THEME_COLORS.primary} />
+              </View>
+              <View style={styles.settingTextWrap}>
+                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Push Notifications</Text>
+                <Text style={styles.settingSub}>Order updates & delivery status</Text>
+              </View>
+              <Switch
+                value={pushEnabled}
+                onValueChange={setPushEnabled}
+                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                thumbColor="#FFF"
+              />
+            </View>
+
+            <View style={[styles.settingRow, styles.settingRowBorder, darkEnabled && darkStyles.settingRowBorder]}>
+              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
+                <Tag size={18} color={THEME_COLORS.primary} />
+              </View>
+              <View style={styles.settingTextWrap}>
+                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Promotional Offers</Text>
+                <Text style={styles.settingSub}>Receive sales & discount alerts</Text>
+              </View>
+              <Switch
+                value={promoEnabled}
+                onValueChange={setPromoEnabled}
+                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                thumbColor="#FFF"
+              />
+            </View>
+
+            <View style={[styles.settingRow, styles.settingRowBorder, darkEnabled && darkStyles.settingRowBorder]}>
+              <View style={[styles.settingIconWrap, darkEnabled && darkStyles.settingIconWrap]}>
+                <Moon size={18} color={THEME_COLORS.primary} />
+              </View>
+              <View style={styles.settingTextWrap}>
+                <Text style={[styles.settingTitle, darkEnabled && darkStyles.settingTitle]}>Dark Mode</Text>
+                <Text style={styles.settingSub}>Match system theme</Text>
+              </View>
+              <Switch
+                value={darkEnabled}
+                onValueChange={setDarkEnabled}
+                trackColor={{ false: '#E2E8F0', true: THEME_COLORS.secondary }}
+                thumbColor="#FFF"
+              />
+            </View>
           </View>
 
           <TouchableOpacity 
@@ -362,7 +395,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 25,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 10, elevation: 3,
+    shadowOpacity: 0.05, shadowRadius: 10,
+    borderWidth: 1, borderColor: '#F1F5F9',
   },
   inputGroup: { marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '800', color: '#475569', marginBottom: 8, marginLeft: 2 },
@@ -384,5 +418,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 10, elevation: 8,
   },
   mainSaveTxt: { color: '#FFF', fontSize: 17, fontWeight: '900' },
+
+  /* App Preferences */
+  settingRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+  },
+  settingRowBorder: {
+    borderTopWidth: 1, borderTopColor: '#F1F5F9', marginTop: 4, paddingTop: 16,
+  },
+  settingIconWrap: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: '#F8FAFC',
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  settingTextWrap: { flex: 1 },
+  settingTitle: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
+  settingSub: { fontSize: 12, color: '#64748B', fontWeight: '500', marginTop: 2 },
+});
+
+const darkStyles = StyleSheet.create({
+  container: { backgroundColor: '#121212' },
+  header: { backgroundColor: '#1E1E1E', borderBottomColor: '#2C2C2C' },
+  headerTitle: { color: '#FFFFFF' },
+  card: { backgroundColor: '#1E1E1E', shadowOpacity: 0.2, borderColor: '#2C2C2C', borderWidth: 1 },
+  sectionTitle: { color: '#A0AAB5' },
+  label: { color: '#CBD5E1' },
+  inputWrapper: { backgroundColor: '#2C2C2C', borderColor: '#3F3F46' },
+  input: { color: '#FFFFFF' },
+  settingTitle: { color: '#FFFFFF' },
+  settingRowBorder: { borderTopColor: '#2C2C2C' },
+  settingIconWrap: { backgroundColor: '#2C2C2C' },
+  avatarName: { color: '#FFFFFF' },
+  avatarCircle: { backgroundColor: '#2C2C2C' },
+  backBtn: { backgroundColor: '#2C2C2C' },
 });
 
