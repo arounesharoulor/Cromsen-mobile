@@ -175,6 +175,9 @@ export default function ProductDetailScreen({ navigation, route }) {
     </View>
   );
 
+  const categoryImage = (Array.isArray(product.category) && product.category[0]?.image) || 
+                        (product.category?.image) || null;
+
   const rawImgs = (
     (product.images?.length > 0 ? product.images : null) || 
     (product.image ? [product.image] : null) || 
@@ -184,6 +187,7 @@ export default function ProductDetailScreen({ navigation, route }) {
     (product.img ? [product.img] : null) || 
     (product.pic ? [product.pic] : null) || 
     (product.photo ? [product.photo] : null) || 
+    (categoryImage ? [categoryImage] : null) ||
     []
   ).filter(Boolean);
   

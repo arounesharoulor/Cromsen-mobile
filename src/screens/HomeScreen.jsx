@@ -47,19 +47,19 @@ const BANNER_DATA = [
     id: 1,
     title: "Premium\nFurniture for\nYour Home",
     tag: "NEW COLLECTION",
-    image: 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200'
+    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=1200'
   },
   {
     id: 2,
     title: "Modern\nInteriors for\nComfort",
     tag: "BEST SELLER",
-    image: 'https://images.pexels.com/photos/1866149/pexels-photo-1866149.jpeg?auto=compress&cs=tinysrgb&w=1200'
+    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=1200'
   },
   {
     id: 3,
     title: "Exclusive\nDeals for\nYou",
     tag: "LIMITED TIME",
-    image: 'https://images.pexels.com/photos/276724/pexels-photo-276724.jpeg?auto=compress&cs=tinysrgb&w=1200'
+    image: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=1200'
   }
 ];
 
@@ -222,25 +222,24 @@ export default function HomeScreen({ navigation, route }) {
               }}
             >
               {BANNER_DATA.map((item) => (
-                <View key={item.id} style={{ width: width - 40 }}>
-                  <ImageBackground
+                <View key={item.id} style={{ width: width - 40, height: 180 }}>
+                  <Image
                     source={{ uri: item.image }}
-                    style={styles.heroBanner}
-                    imageStyle={styles.heroBannerImg}
-                  >
-                    <View style={styles.heroOverlay}>
-                      <View style={styles.heroTag}>
-                        <Text style={styles.heroTagTxt}>{item.tag}</Text>
-                      </View>
-                      <Text style={styles.heroTitle}>{item.title}</Text>
-                      <TouchableOpacity
-                        style={styles.heroBtn}
-                        onPress={() => navigation.navigate('Search')}
-                      >
-                        <Text style={styles.heroBtnTxt}>Shop Now →</Text>
-                      </TouchableOpacity>
+                    style={[styles.heroBanner, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.heroOverlay}>
+                    <View style={styles.heroTag}>
+                      <Text style={styles.heroTagTxt}>{item.tag}</Text>
                     </View>
-                  </ImageBackground>
+                    <Text style={styles.heroTitle}>{item.title}</Text>
+                    <TouchableOpacity
+                      style={styles.heroBtn}
+                      onPress={() => navigation.navigate('Search')}
+                    >
+                      <Text style={styles.heroBtnTxt}>Shop Now →</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))}
             </ScrollView>
@@ -368,14 +367,14 @@ export default function HomeScreen({ navigation, route }) {
                 {products.slice(3, 7).map((p) => (
                   <TouchableOpacity
                     key={p._id || p.id}
-                    style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0 }]}
+                    style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0, overflow: 'hidden' }]}
                     onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                   >
-                    <ImageBackground
-                      source={{ uri: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0])) }}
-                      style={{ width: '100%', height: '100%' }}
-                      imageStyle={{ borderRadius: 12 }}
-                    >
+                    <Image
+                      source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl) }}
+                      style={{ width: '100%', height: '100%', borderRadius: 12, position: 'absolute' }}
+                      resizeMode="cover"
+                    />
                       <View style={[styles.heroOverlay, { backgroundColor: 'transparent', borderRadius: 12, padding: 15 }]}>
                         <View style={{ backgroundColor: 'rgba(255,255,255,0.85)', padding: 10, borderRadius: 10, alignSelf: 'flex-start' }}>
                           <Text style={[styles.heroTitle, { fontSize: 16, color: THEME_COLORS.text, marginBottom: 4 }]}>
@@ -384,7 +383,6 @@ export default function HomeScreen({ navigation, route }) {
                           <Text style={[styles.heroBtnTxt, { fontSize: 13, color: '#1E3C83' }]}>₹{p.price?.toLocaleString()}</Text>
                         </View>
                       </View>
-                    </ImageBackground>
                   </TouchableOpacity>
                 ))}
               </ScrollView>

@@ -4,7 +4,7 @@
     "slug": "cromsen-mobile",
     "scheme": "cromsen-mobile",
     "version": "1.0.0",
-    "sdkVersion": "52.0.0",
+    "sdkVersion": "54.0.0",
     "icon": "./assets/icons/Cromsen-Appicon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -33,7 +33,6 @@
       }
     },
     "plugins": [
-      "expo-web-browser",
       "expo-dev-client",
       [
         "expo-build-properties",

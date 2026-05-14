@@ -21,40 +21,43 @@ const handleResponse = async (response) => {
 };
 
 export const getImageUrl = (imagePath) => {
-  // If it's an object, try to extract various possible URL properties
-  if (imagePath && typeof imagePath === 'object' && !Array.isArray(imagePath)) {
-    imagePath = imagePath.url || imagePath.imageURL || imagePath.path || 
-                imagePath.secure_url || imagePath.uri || imagePath.src || 
-                imagePath.original || imagePath.link || "";
-  }
-
   // If it's an array, take the first valid element
   if (Array.isArray(imagePath)) {
-    const firstValid = imagePath.find(item => item && (typeof item === 'string' || typeof item === 'object'));
-    if (firstValid) return getImageUrl(firstValid); // Recurse
-    imagePath = "";
-  }
-
-  if (!imagePath || typeof imagePath !== 'string' || imagePath.trim() === "") {
+    const firstValid = imagePath.find(item => item && item !== '');
+    if (firstValid) return getImageUrl(firstValid);
     return 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=400';
   }
 
-  if (imagePath.startsWith('http')) return imagePath;
-  if (imagePath.startsWith('data:image')) return imagePath;
-  
-  // Normalize slashes for cross-platform compatibility
-  const normalizedPath = imagePath.replace(/\\/g, '/');
-  
-  // If the path already includes the domain but not the protocol
-  if (normalizedPath.includes('cromsen-backend.onrender.com') && !normalizedPath.startsWith('http')) {
-    return `https://${normalizedPath.replace(/^\/+/, '')}`;
+  // If it's an object, try common URL properties
+  if (imagePath && typeof imagePath === 'object') {
+    const url = imagePath.url || imagePath.imageURL || imagePath.secure_url ||
+                imagePath.uri || imagePath.src || imagePath.path || '';
+    return getImageUrl(url);
   }
 
-  const baseUrl = BASE_URL.replace('/api', '');
-  
-  // Ensure we don't double up slashes
-  const cleanPath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
-  return `${baseUrl}${cleanPath}`;
+  // Not a string or empty
+  if (!imagePath || typeof imagePath !== 'string' || imagePath.trim() === '') {
+    return 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=400';
+  }
+
+  const path = imagePath.trim();
+
+  // Already a full URL (Cloudinary, S3, etc.) — return as-is
+  // Replace localhost with backend for dev-uploaded images
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (path.includes('localhost') || path.includes('127.0.0.1')) {
+      return path.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, 'https://cromsen-backend.onrender.com');
+    }
+    return path;
+  }
+
+  // Base64 image
+  if (path.startsWith('data:image')) return path;
+
+  // Relative path — prepend backend base URL
+  const baseUrl = 'https://cromsen-backend.onrender.com';
+  const cleanPath = path.replace(/\\/g, '/');
+  return `${baseUrl}/${cleanPath.replace(/^\/+/, '')}`;
 };
 
 

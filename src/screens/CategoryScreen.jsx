@@ -24,6 +24,7 @@ const getCategoryIcon = (name, color) => {
   if (n.includes('honeycomb')) return <HoneycombIcon size={24} color={color} />;
   if (n.includes('magic screen') || n.includes('magicscreen')) return <MagicScreenIcon size={24} color={color} />;
   if (n.includes('curtain')) return <CurtainsIcon size={24} color={color} />;
+  if (n.includes('blind')) return <PleatedIcon size={24} color={color} />;
   if (n.includes('mosquito') || n.includes('net')) return <MosquitoIcon size={24} color={color} />;
   if (n.includes('fencing') || n.includes('fence')) return <FencingIcon size={24} color={color} />;
   if (n.includes('balcony')) return <BalconyIcon size={24} color={color} />;
@@ -143,7 +144,7 @@ export default function CategoryScreen({ navigation }) {
                       )}
                     </View>
                     <Text style={[styles.sideLabel, { color: isActive ? theme.secondary : theme.textSecondary, fontWeight: isActive ? '900' : '700' }]} numberOfLines={2}>
-                      {sanitizeData(cat.name, 'Category')}
+                      {sanitizeData(cat.name || cat.label || cat.title, 'Category')}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -163,13 +164,13 @@ export default function CategoryScreen({ navigation }) {
                       style={styles.bannerImg} 
                     />
                     <View style={styles.bannerOverlay}>
-                      <Text style={styles.bannerText}>New {selectedCat.name} Collection</Text>
+                      <Text style={styles.bannerText}>New {selectedCat.name || selectedCat.label || selectedCat.title || ''} Collection</Text>
                     </View>
                   </TouchableOpacity>
 
                   {/* Section Title */}
                   <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: theme.text }]}>{selectedCat.name}</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>{selectedCat.name || selectedCat.label || selectedCat.title || 'Products'}</Text>
                   </View>
 
                   {/* Products Grid */}
@@ -183,7 +184,7 @@ export default function CategoryScreen({ navigation }) {
                           style={styles.gridItem}
                           onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                         >
-                          <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
+                          <Image source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl || selectedCat.image) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
                           <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={1}>{sanitizeData(p.name)}</Text>
                         </TouchableOpacity>
                       ))}
@@ -207,7 +208,7 @@ export default function CategoryScreen({ navigation }) {
                         style={[styles.popItem, { backgroundColor: theme.surface }]}
                         onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                       >
-                        <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={styles.popImg} />
+                        <Image source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl || selectedCat.image) }} style={styles.popImg} />
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
