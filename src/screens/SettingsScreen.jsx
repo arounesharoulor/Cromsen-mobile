@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield, ChevronDown, Search, Pencil } from 'lucide-react-native';
+import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield, ChevronDown, Search, Pencil, Eye, EyeOff } from 'lucide-react-native';
 
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +25,8 @@ export default function SettingsScreen({ navigation }) {
   const [currentPassword, setCurrentPassword] = useState(user?.storedPassword || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
   
   // Address fields
   const [address, setAddress] = useState('');
@@ -170,16 +172,13 @@ export default function SettingsScreen({ navigation }) {
       const updateData = { 
         name, 
         email, 
-        phone: phone.replace(/\s/g, ''), // Send ONLY the 10-digit number
-        countryCode: selectedCountry.code, // Send country code separately
-        currentPassword: autoPassword 
+        phone: phone.replace(/\s/g, ''),
+        countryCode: selectedCountry.code
       };
+
       if (pwdChanged) {
-        updateData.currentPassword = currentPassword;
+        updateData.currentPassword = currentPassword || user?.storedPassword;
         updateData.password = newPassword;
-      } else {
-        // Even if password didn't change, we might need it for auth
-        updateData.currentPassword = currentPassword;
       }
 
       // 1. Update Profile (Name, Email, Phone, Password)
@@ -218,26 +217,40 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const renderInput = (label, value, onChange, icon, props = {}) => (
-    <View style={styles.inputGroup}>
-      <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
-      <View style={[
-        styles.inputWrapper, 
-        { backgroundColor: theme.background, borderColor: theme.border },
-        !isEditing && { opacity: 0.7, backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9' }
-      ]}>
-        <View style={styles.iconBox}>{icon}</View>
-        <TextInput 
-          style={[styles.input, { color: theme.text }]}
-          value={value}
-          onChangeText={onChange}
-          placeholderTextColor={theme.textSecondary}
-          editable={isEditing}
-          {...props}
-        />
+  const renderInput = (label, value, onChange, icon, props = {}) => {
+    const isPassword = props.secureTextEntry;
+    const showValue = label.toLowerCase().includes('current') ? showCurrentPwd : showNewPwd;
+    
+    return (
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
+        <View style={[
+          styles.inputWrapper, 
+          { backgroundColor: theme.background, borderColor: theme.border },
+          !isEditing && { opacity: 0.7, backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9' }
+        ]}>
+          <View style={styles.iconBox}>{icon}</View>
+          <TextInput 
+            style={[styles.input, { color: theme.text }]}
+            value={value}
+            onChangeText={onChange}
+            placeholderTextColor={theme.textSecondary}
+            editable={isEditing}
+            {...props}
+            secureTextEntry={isPassword && !showValue}
+          />
+          {isPassword && isEditing && (
+            <TouchableOpacity 
+              style={{ padding: 10 }} 
+              onPress={() => label.toLowerCase().includes('current') ? setShowCurrentPwd(!showCurrentPwd) : setShowNewPwd(!showNewPwd)}
+            >
+              {showValue ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
