@@ -57,8 +57,8 @@ export default function RegisterScreen({ navigation }) {
       const cleanPhone = form.phone.replace(/^\+\d+\s?/, '').replace(/\s/g, '');
       const regData = { 
         name: form.name, 
-        phone: `${selectedCountry.code}${cleanPhone}`, 
-        countryCode: selectedCountry.code,
+        phone: cleanPhone, // Send ONLY the 10-digit number
+        countryCode: selectedCountry.code, // Send country code separately
         password: form.password,
         email: `${cleanPhone}@cromsen.com` 
       };

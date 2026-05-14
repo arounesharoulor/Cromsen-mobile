@@ -170,9 +170,9 @@ export default function SettingsScreen({ navigation }) {
       const updateData = { 
         name, 
         email, 
-        phone: `${selectedCountry.code}${phone.replace(/\s/g, '')}`, 
-        countryCode: selectedCountry.code,
-        currentPassword: autoPassword // Pass it automatically
+        phone: phone.replace(/\s/g, ''), // Send ONLY the 10-digit number
+        countryCode: selectedCountry.code, // Send country code separately
+        currentPassword: autoPassword 
       };
       if (pwdChanged) {
         updateData.currentPassword = currentPassword;
@@ -328,14 +328,8 @@ export default function SettingsScreen({ navigation }) {
           <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Shipping Information</Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {renderInput('Street Address', address, setAddress, <MapPin size={18} color={theme.textSecondary} />, { placeholder: 'House/Building/Street' })}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1.2 }}>
-                {renderInput('City', city, setCity, null, { placeholder: 'City' })}
-              </View>
-              <View style={{ flex: 1 }}>
-                {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP', maxLength: 6 })}
-              </View>
-            </View>
+            {renderInput('City', city, setCity, null, { placeholder: 'City' })}
+            {renderInput('ZIP Code', zip, setZip, null, { keyboardType: 'number-pad', placeholder: 'ZIP' })}
             {renderInput('State', state, setState, null, { placeholder: 'State/Province' })}
           </View>
           {/* App Preferences */}
