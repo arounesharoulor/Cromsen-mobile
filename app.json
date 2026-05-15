@@ -25,13 +25,9 @@
         "backgroundColor": "#000000"
       }
     },
-    "updates": {
-      "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
-    },
+    "updates": {},
     "extra": {
-      "eas": {
-        "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
-      }
+      "eas": {}
     },
     "plugins": [
       "expo-dev-client",
@@ -48,6 +44,6 @@
       ],
       "expo-asset"
     ],
-    "newArchEnabled": true
+    "newArchEnabled": false
   }
 }
