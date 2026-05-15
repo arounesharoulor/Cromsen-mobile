@@ -4,24 +4,24 @@
     "slug": "cromsen-mobile",
     "scheme": "cromsen-mobile",
     "version": "1.0.0",
-    "icon": "./assets/icons/Cromsen-Appicon.png",
+    "icon": "./assets/icons/CromsenAppicon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/icons/Cromsen-Appicon.png",
+      "image": "./assets/icons/CromsenAppicon.png",
       "backgroundColor": "#ffffff",
       "resizeMode": "contain"
     },
     "runtimeVersion": "1.0.0",
     "ios": {
-      "icon": "./assets/icons/Cromsen-Appicon.png",
+      "icon": "./assets/icons/CromsenAppicon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.cromsen.app"
     },
     "android": {
       "package": "com.cromsen.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icons/Cromsen-Appicon.png",
+        "foregroundImage": "./assets/icons/CromsenAppicon.png",
         "backgroundColor": "#000000"
       }
     },
@@ -32,14 +32,13 @@
       }
     },
     "plugins": [
-      "expo-dev-client",
       [
         "expo-build-properties",
         {
           "android": {
             "kotlinVersion": "2.0.0",
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
             "minSdkVersion": 23
           }
         }

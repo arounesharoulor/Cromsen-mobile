@@ -7,3 +7,10 @@ android/
 ios/
 *.log
 .git/
+
+# Ignore files with spaces or invalid characters (Android build fix)
+assets/icons/*\ *.svg
+assets/icons/*-*.svg
+assets/icons/pvc\ doors.svg
+assets/icons/upvc\ hardware.svg
+assets/icons/upvc\ tools.svg
