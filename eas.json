@@ -11,13 +11,15 @@
     "preview": {
       "developmentClient": true,
       "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
+        "buildType": "apk",
+        "image": "latest"          // ← Important for SDK 54
       }
     },
-    "production": {}
+    "production": {
+      "android": {
+        "image": "latest"          // ← Add this
+      }
+    }
   },
   "submit": {
     "production": {}

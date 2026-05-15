@@ -14,7 +14,7 @@ import { Modal as RNModal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
 import { getImageUrl, sanitizeData, userService } from '../services/api';
-import RazorpayCheckout from 'react-native-razorpay';
+import Razorpay from '@codearcade/expo-razorpay';
 import { useAuth } from '../context/AuthContext';
 
 
@@ -662,11 +662,9 @@ export default function CheckoutScreen({ navigation, route }) {
             }
 
             // STEP 4: CHOOSE METHOD (Native SDK vs Secure Browser)
-            // Strict check to ensure the Native Module is actually linked (prevents crashes in Expo Go)
-            const isNativeLinked = NativeModules && (NativeModules.RazorpayCheckout || NativeModules.RazorpayEventEmitter);
-            
-            if (RazorpayCheckout && isNativeLinked && typeof RazorpayCheckout.open === 'function') {
-              console.log('Opening Razorpay Native SDK...');
+            // Using the @codearcade/expo-razorpay wrapper which works in Expo
+            if (Razorpay && typeof Razorpay.open === 'function') {
+              console.log('Opening Razorpay via Expo Wrapper...');
               
               const options = {
                 key: 'rzp_test_SNY1G9ELPHlY7P',
@@ -683,7 +681,7 @@ export default function CheckoutScreen({ navigation, route }) {
                 modal: { ondismiss: () => alert('Payment Cancelled') },
               };
 
-              const paymentData = await RazorpayCheckout.open(options);
+              const paymentData = await Razorpay.open(options);
               console.log('Payment Success:', paymentData);
 
               // STEP 5: VERIFY PAYMENT & SAVE ORDER

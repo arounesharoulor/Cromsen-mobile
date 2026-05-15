@@ -68,6 +68,7 @@ export default function HomeScreen({ navigation, route }) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [trendingProducts, setTrendingProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeBanner, setActiveBanner] = useState(0);
   const { cartCount, addToCart } = useCart();
@@ -124,13 +125,19 @@ export default function HomeScreen({ navigation, route }) {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cats, prods] = await Promise.all([
+      const [cats, prods, trendingProds] = await Promise.all([
         categoryService.getCategories(),
         productService.getProducts({ limit: 8 }),
+        productService.getProducts({ category: 'Trending Now', limit: 4 }),
       ]);
       setCategories(Array.isArray(cats) ? cats : cats.data || []);
+      
       const list = prods.products || prods.data || (Array.isArray(prods) ? prods : []);
       setProducts(list);
+
+      const trendingList = trendingProds.products || trendingProds.data || (Array.isArray(trendingProds) ? trendingProds : []);
+      // Fallback: if no products in Trending Now category, use a slice of general products
+      setTrendingProducts(trendingList.length > 0 ? trendingList : list.slice(3, 7));
     } finally {
       setLoading(false);
     }
@@ -138,9 +145,15 @@ export default function HomeScreen({ navigation, route }) {
 
   const silentRefresh = async () => {
     try {
-      const prods = await productService.getProducts({ limit: 8 });
+      const [prods, trendingProds] = await Promise.all([
+        productService.getProducts({ limit: 8 }),
+        productService.getProducts({ category: 'Trending Now', limit: 4 }),
+      ]);
       const list = prods.products || prods.data || (Array.isArray(prods) ? prods : []);
       if (list.length > 0) setProducts(list);
+
+      const trendingList = trendingProds.products || trendingProds.data || (Array.isArray(trendingProds) ? trendingProds : []);
+      if (trendingList.length > 0) setTrendingProducts(trendingList);
     } catch (e) { console.warn('Background refresh failed', e); }
   };
 
@@ -364,7 +377,7 @@ export default function HomeScreen({ navigation, route }) {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.bsScroll}
               >
-                {products.slice(3, 7).map((p) => (
+                {trendingProducts.map((p) => (
                   <TouchableOpacity
                     key={p._id || p.id}
                     style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0, overflow: 'hidden' }]}

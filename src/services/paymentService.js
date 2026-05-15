@@ -1,4 +1,4 @@
-import RazorpayCheckout from 'react-native-razorpay';
+import Razorpay from '@codearcade/expo-razorpay';
 import { Linking, Keyboard } from 'react-native';
 
 export const RAZORPAY_KEY_ID = 'rzp_test_SNY1G9ELPHlY7P';
@@ -12,8 +12,8 @@ class PaymentService {
         .then(keyData => {
           const activeKey = keyData.key || RAZORPAY_KEY_ID;
 
-          // Check if Native SDK is available (it's null in Expo Go)
-          if (RazorpayCheckout) {
+          // Check if Razorpay wrapper is available
+          if (Razorpay) {
             const options = {
               description: 'Order Payment',
               image: 'https://i.imgur.com/3g7nmJC.png',
@@ -29,8 +29,8 @@ class PaymentService {
               },
               theme: { color: '#004694' }
             };
-
-            RazorpayCheckout.open(options)
+  
+            Razorpay.open(options)
               .then(resolve)
               .catch(reject);
           } else {

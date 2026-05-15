@@ -16,7 +16,7 @@ const logoXml = `<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xml
 </svg>`;
 
 import CromsenLogo from '../../assets/icons/cromsen.svg';
-import CartIconSvg from '../../assets/icons/Cart Icons.svg';
+import CartIconSvg from '../../assets/icons/cart_icons.svg';
 
 export const LogoIcon = ({ size = 44 }) => {
   return (
