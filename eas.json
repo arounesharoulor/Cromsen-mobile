@@ -9,7 +9,7 @@
       "distribution": "internal"
     },
     "preview": {
-      "developmentClient": true,
+      "developmentClient": false,
       "android": {
         "buildType": "apk",
         "image": "latest"          // ← Important for SDK 54
@@ -17,7 +17,8 @@
     },
     "production": {
       "android": {
-        "image": "latest"          // ← Add this
+        "buildType": "apk",
+        "image": "latest"
       }
     }
   },
