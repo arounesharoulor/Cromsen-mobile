@@ -16,7 +16,10 @@
     "ios": {
       "icon": "./assets/icons/CromsenAppicon.png",
       "supportsTablet": true,
-      "bundleIdentifier": "com.cromsen.app"
+      "bundleIdentifier": "com.cromsen.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.cromsen.app",
@@ -45,6 +48,6 @@
       ],
       "expo-asset"
     ],
-    "newArchEnabled": false
+    "newArchEnabled": true
   }
 }
