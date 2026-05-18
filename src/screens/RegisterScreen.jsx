@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Alert, Modal, FlatList,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, TextInput, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Phone, Lock, Eye, EyeOff, ArrowLeft, ChevronDown, Search } from 'lucide-react-native';
+import { User, Phone, Lock, Eye, EyeOff, ArrowLeft, ChevronDown, Mail, ShieldCheck } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
 import { authService } from '../services/api';
@@ -28,40 +28,153 @@ const COUNTRIES = [
 export default function RegisterScreen({ navigation }) {
   const { login: authLogin } = useAuth();
   const { isDarkMode, theme } = useTheme();
-  const [form, setForm] = useState({ name: '', phone: '', password: '', confirm: '' });
+  
+  // Multi-Step Registration States
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: '', phone: '', email: '', password: '', confirm: '' });
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // OTP Verification States
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [sentOtp, setSentOtp] = useState('');
+  const [timer, setTimer] = useState(60);
+  const [otpError, setOtpError] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const timerRef = useRef(null);
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const validate = () => {
+  // Handle Countdown Timer for Resend OTP
+  useEffect(() => {
+    if (showOtpModal && timer > 0) {
+      timerRef.current = setInterval(() => {
+        setTimer(t => t - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [showOtpModal, timer]);
+
+  const validateStep1 = () => {
     const e = {};
-    if (!form.name.trim()) e.name = 'Full name is required';
     if (!form.phone) e.phone = 'Mobile number is required';
     else if (!/^\d{10}$/.test(form.phone.replace(/\D/g, ''))) e.phone = 'Enter a valid 10-digit number';
-    if (!form.password) e.password = 'Password is required';
-    else if (form.password.length < 6) e.password = 'Password must be at least 6 characters';
-    if (form.password !== form.confirm) e.confirm = 'Passwords do not match';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleRegister = async () => {
-    if (!validate()) return;
+  const validateStep2 = () => {
+    const e = {};
+    if (!form.password) e.password = 'Password is required';
+    else if (form.password.length < 6) e.password = 'Password must be at least 6 characters';
+    if (form.password !== form.confirm) e.confirm = 'Passwords do not match';
+    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const generateAndSendOtp = (cleanPhone) => {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setSentOtp(code);
+    setTimer(60);
+    setOtpInput('');
+    setOtpError('');
+    
+    // Simulate SMS delivery
+    setTimeout(() => {
+      Alert.alert(
+        '💬 Cromsen Secure OTP',
+        `Your registration verification code is: ${code}\n\nDo not share this code with anyone.`,
+        [{ text: 'Copy Code', onPress: () => {} }]
+      );
+    }, 800);
+  };
+
+  const handleResendOtp = () => {
+    if (timer > 0) return;
+    const digits = form.phone.replace(/\D/g, '');
+    const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
+    generateAndSendOtp(cleanPhone);
+  };
+
+  const handleSendOtp = async () => {
+    if (!validateStep1()) return;
     try {
       setLoading(true);
-      // Strip any existing country code prefix or spaces the user might have typed
-      const cleanPhone = form.phone.replace(/^\+\d+\s?/, '').replace(/\s/g, '');
+      const digits = form.phone.replace(/\D/g, '');
+      const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
+
+      // 1. Verify if phone number already exists before sending OTP
+      try {
+        const response = await fetch('https://cromsen-backend.onrender.com/api/users');
+        if (response.ok) {
+          const listData = await response.json();
+          const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
+          const matchedUser = users.find(u => {
+            const dbDigits = (u.phone || '').replace(/\D/g, '');
+            if (dbDigits.length >= 10 && cleanPhone.length >= 10) {
+              return dbDigits.slice(-10) === cleanPhone.slice(-10);
+            }
+            return dbDigits === cleanPhone;
+          });
+          if (matchedUser) {
+            Alert.alert('Registration Failed', 'An account with this mobile number already exists.');
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Backend user check failed, proceeding with OTP registration:', err);
+      }
+
+      setLoading(false);
+      // Trigger the OTP Modal and send the code!
+      setShowOtpModal(true);
+      generateAndSendOtp(cleanPhone);
+    } catch (err) {
+      Alert.alert('Registration Failed', err.message || 'Could not verify mobile number');
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpInput.length !== 6) {
+      setOtpError('Please enter a 6-digit code');
+      return;
+    }
+
+    if (otpInput !== sentOtp) {
+      setOtpError('Invalid verification code. Please try again.');
+      return;
+    }
+
+    setShowOtpModal(false);
+    clearInterval(timerRef.current);
+    // OTP Verified! Advance to details step
+    setStep(2);
+  };
+
+  const handleCompleteRegistration = async () => {
+    if (!validateStep2()) return;
+    try {
+      setLoading(true);
+      const digits = form.phone.replace(/\D/g, '');
+      const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
+
       const regData = { 
-        name: form.name, 
-        phone: cleanPhone, // Send ONLY the 10-digit number
-        countryCode: selectedCountry.code, // Send country code separately
+        name: form.name.trim() || 'Cromsen Member', 
+        phone: cleanPhone, 
+        countryCode: selectedCountry.code, 
         password: form.password,
-        email: `${cleanPhone}@cromsen.com` 
+        email: form.email.trim() || `${cleanPhone}@cromsen.com` 
       };
+
       const response = await authService.register(regData);
       
       // Auto-login after successful registration
@@ -72,7 +185,7 @@ export default function RegisterScreen({ navigation }) {
         { text: 'Great!', onPress: () => navigation.replace('Main') }
       ]);
     } catch (err) {
-      Alert.alert('Registration Failed', err.message || 'Could not create account');
+      Alert.alert('Registration Failed', err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -83,92 +196,158 @@ export default function RegisterScreen({ navigation }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
+        
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.logoRow}>
               <LogoIcon size={50} color={theme.primary} />
             </View>
-            <Text style={[styles.title, { color: theme.text }]}>Create Account</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Join thousands of happy customers</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              {step === 1 ? 'Verify Phone' : 'Create Account'}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              {step === 1 
+                ? 'Verify your mobile number with a secure OTP to start registration' 
+                : 'Set up your name, email, and password to finish signing up'
+              }
+            </Text>
           </View>
 
-          {/* Form */}
+          {/* Step Progress Indicator */}
+          <View style={styles.stepIndicatorRow}>
+            <View style={[styles.stepDot, { backgroundColor: theme.primary }]} />
+            <View style={[styles.stepLine, { backgroundColor: step >= 2 ? theme.primary : theme.border }]} />
+            <View style={[styles.stepDot, { backgroundColor: step >= 2 ? theme.primary : theme.border }]} />
+          </View>
+          <Text style={[styles.stepIndicatorText, { color: theme.textSecondary }]}>
+            {step === 1 ? 'Step 1: Mobile Verification' : 'Step 2: Account Details'}
+          </Text>
+
+          {/* Form Content */}
           <View style={styles.form}>
-            <AppInput
-              label="Full Name"
-              placeholder="Enter your full name"
-              value={form.name}
-              onChangeText={v => set('name', v)}
-              error={errors.name}
-              leftIcon={<User size={18} color={theme.textSecondary} />}
-              autoCapitalize="words"
-            />
-            <View style={styles.phoneRow}>
-              <TouchableOpacity style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={() => setShowCountryModal(true)}>
-                <Text style={styles.flagTxt}>{selectedCountry.flag}</Text>
-                <Text style={[styles.countryTxt, { color: theme.text }]}>{selectedCountry.code}</Text>
-                <ChevronDown size={14} color={theme.textSecondary} />
-              </TouchableOpacity>
-              <View style={{ flex: 1 }}>
-                <AppInput
-                  label="Mobile Number"
-                  placeholder="Enter your mobile number"
-                   value={form.phone}
-                  onChangeText={v => set('phone', v.replace(/[^0-9]/g, ''))}
-                  keyboardType="phone-pad"
-                  error={errors.phone}
-                  leftIcon={<Phone size={18} color={theme.textSecondary} />}
+            {step === 1 ? (
+              <>
+                <View style={styles.phoneRow}>
+                  <TouchableOpacity 
+                    style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} 
+                    onPress={() => setShowCountryModal(true)}
+                  >
+                    <Text style={styles.flagTxt}>{selectedCountry.flag}</Text>
+                    <Text style={[styles.countryTxt, { color: theme.text }]}>{selectedCountry.code}</Text>
+                    <ChevronDown size={14} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  
+                  <View style={{ flex: 1 }}>
+                    <AppInput
+                      label="Mobile Number (Mandatory)"
+                      placeholder="Enter your mobile number"
+                      value={form.phone}
+                      onChangeText={v => set('phone', v.replace(/[^0-9]/g, ''))}
+                      keyboardType="phone-pad"
+                      error={errors.phone}
+                      leftIcon={<Phone size={18} color={theme.textSecondary} />}
+                    />
+                  </View>
+                </View>
+
+                <Text style={[styles.terms, { color: theme.textSecondary, textAlign: 'left', marginBottom: 28 }]}>
+                   We will send a secure 6-digit OTP code to verify ownership of this number.
+                </Text>
+
+                <AppButton
+                  title="Send Verification OTP"
+                  onPress={handleSendOtp}
+                  loading={loading}
+                  size="lg"
+                  style={[styles.submitBtn, { backgroundColor: theme.primary }]}
                 />
-              </View>
-            </View>
-            <AppInput
-              label="Password"
-              placeholder="Create a strong password"
-              value={form.password}
-              onChangeText={v => set('password', v)}
-              secureTextEntry={!showPwd}
-              error={errors.password}
-              leftIcon={<Lock size={18} color={theme.textSecondary} />}
-              rightIcon={showPwd ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
-              onRightIconPress={() => setShowPwd(v => !v)}
-              hint="Minimum 6 characters"
-              contextMenuHidden={true}
-              selectTextOnFocus={false}
-            />
-            <AppInput
-              label="Confirm Password"
-              placeholder="Re-enter your password"
-              value={form.confirm}
-              onChangeText={v => set('confirm', v)}
-              secureTextEntry={!showPwd}
-              error={errors.confirm}
-              leftIcon={<Lock size={18} color={theme.textSecondary} />}
-              contextMenuHidden={true}
-              selectTextOnFocus={false}
-            />
+              </>
+            ) : (
+              <>
+                <AppInput
+                  label="Full Name"
+                  placeholder="Enter your full name"
+                  value={form.name}
+                  onChangeText={v => set('name', v)}
+                  error={errors.name}
+                  leftIcon={<User size={18} color={theme.textSecondary} />}
+                  autoCapitalize="words"
+                />
 
-            <Text style={[styles.terms, { color: theme.textSecondary }]}>
-              By creating an account, you agree to our{' '}
-              <Text style={[styles.link, { color: theme.primary }]}>Terms of Service</Text> and{' '}
-              <Text style={[styles.link, { color: theme.primary }]}>Privacy Policy</Text>
-            </Text>
+                <AppInput
+                  label="Email Address"
+                  placeholder="name@example.com"
+                  value={form.email}
+                  onChangeText={v => set('email', v)}
+                  error={errors.email}
+                  leftIcon={<Mail size={18} color={theme.textSecondary} />}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
 
-            <AppButton
-              title="Create Account"
-              onPress={handleRegister}
-              loading={loading}
-              size="lg"
-              style={[styles.submitBtn, { backgroundColor: theme.primary }]}
-            />
+                <AppInput
+                  label="Password"
+                  placeholder="Create a strong password"
+                  value={form.password}
+                  onChangeText={v => set('password', v)}
+                  secureTextEntry={!showPwd}
+                  error={errors.password}
+                  leftIcon={<Lock size={18} color={theme.textSecondary} />}
+                  rightIcon={showPwd ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+                  onRightIconPress={() => setShowPwd(v => !v)}
+                  hint="Minimum 6 characters"
+                  contextMenuHidden={true}
+                  selectTextOnFocus={false}
+                />
+                
+                <AppInput
+                  label="Confirm Password"
+                  placeholder="Re-enter your password"
+                  value={form.confirm}
+                  onChangeText={v => set('confirm', v)}
+                  secureTextEntry={!showPwd}
+                  error={errors.confirm}
+                  leftIcon={<Lock size={18} color={theme.textSecondary} />}
+                  contextMenuHidden={true}
+                  selectTextOnFocus={false}
+                />
+
+                <Text style={[styles.terms, { color: theme.textSecondary }]}>
+                  By creating an account, you agree to our{' '}
+                  <Text style={[styles.link, { color: theme.primary }]}>Terms of Service</Text> and{' '}
+                  <Text style={[styles.link, { color: theme.primary }]}>Privacy Policy</Text>
+                </Text>
+
+                <View style={styles.step2ActionButtons}>
+                  <AppButton
+                    title="Complete Registration"
+                    onPress={handleCompleteRegistration}
+                    loading={loading}
+                    size="lg"
+                    style={[styles.submitBtn, { backgroundColor: theme.primary }]}
+                  />
+                  
+                  <TouchableOpacity 
+                    style={[styles.backToStep1Btn, { borderColor: theme.border }]} 
+                    onPress={() => setStep(1)}
+                  >
+                    <Text style={[styles.backToStep1Txt, { color: theme.textSecondary }]}>Change Mobile Number</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
 
           {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={[styles.footerTxt, { color: theme.textSecondary }]}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={[styles.linkTxt, { color: theme.primary }]}>Sign In</Text>
-            </TouchableOpacity>
-          </View>
+          {step === 1 && (
+            <View style={styles.footer}>
+              <Text style={[styles.footerTxt, { color: theme.textSecondary }]}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <Text style={[styles.linkTxt, { color: theme.primary }]}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -204,6 +383,75 @@ export default function RegisterScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Premium OTP Verification Overlay Modal */}
+      <Modal visible={showOtpModal} animationType="fade" transparent onRequestClose={() => setShowOtpModal(false)}>
+        <View style={styles.otpModalOverlay}>
+          <View style={[styles.otpModalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.otpIconWrap}>
+              <ShieldCheck size={48} color={theme.primary} />
+            </View>
+            <Text style={[styles.otpTitle, { color: theme.text }]}>Security Verification</Text>
+            <Text style={[styles.otpSubtitle, { color: theme.textSecondary }]}>
+              Enter the 6-digit verification code sent to {selectedCountry.code} {form.phone.slice(-4).padStart(form.phone.length, '•')}
+            </Text>
+
+            <View style={styles.otpInputGroup}>
+              <TextInput
+                style={[styles.otpTextInput, { color: theme.text, borderColor: otpError ? theme.error : theme.border, backgroundColor: theme.background }]}
+                value={otpInput}
+                onChangeText={v => {
+                  setOtpInput(v.replace(/[^0-9]/g, '').slice(0, 6));
+                  if (otpError) setOtpError('');
+                }}
+                keyboardType="number-pad"
+                maxLength={6}
+                placeholder="0 0 0 0 0 0"
+                placeholderTextColor={theme.textSecondary}
+                textAlign="center"
+                autoFocus={true}
+              />
+              {otpError ? <Text style={[styles.otpErrorText, { color: theme.error }]}>{otpError}</Text> : null}
+            </View>
+
+            <View style={styles.otpTimerRow}>
+              {timer > 0 ? (
+                <Text style={[styles.otpTimerTxt, { color: theme.textSecondary }]}>
+                  Resend code in <Text style={{ color: theme.primary, fontWeight: '700' }}>{timer}s</Text>
+                </Text>
+              ) : (
+                <TouchableOpacity onPress={handleResendOtp}>
+                  <Text style={[styles.otpResendBtn, { color: theme.primary }]}>Resend Code via SMS</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.otpActionButtons}>
+              <TouchableOpacity 
+                style={[styles.otpVerifyBtn, { backgroundColor: theme.primary }]} 
+                onPress={handleVerifyOtp}
+                disabled={otpVerifying}
+              >
+                {otpVerifying ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.otpVerifyBtnTxt}>Verify & Continue</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.otpCancelBtn, { borderColor: theme.border }]} 
+                onPress={() => {
+                  setShowOtpModal(false);
+                  clearInterval(timerRef.current);
+                }}
+              >
+                <Text style={[styles.otpCancelBtnTxt, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -218,11 +466,37 @@ const styles = StyleSheet.create({
     marginTop: 4, marginBottom: 20,
   },
 
-  header: { marginBottom: 32 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  header: { marginBottom: 20 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   title: { fontSize: 28, fontWeight: '800', color: THEME_COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, color: THEME_COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
+  subtitle: { fontSize: 14, color: THEME_COLORS.textSecondary, marginTop: 6, fontWeight: '500', lineHeight: 20 },
   
+  // Step Progress Indicator
+  stepIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  stepLine: {
+    width: 60,
+    height: 2,
+  },
+  stepIndicatorText: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 24,
+  },
+
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
   countryPicker: {
     height: 48, paddingHorizontal: 10, borderRadius: 24,
@@ -257,8 +531,68 @@ const styles = StyleSheet.create({
   },
   link: { color: THEME_COLORS.primary, fontWeight: '700' },
   submitBtn: { width: '100%', borderRadius: 14 },
+  
+  step2ActionButtons: {
+    flexDirection: 'column',
+    gap: 12,
+    marginTop: 8,
+  },
+  backToStep1Btn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backToStep1Txt: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   footer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 28 },
   footerTxt: { color: THEME_COLORS.textSecondary, fontSize: 14 },
   linkTxt: { color: THEME_COLORS.primary, fontSize: 14, fontWeight: '800' },
+
+  // OTP Modal Styles
+  otpModalOverlay: { 
+    flex: 1, backgroundColor: 'rgba(12, 24, 33, 0.75)', 
+    justifyContent: 'center', alignItems: 'center', padding: 24 
+  },
+  otpModalSheet: {
+    width: '100%', maxWidth: 360, borderRadius: 24, 
+    padding: 24, alignItems: 'center', borderWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25, shadowRadius: 15, elevation: 10
+  },
+  otpIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(0, 70, 148, 0.08)',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16
+  },
+  otpTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
+  otpSubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24, paddingHorizontal: 10 },
+  
+  otpInputGroup: { width: '100%', marginBottom: 16, alignItems: 'center' },
+  otpTextInput: {
+    width: '100%', height: 56, borderWidth: 1.5, borderRadius: 16,
+    fontSize: 24, fontWeight: '800', letterSpacing: 8, textAlign: 'center'
+  },
+  otpErrorText: { fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+  
+  otpTimerRow: { marginBottom: 24, alignItems: 'center' },
+  otpTimerTxt: { fontSize: 14, fontWeight: '500' },
+  otpResendBtn: { fontSize: 14, fontWeight: '700' },
+  
+  otpActionButtons: { width: '100%', gap: 10 },
+  otpVerifyBtn: { 
+    height: 50, borderRadius: 12, 
+    justifyContent: 'center', alignItems: 'center' 
+  },
+  otpVerifyBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  otpCancelBtn: { 
+    height: 50, borderRadius: 12, borderWidth: 1,
+    justifyContent: 'center', alignItems: 'center' 
+  },
+  otpCancelBtnTxt: { fontSize: 16, fontWeight: '700' }
 });

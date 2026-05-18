@@ -31,21 +31,26 @@ export default function AddressesScreen({ navigation }) {
       const currentUserId = user?._id || user?.id;
       if (!currentUserId) return;
 
+      const addressKey = `@UserAddresses_${currentUserId}`;
+
       // Fetch from backend
       const data = await userService.getAddresses(currentUserId);
       const backendAddrs = Array.isArray(data) ? data : data.data || data.addresses || [];
       
       if (backendAddrs.length > 0) {
         setAddresses(backendAddrs);
-        await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
+        await AsyncStorage.setItem(addressKey, JSON.stringify(backendAddrs));
       } else {
-        const stored = await AsyncStorage.getItem('@UserAddresses');
+        const stored = await AsyncStorage.getItem(addressKey);
         if (stored) setAddresses(JSON.parse(stored));
       }
     } catch (e) { 
       console.error('Error loading addresses:', e);
-      const stored = await AsyncStorage.getItem('@UserAddresses');
-      if (stored) setAddresses(JSON.parse(stored));
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        const stored = await AsyncStorage.getItem(`@UserAddresses_${currentUserId}`);
+        if (stored) setAddresses(JSON.parse(stored));
+      }
     }
   };
 
@@ -64,7 +69,9 @@ export default function AddressesScreen({ navigation }) {
           }
           const filtered = addresses.filter(a => (a.id !== id && a._id !== id));
           setAddresses(filtered);
-          await AsyncStorage.setItem('@UserAddresses', JSON.stringify(filtered));
+          if (currentUserId) {
+            await AsyncStorage.setItem(`@UserAddresses_${currentUserId}`, JSON.stringify(filtered));
+          }
         } catch (e) {
           Alert.alert('Error', 'Failed to delete address from server.');
         }
@@ -114,9 +121,11 @@ export default function AddressesScreen({ navigation }) {
       }
 
       setAddresses(updated);
-      await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
+      if (currentUserId) {
+        await AsyncStorage.setItem(`@UserAddresses_${currentUserId}`, JSON.stringify(updated));
+      }
       setModalVisible(false);
-      loadAddresses(); // Refresh from backend
+      loadAddresses();
     } catch (e) {
       Alert.alert('Error', 'Failed to save address to server.');
     }

@@ -1,31 +1,47 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
+  const { user } = useAuth();
+  const currentUserId = user?._id || user?.id;
   const [cartItems, setCartItems] = useState([]);
 
   useEffect(() => {
     const loadCart = async () => {
       try {
-        const stored = await AsyncStorage.getItem('@cart_items');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setCartItems(parsed);
+        const cartKey = currentUserId ? `@cart_items_${currentUserId}` : '@cart_items_guest';
+        const stored = await AsyncStorage.getItem(cartKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setCartItems(parsed);
+          } else {
+            setCartItems([]);
+          }
+        } else {
+          setCartItems([]);
         }
-      }
       } catch (e) {
         console.error('Error loading cart', e);
       }
     };
     loadCart();
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
-    AsyncStorage.setItem('@cart_items', JSON.stringify(cartItems)).catch(e => console.error(e));
-  }, [cartItems]);
+    const saveCart = async () => {
+      try {
+        const cartKey = currentUserId ? `@cart_items_${currentUserId}` : '@cart_items_guest';
+        await AsyncStorage.setItem(cartKey, JSON.stringify(cartItems));
+      } catch (e) {
+        console.error('Error saving cart', e);
+      }
+    };
+    saveCart();
+  }, [cartItems, currentUserId]);
 
   const addToCart = (product, quantity = 1) => {
     setCartItems(prev => {

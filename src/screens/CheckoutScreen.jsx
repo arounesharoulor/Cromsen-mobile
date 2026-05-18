@@ -402,26 +402,72 @@ export default function CheckoutScreen({ navigation, route }) {
       const currentUserId = user?._id || user?.id;
       if (!currentUserId) return;
 
-      // Try fetching from backend
+      const addressKey = `@UserAddresses_${currentUserId}`;
+
+      // 1. Fetch from backend
       const data = await userService.getAddresses(currentUserId);
       const backendAddrs = Array.isArray(data) ? data : data.data || data.addresses || [];
       
-      if (backendAddrs.length > 0) {
-        setAddresses(backendAddrs);
-        if (backendAddrs.length > 0) setSelAddr(backendAddrs[0].id || backendAddrs[0]._id);
-        await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
-      } else {
-        const stored = await AsyncStorage.getItem('@UserAddresses');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setAddresses(parsed);
-          if (parsed.length > 0) setSelAddr(parsed[0].id);
+      // 2. Load locally stored addresses
+      const stored = await AsyncStorage.getItem(addressKey);
+      let localAddrs = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(localAddrs)) localAddrs = [];
+
+      // 3. Merging logic to preserve local-only changes while fetching server changes
+      let merged = [...localAddrs];
+      
+      backendAddrs.forEach(bAddr => {
+        const bFormatted = {
+          id: bAddr._id || bAddr.id,
+          type: bAddr.saveAs || bAddr.type || 'HOME',
+          name: bAddr.name || bAddr.firstName || '',
+          address: bAddr.street || bAddr.address || '',
+          line2: bAddr.line2 || '',
+          city: bAddr.city || '',
+          state: bAddr.state || '',
+          zip: bAddr.zip || bAddr.pincode || '',
+          phone: bAddr.phone || '',
+          full: bAddr.full || `${bAddr.street || bAddr.address || ''}, ${bAddr.line2 ? bAddr.line2 + ', ' : ''}${bAddr.city || ''}, ${bAddr.state || ''} - ${bAddr.zip || bAddr.pincode || ''}`
+        };
+
+        const idx = merged.findIndex(m => String(m.id) === String(bFormatted.id));
+        if (idx !== -1) {
+          merged[idx] = { ...merged[idx], ...bFormatted };
+        } else {
+          // Fallback duplicate check by content
+          const dupIdx = merged.findIndex(m => 
+            (m.address || '').toLowerCase() === (bFormatted.address || '').toLowerCase() &&
+            (m.city || '').toLowerCase() === (bFormatted.city || '').toLowerCase() &&
+            (m.zip || '') === (bFormatted.zip || '')
+          );
+          if (dupIdx !== -1) {
+            merged[dupIdx] = { ...merged[dupIdx], ...bFormatted };
+          } else {
+            merged.push(bFormatted);
+          }
+        }
+      });
+
+      if (merged.length > 0) {
+        setAddresses(merged);
+        await AsyncStorage.setItem(addressKey, JSON.stringify(merged));
+        if (!selAddr) {
+          setSelAddr(merged[0].id || merged[0]._id);
         }
       }
     } catch (e) { 
       console.error('Error loading addresses:', e);
-      const stored = await AsyncStorage.getItem('@UserAddresses');
-      if (stored) setAddresses(JSON.parse(stored));
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        const stored = await AsyncStorage.getItem(`@UserAddresses_${currentUserId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setAddresses(parsed);
+          if (parsed.length > 0 && !selAddr) {
+            setSelAddr(parsed[0].id || parsed[0]._id);
+          }
+        }
+      }
     }
   };
 
@@ -437,8 +483,8 @@ export default function CheckoutScreen({ navigation, route }) {
         city: newAddr.city,
         state: newAddr.state,
         zip: newAddr.pincode,
-        phone: newAddr.mobile, // Store only mobile number to avoid truncation
-        countryCode: newAddr.countryCode, // Store code separately
+        phone: newAddr.mobile,
+        countryCode: newAddr.countryCode,
         full: `${newAddr.line1}, ${newAddr.line2 ? newAddr.line2 + ', ' : ''}${newAddr.city}, ${newAddr.state} - ${newAddr.pincode}`,
       };
 
@@ -470,25 +516,31 @@ export default function CheckoutScreen({ navigation, route }) {
       } else {
         updated = [...addresses, formatted];
       }
+      
+      // Update local storage and UI immediately
       setAddresses(updated);
-      await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
+      if (currentUserId) {
+        await AsyncStorage.setItem(`@UserAddresses_${currentUserId}`, JSON.stringify(updated));
+      }
       updateUser({ ...user, addresses: updated });
       setSelAddr(formatted.id);
       setShowAddForm(false);
       setEditingAddr(null);
-      
-      // Refresh from backend to be sure
-      loadAddresses();
-    } catch (e) { console.error('Error saving address:', e); }
+    } catch (e) { 
+      console.warn('Error saving address:', e); 
+    }
   };
 
   const handleDeleteAddress = async (id) => {
     const updated = addresses.filter(a => a.id !== id);
     setAddresses(updated);
-    await AsyncStorage.setItem('@UserAddresses', JSON.stringify(updated));
+    
+    const currentUserId = user?._id || user?.id;
+    if (currentUserId) {
+      await AsyncStorage.setItem(`@UserAddresses_${currentUserId}`, JSON.stringify(updated));
+    }
     if (selAddr === id) setSelAddr(updated.length > 0 ? updated[0].id : null);
 
-    const currentUserId = user?._id || user?.id;
     if (currentUserId) {
       try {
         await userService.deleteAddress(currentUserId, id, user?.storedPassword);
@@ -527,9 +579,11 @@ export default function CheckoutScreen({ navigation, route }) {
           razorpay_order_id: result.razorpay_order_id,
         };
         
-        const storedOrders = await AsyncStorage.getItem('@UserOrders');
+        const currentUserId = user?._id || user?.id;
+        const ordersKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+        const storedOrders = await AsyncStorage.getItem(ordersKey);
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
-        await AsyncStorage.setItem('@UserOrders', JSON.stringify([finalOrderWithPayment, ...orders]));
+        await AsyncStorage.setItem(ordersKey, JSON.stringify([finalOrderWithPayment, ...orders]));
 
         clearCart();
         navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
@@ -704,9 +758,11 @@ export default function CheckoutScreen({ navigation, route }) {
                 razorpay_order_id: paymentData.razorpay_order_id,
               };
 
-              const storedOrders = await AsyncStorage.getItem('@UserOrders');
+              const currentUserId = user?._id || user?.id;
+              const ordersKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+              const storedOrders = await AsyncStorage.getItem(ordersKey);
               const orders = storedOrders ? JSON.parse(storedOrders) : [];
-              await AsyncStorage.setItem('@UserOrders', JSON.stringify([finalOrderWithPayment, ...orders]));
+              await AsyncStorage.setItem(ordersKey, JSON.stringify([finalOrderWithPayment, ...orders]));
  
               if (!directItem) clearCart();
               navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
@@ -827,9 +883,11 @@ export default function CheckoutScreen({ navigation, route }) {
         } catch (syncErr) {
           console.warn('COD Admin Sync Warning:', syncErr);
         }
-        const storedOrders = await AsyncStorage.getItem('@UserOrders');
+        const currentUserId = user?._id || user?.id;
+        const ordersKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+        const storedOrders = await AsyncStorage.getItem(ordersKey);
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
-        await AsyncStorage.setItem('@UserOrders', JSON.stringify([newOrder, ...orders]));
+        await AsyncStorage.setItem(ordersKey, JSON.stringify([newOrder, ...orders]));
 
         if (!directItem) clearCart();
         alert('Order Placed Successfully!');
@@ -883,34 +941,38 @@ export default function CheckoutScreen({ navigation, route }) {
         <AddAddressForm onSave={handleSaveAddress} initialData={editingAddr} user={user} />
       ) : step === 0 ? (
         <ScrollView contentContainerStyle={s.content}>
-          {addresses.map((addr) => (
-            <TouchableOpacity
-              key={addr.id}
-              style={[s.addrCard, selAddr === addr.id && s.addrCardActive]}
-              onPress={() => setSelAddr(addr.id)}
-            >
-              <View style={s.addrCardHeader}>
-                <View style={[s.addrTypeBadge, { backgroundColor: THEME_COLORS.primary }]}>
-                  <Text style={s.addrTypeTxt}>{addr.type}</Text>
+          {addresses.map((addr) => {
+            const addrId = addr.id || addr._id;
+            const isActive = selAddr === addrId;
+            return (
+              <TouchableOpacity
+                key={addrId}
+                style={[s.addrCard, isActive && s.addrCardActive]}
+                onPress={() => setSelAddr(addrId)}
+              >
+                <View style={s.addrCardHeader}>
+                  <View style={[s.addrTypeBadge, { backgroundColor: THEME_COLORS.primary }]}>
+                    <Text style={s.addrTypeTxt}>{addr.type}</Text>
+                  </View>
+                  <View style={[s.radio, isActive && s.radioActive]}>
+                    {isActive && <View style={s.radioInner} />}
+                  </View>
                 </View>
-                <View style={[s.radio, selAddr === addr.id && s.radioActive]}>
-                  {selAddr === addr.id && <View style={s.radioInner} />}
+                <Text style={s.addrName}>{addr.name}</Text>
+                <Text style={s.addrPhone}>{addr.phone}</Text>
+                <Text style={s.addrFull}>{addr.full}</Text>
+                
+                <View style={s.addrActions}>
+                  <TouchableOpacity onPress={() => { setEditingAddr(addr); setShowAddForm(true); }} style={s.addrActionBtn}>
+                    <Text style={s.addrActionTxt}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteAddress(addrId)} style={s.addrActionBtn}>
+                    <Text style={[s.addrActionTxt, { color: '#EB5757' }]}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
-              <Text style={s.addrName}>{addr.name}</Text>
-              <Text style={s.addrPhone}>{addr.phone}</Text>
-              <Text style={s.addrFull}>{addr.full}</Text>
-              
-              <View style={s.addrActions}>
-                <TouchableOpacity onPress={() => { setEditingAddr(addr); setShowAddForm(true); }} style={s.addrActionBtn}>
-                  <Text style={s.addrActionTxt}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteAddress(addr.id)} style={s.addrActionBtn}>
-                  <Text style={[s.addrActionTxt, { color: '#EB5757' }]}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            );
+          })}
           
           <TouchableOpacity style={s.addNewBtn} onPress={() => { setEditingAddr(null); setShowAddForm(true); }}>
             <View style={s.plusCircle}><Plus size={16} color={THEME_COLORS.primary} /></View>
@@ -931,11 +993,11 @@ export default function CheckoutScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
           <View style={s.summaryCard}>
-            {addresses.find(a => a.id === selAddr) ? (
+            {addresses.find(a => a.id === selAddr || a._id === selAddr) ? (
               <>
-                <Text style={s.summaryName}>{addresses.find(a => a.id === selAddr).name}</Text>
-                <Text style={s.summaryText}>{addresses.find(a => a.id === selAddr).full}</Text>
-                <Text style={s.summaryText}>{addresses.find(a => a.id === selAddr).phone}</Text>
+                <Text style={s.summaryName}>{addresses.find(a => a.id === selAddr || a._id === selAddr).name}</Text>
+                <Text style={s.summaryText}>{addresses.find(a => a.id === selAddr || a._id === selAddr).full}</Text>
+                <Text style={s.summaryText}>{addresses.find(a => a.id === selAddr || a._id === selAddr).phone}</Text>
               </>
             ) : null}
           </View>

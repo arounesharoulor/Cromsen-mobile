@@ -4,37 +4,48 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Bell, CheckCircle, Info, AlertCircle, ShoppingCart } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { userService, productService } from '../services/api';
+import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext();
 
 export const NotificationProvider = ({ children }) => {
+  const { user } = useAuth();
+  const currentUserId = user?._id || user?.id;
   const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastY = useRef(new Animated.Value(-50)).current;
 
-  // Load notifications from history on mount
+  // Load notifications from history when active user ID changes
   useEffect(() => {
     const loadNotifs = async () => {
       try {
-        const stored = await AsyncStorage.getItem('@UserNotifications');
+        const notifKey = currentUserId ? `@UserNotifications_${currentUserId}` : '@UserNotifications_guest';
+        const stored = await AsyncStorage.getItem(notifKey);
         if (stored) {
           setNotifications(JSON.parse(stored));
+        } else {
+          setNotifications([]);
         }
-      } catch (e) { console.error('Error loading notifications:', e); }
+      } catch (e) { 
+        console.error('Error loading notifications:', e); 
+      }
     };
     loadNotifs();
-  }, []);
+  }, [currentUserId]);
 
   // Save notifications whenever they change
   useEffect(() => {
     const saveNotifs = async () => {
       try {
-        await AsyncStorage.setItem('@UserNotifications', JSON.stringify(notifications));
-      } catch (e) { console.error('Error saving notifications:', e); }
+        const notifKey = currentUserId ? `@UserNotifications_${currentUserId}` : '@UserNotifications_guest';
+        await AsyncStorage.setItem(notifKey, JSON.stringify(notifications));
+      } catch (e) { 
+        console.error('Error saving notifications:', e); 
+      }
     };
-    if (notifications.length > 0) saveNotifs();
-  }, [notifications]);
+    saveNotifs();
+  }, [notifications, currentUserId]);
 
   const addNotification = useCallback((type, title, message, screen = null, params = null) => {
     const newNotif = {
@@ -99,7 +110,8 @@ export const NotificationProvider = ({ children }) => {
 
   const clearAll = () => {
     setNotifications([]);
-    AsyncStorage.removeItem('@UserNotifications');
+    const notifKey = currentUserId ? `@UserNotifications_${currentUserId}` : '@UserNotifications_guest';
+    AsyncStorage.removeItem(notifKey);
   };
 
   const checkOrderUpdates = useCallback(async (userId, userEmail) => {
@@ -114,7 +126,8 @@ export const NotificationProvider = ({ children }) => {
         status: String(o.status || 'ORDER CONFIRMED').toUpperCase()
       }));
 
-      const stored = await AsyncStorage.getItem('@UserOrders');
+      const ordersKey = `@UserOrders_${userId}`;
+      const stored = await AsyncStorage.getItem(ordersKey);
       if (stored) {
         const localOrders = JSON.parse(stored).map(o => ({
           id: String(o._id || o.id),
@@ -136,7 +149,7 @@ export const NotificationProvider = ({ children }) => {
           }
         });
       }
-      await AsyncStorage.setItem('@UserOrders', JSON.stringify(rawOrders));
+      await AsyncStorage.setItem(ordersKey, JSON.stringify(rawOrders));
     } catch (e) {
       console.warn('Order status polling failed:', e);
     }

@@ -1,30 +1,40 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 
 const WishlistContext = createContext();
 
 export function WishlistProvider({ children }) {
+  const { user } = useAuth();
+  const currentUserId = user?._id || user?.id;
   const [wishlistItems, setWishlistItems] = useState([]);
 
   useEffect(() => {
-    loadWishlist();
-  }, []);
-
-  const loadWishlist = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('@wishlist');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setWishlistItems(parsed);
+    const loadWishlist = async () => {
+      try {
+        const wishlistKey = currentUserId ? `@wishlist_${currentUserId}` : '@wishlist_guest';
+        const stored = await AsyncStorage.getItem(wishlistKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setWishlistItems(parsed);
+          } else {
+            setWishlistItems([]);
+          }
+        } else {
+          setWishlistItems([]);
+        }
+      } catch (e) {
+        console.error('Failed to load wishlist', e);
       }
-    } catch (e) {
-      console.error('Failed to load wishlist', e);
-    }
-  };
+    };
+    loadWishlist();
+  }, [currentUserId]);
 
   const saveWishlist = async (items) => {
     try {
-      await AsyncStorage.setItem('@wishlist', JSON.stringify(items));
+      const wishlistKey = currentUserId ? `@wishlist_${currentUserId}` : '@wishlist_guest';
+      await AsyncStorage.setItem(wishlistKey, JSON.stringify(items));
     } catch (e) {
       console.error('Failed to save wishlist', e);
     }

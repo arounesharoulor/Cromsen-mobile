@@ -86,7 +86,8 @@ export default function ProfileScreen({ navigation }) {
   const [showImageOptions, setShowImageOptions] = useState(false);
 
   const userName = sanitizeData(user?.name, 'Abishek Kevin');
-  const userEmail = user?.email || 'kevin@madhuratechnologies.com';
+  const hasRealEmail = user?.email && !user.email.endsWith('@cromsen.com');
+  const userEmail = hasRealEmail ? user.email : 'No email linked';
 
   const handleRemoveImage = async () => {
     setProfileImage(null);
@@ -164,7 +165,16 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           <Text style={[styles.profileName, { color: theme.text }]}>{userName}</Text>
-          <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{userEmail}</Text>
+          {hasRealEmail ? (
+            <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{userEmail}</Text>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.linkEmailBadge, { backgroundColor: isDarkMode ? 'rgba(242, 101, 34, 0.15)' : 'rgba(242, 101, 34, 0.08)', borderColor: theme.secondary }]}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Text style={[styles.linkEmailTxt, { color: theme.secondary }]}>＋ Link Email Address</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Menu Sections */}
@@ -285,6 +295,19 @@ const styles = StyleSheet.create({
   },
   profileName: { fontSize: 20, fontWeight: '900', color: THEME_COLORS.text, marginBottom: 4 },
   profileEmail: { fontSize: 13, color: THEME_COLORS.textSecondary, fontWeight: '500' },
+  linkEmailBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  linkEmailTxt: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
 
   /* Sections */
   section: { paddingHorizontal: 20, marginTop: 15 },

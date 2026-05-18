@@ -20,7 +20,7 @@ export default function SettingsScreen({ navigation }) {
   const { addNotification } = useNotifications();
   
   const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
+  const [email, setEmail] = useState(user?.email && !user.email.endsWith('@cromsen.com') ? user.email : '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [currentPassword, setCurrentPassword] = useState(user?.storedPassword || '');
   const [newPassword, setNewPassword] = useState('');
@@ -74,7 +74,8 @@ export default function SettingsScreen({ navigation }) {
       const loadData = async () => {
         try {
           // 1. First, attempt to load local addresses so the UI feels fast and reflects Checkout immediately
-          const storedAddrs = await AsyncStorage.getItem('@UserAddresses');
+          const addressKey = currentUserId ? `@UserAddresses_${currentUserId}` : '@UserAddresses_guest';
+          const storedAddrs = await AsyncStorage.getItem(addressKey);
           if (storedAddrs) {
             const addrs = JSON.parse(storedAddrs);
             if (addrs && addrs.length > 0) {
@@ -98,7 +99,7 @@ export default function SettingsScreen({ navigation }) {
             const u = profile.user || profile.data || profile;
             if (u) {
               setName(u.name || '');
-              setEmail(u.email || '');
+              setEmail(u.email && !u.email.endsWith('@cromsen.com') ? u.email : '');
               if (u.phone) {
                 // Strip existing country code if present to avoid duplication in UI
                 let cleanPhone = u.phone.replace(/^\+\d+\s?/, '').replace(/\D/g, '');
@@ -133,7 +134,9 @@ export default function SettingsScreen({ navigation }) {
               }
               
               // Sync backend addresses to local storage
-              await AsyncStorage.setItem('@UserAddresses', JSON.stringify(backendAddrs));
+              if (currentUserId) {
+                await AsyncStorage.setItem(`@UserAddresses_${currentUserId}`, JSON.stringify(backendAddrs));
+              }
             }
           } catch (err) {
             console.warn('Backend address fetch failed:', err);
@@ -157,7 +160,7 @@ export default function SettingsScreen({ navigation }) {
       if (!currentUserId) throw new Error('User not logged in');
 
       const nameChanged = name !== user?.name;
-      const emailChanged = email !== user?.email;
+      const emailChanged = email !== (user?.email && !user.email.endsWith('@cromsen.com') ? user.email : '');
       const phoneChanged = phone !== (user?.phone || '');
       const pwdChanged = newPassword.trim().length > 0;
       const addrChanged = address !== (origAddr?.address || '') || 
@@ -169,9 +172,11 @@ export default function SettingsScreen({ navigation }) {
       // Automatically use stored password if available, so user doesn't have to type it
       const autoPassword = currentPassword || user?.storedPassword;
 
+      const finalEmail = email.trim() || (user?.email?.endsWith('@cromsen.com') ? user.email : `${phone.replace(/\s/g, '')}@cromsen.com`);
+
       const updateData = { 
         name, 
-        email, 
+        email: finalEmail, 
         phone: phone.replace(/\s/g, ''),
         countryCode: selectedCountry.code
       };
@@ -199,6 +204,40 @@ export default function SettingsScreen({ navigation }) {
           await userService.addAddress(currentUserId, addrData, autoPassword);
         } catch (e) {
           console.warn('Address sync failed:', e);
+        }
+
+        // Save address PERMANENTLY to local storage immediately!
+        try {
+          const addressKey = currentUserId ? `@UserAddresses_${currentUserId}` : '@UserAddresses_guest';
+          const storedStr = await AsyncStorage.getItem(addressKey);
+          let addrs = [];
+          if (storedStr) {
+            addrs = JSON.parse(storedStr);
+          }
+          if (!Array.isArray(addrs)) addrs = [];
+          
+          const newAddr = {
+            id: origAddr?.id || String(Date.now()),
+            name: name,
+            address: address,
+            city: city,
+            state: state,
+            zip: zip,
+            phone: phone,
+            type: origAddr?.type || 'HOME',
+            full: `${address}, ${city}, ${state} - ${zip}`
+          };
+          
+          const existingIdx = addrs.findIndex(a => String(a.id) === String(newAddr.id));
+          if (existingIdx !== -1) {
+            addrs[existingIdx] = newAddr;
+          } else {
+            addrs.push(newAddr);
+          }
+          
+          await AsyncStorage.setItem(addressKey, JSON.stringify(addrs));
+        } catch (storageErr) {
+          console.warn('Failed to save address locally in settings:', storageErr);
         }
       }
 

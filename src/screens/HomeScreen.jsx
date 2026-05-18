@@ -235,7 +235,7 @@ export default function HomeScreen({ navigation, route }) {
               }}
             >
               {BANNER_DATA.map((item) => (
-                <View key={item.id} style={{ width: width - 40, height: 180 }}>
+                <View key={item.id} style={{ width: width - 40, height: 200 }}>
                   <Image
                     source={{ uri: item.image }}
                     style={[styles.heroBanner, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 20,
     overflow: 'hidden',
-    height: 180,
+    height: 200,
     position: 'relative',
     backgroundColor: THEME_COLORS.surface,
     elevation: 5,
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   },
   heroBanner: {
     width: width - 40,
-    height: 180,
+    height: 200,
     backgroundColor: 'transparent',
   },
   heroBannerImg: { borderRadius: 0 },
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   heroOverlay: {
     flex: 1,
     backgroundColor: 'rgba(12,24,33,0.50)',
-    padding: 30,
+    padding: 20,
     justifyContent: 'center',
   },
   heroTag: {
@@ -512,13 +512,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   heroTagTxt: { color: THEME_COLORS.surface, fontSize: 9, fontWeight: '900', letterSpacing: 1, fontFamily: FONTS.family },
-  heroTitle: { color: THEME_COLORS.surface, fontSize: 24, fontWeight: '900', lineHeight: 32, marginBottom: 16, fontFamily: FONTS.family },
+  heroTitle: { color: THEME_COLORS.surface, fontSize: 24, fontWeight: '900', lineHeight: 30, marginBottom: 12, fontFamily: FONTS.family },
   heroBtn: {
     backgroundColor: THEME_COLORS.secondary,
-    paddingHorizontal: 16, paddingVertical: 9,
+    paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 10, alignSelf: 'flex-start',
   },
   heroBtnTxt: { color: THEME_COLORS.surface, fontWeight: '900', fontSize: 12, fontFamily: FONTS.family },

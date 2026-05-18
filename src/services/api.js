@@ -267,8 +267,8 @@ export const userService = {
 
     try {
       // 1. Get current user data to merge addresses
-      console.log(`[SYNC] Fetching current user for address merge: GET ${BASE_URL}/users/${userId}/profile`);
-      const getResp = await fetch(`${BASE_URL}/users/${userId}/profile`);
+      console.log(`[SYNC] Fetching current user for address merge: GET ${BASE_URL}/users/profile/${userId}`);
+      const getResp = await fetch(`${BASE_URL}/users/profile/${userId}`);
       let user;
       if (getResp.ok) {
         const data = await getResp.json();
@@ -283,10 +283,39 @@ export const userService = {
 
       if (!user) throw new Error('User not found for address sync');
 
-      const updatedAddresses = [...(user.addresses || []), backendAddr];
+      let updatedAddresses = [];
+      const currentAddresses = user.addresses || [];
+      const targetId = addressData.id || addressData._id;
+      let matched = false;
+
+      if (targetId) {
+        updatedAddresses = currentAddresses.map(addr => {
+          if (addr._id === targetId || addr.id === targetId) {
+            matched = true;
+            return { ...addr, ...backendAddr };
+          }
+          return addr;
+        });
+      }
+
+      if (!matched) {
+        // Fallback: search by similar address details (street, city, zip) to avoid duplicates
+        const existingIdx = currentAddresses.findIndex(addr => 
+          (addr.street || '').toLowerCase() === (backendAddr.street || '').toLowerCase() &&
+          (addr.city || '').toLowerCase() === (backendAddr.city || '').toLowerCase() &&
+          (addr.zip || '') === (backendAddr.zip || '')
+        );
+        
+        if (existingIdx !== -1) {
+          updatedAddresses = [...currentAddresses];
+          updatedAddresses[existingIdx] = { ...updatedAddresses[existingIdx], ...backendAddr };
+        } else {
+          updatedAddresses = [...currentAddresses, backendAddr];
+        }
+      }
       
       // 2. Push updated addresses to backend
-      const updateUrl = `${BASE_URL}/users/${userId}/profile`;
+      const updateUrl = `${BASE_URL}/users/profile/${userId}`;
       console.log(`[SYNC] Syncing Addresses: PUT ${updateUrl}`);
       const updateBody = { addresses: updatedAddresses };
       if (password) updateBody.currentPassword = password;
@@ -312,7 +341,7 @@ export const userService = {
       // If all else fails, handle error normally
       return await handleResponse(updateResp);
     } catch (e) {
-      console.error('Add address error:', e);
+      console.warn('Add address error:', e);
       // Don't crash the UI if it's a known sync limitation
       if (e.message?.includes('locally')) return { success: true };
       throw e;

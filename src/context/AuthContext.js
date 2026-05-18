@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const addrs = await userService.getAddresses(userId);
         if (addrs && addrs.length > 0) {
-          await AsyncStorage.setItem('@UserAddresses', JSON.stringify(addrs));
+          await AsyncStorage.setItem(`@UserAddresses_${userId}`, JSON.stringify(addrs));
         }
       } catch (e) {}
 
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const orders = await userService.getOrders(userId, userEmail);
         if (orders && orders.length > 0) {
-          await AsyncStorage.setItem('@UserOrders', JSON.stringify(orders));
+          await AsyncStorage.setItem(`@UserOrders_${userId}`, JSON.stringify(orders));
         }
       } catch (e) {}
 

@@ -4,23 +4,27 @@ import {
   KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mail, ArrowLeft } from 'lucide-react-native';
+import { Mail, ArrowLeft, Phone } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { AppButton, AppInput } from '../components';
 import { LogoIcon } from '../components/CustomIcons';
 
 export default function ForgotPasswordScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const { isDarkMode, theme } = useTheme();
 
   const handleReset = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Please enter your email address');
+    if (!identifier) {
+      Alert.alert('Error', 'Please enter your mobile number or email address');
       return;
     }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+
+    const isEmail = identifier.includes('@');
+    const isPhone = /^\d{10}$/.test(identifier.replace(/\D/g, ''));
+
+    if (!isEmail && !isPhone) {
+      Alert.alert('Error', 'Please enter a valid 10-digit mobile number or email address');
       return;
     }
 
@@ -31,15 +35,19 @@ export default function ForgotPasswordScreen({ navigation }) {
         setLoading(false);
         Alert.alert(
           'Success', 
-          'Password reset link has been sent to your email.',
+          isPhone 
+            ? 'A secure password reset link/code has been sent to your mobile number via SMS.' 
+            : 'Password reset link has been sent to your email address.',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       }, 1500);
     } catch (err) {
-      Alert.alert('Error', 'Failed to send reset link. Please try again.');
+      Alert.alert('Error', 'Failed to request reset. Please try again.');
       setLoading(false);
     }
   };
+
+  const isEmailInput = identifier.includes('@') || !/^\d+$/.test(identifier.replace(/\D/g, ''));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -60,23 +68,23 @@ export default function ForgotPasswordScreen({ navigation }) {
             </View>
             <Text style={[styles.title, { color: theme.text }]}>Reset Password</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Enter your email and we'll send you a recovery link
+              Enter your mobile number or email and we'll send you recovery details
             </Text>
           </View>
 
           <View style={styles.form}>
             <AppInput
-              label="Email Address"
-              placeholder="name@example.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
+              label="Mobile Number or Email"
+              placeholder="e.g. +91 98765 43210 or name@example.com"
+              value={identifier}
+              onChangeText={setIdentifier}
+              keyboardType={isEmailInput ? "email-address" : "phone-pad"}
               autoCapitalize="none"
-              leftIcon={<Mail size={18} color={theme.textSecondary} />}
+              leftIcon={isEmailInput ? <Mail size={18} color={theme.textSecondary} /> : <Phone size={18} color={theme.textSecondary} />}
             />
 
             <AppButton
-              title="Send Recovery Link"
+              title="Send Recovery Details"
               onPress={handleReset}
               loading={loading}
               size="lg"

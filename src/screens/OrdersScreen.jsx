@@ -93,7 +93,8 @@ export default function OrdersScreen({ navigation }) {
         setOrders(normalized);
       } else {
         // Fallback to local storage
-        const stored = await AsyncStorage.getItem('@UserOrders');
+        const storedKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+        const stored = await AsyncStorage.getItem(storedKey);
         if (stored) {
           const localOrders = JSON.parse(stored).filter(o => o.userId === currentUserId || o.userEmail === userEmail);
           setOrders(localOrders.map(normalize));
@@ -101,10 +102,14 @@ export default function OrdersScreen({ navigation }) {
       }
     } catch (e) {
       console.error('Error fetching orders:', e);
-      const stored = await AsyncStorage.getItem('@UserOrders');
-      if (stored) {
-        const localOrders = JSON.parse(stored).filter(o => o.userId === (user?._id || user?.id));
-        setOrders(localOrders);
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        const storedKey = `@UserOrders_${currentUserId}`;
+        const stored = await AsyncStorage.getItem(storedKey);
+        if (stored) {
+          const localOrders = JSON.parse(stored).filter(o => o.userId === currentUserId);
+          setOrders(localOrders);
+        }
       }
     } finally {
       setLoading(false);
@@ -131,7 +136,11 @@ export default function OrdersScreen({ navigation }) {
               
               const updatedOrders = orders.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'CANCELLED' } : o);
               setOrders(updatedOrders);
-              await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+              
+              const currentUserId = user?._id || user?.id;
+              if (currentUserId) {
+                await AsyncStorage.setItem(`@UserOrders_${currentUserId}`, JSON.stringify(updatedOrders));
+              }
               
               Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
             } catch (e) {

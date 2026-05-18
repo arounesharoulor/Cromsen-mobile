@@ -93,11 +93,15 @@ export default function OrderDetailScreen({ navigation, route }) {
       setCurrentOrder(updatedOrder);
       
       // Update local storage
-      const stored = await AsyncStorage.getItem('@UserOrders');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const updatedOrders = parsed.map(o => (o.id === updatedOrder.id || o._id === updatedOrder._id) ? updatedOrder : o);
-        await AsyncStorage.setItem('@UserOrders', JSON.stringify(updatedOrders));
+      const currentUserId = currentOrder.userId;
+      if (currentUserId) {
+        const storedKey = `@UserOrders_${currentUserId}`;
+        const stored = await AsyncStorage.getItem(storedKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const updatedOrders = parsed.map(o => (o.id === updatedOrder.id || o._id === updatedOrder._id) ? updatedOrder : o);
+          await AsyncStorage.setItem(storedKey, JSON.stringify(updatedOrders));
+        }
       }
       
       alert('Order cancelled successfully.');
