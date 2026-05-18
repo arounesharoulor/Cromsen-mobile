@@ -4,7 +4,7 @@ import {
   StatusBar, Animated, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, ShoppingCart, CheckCircle, Info, Trash2, Clock, X, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, Bell, ShoppingCart, CheckCircle, Info, Trash2, Clock, X, AlertCircle, Heart, User } from 'lucide-react-native';
 import { THEME_COLORS } from '../styling';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -35,15 +35,27 @@ export default function NotificationsScreen({ navigation }) {
   }, [notifications]);
 
   const getIcon = (type, read) => {
-    let color = read ? '#94A3B8' : THEME_COLORS.primary;
     const size = 22;
-    if (type === 'error' && !read) color = '#EF4444'; // Red for errors/cancellations
-    
+    if (read) {
+      switch (type) {
+        case 'cart': return <ShoppingCart size={size} color="#94A3B8" />;
+        case 'wishlist': return <Heart size={size} color="#94A3B8" fill="#94A3B8" />;
+        case 'profile': return <User size={size} color="#94A3B8" />;
+        case 'success': return <CheckCircle size={size} color="#94A3B8" />;
+        case 'error': return <AlertCircle size={size} color="#94A3B8" />;
+        case 'info': return <Info size={size} color="#94A3B8" />;
+        default: return <Bell size={size} color="#94A3B8" />;
+      }
+    }
+
     switch (type) {
-      case 'cart': return <ShoppingCart size={size} color={color} />;
-      case 'success': return <CheckCircle size={size} color={color} />;
-      case 'error': return <AlertCircle size={size} color={color} />;
-      default: return <Bell size={size} color={color} />;
+      case 'cart': return <ShoppingCart size={size} color="#F26522" />;
+      case 'wishlist': return <Heart size={size} color="#E11D48" fill="#E11D48" />;
+      case 'profile': return <User size={size} color="#4F46E5" />;
+      case 'success': return <CheckCircle size={size} color="#059669" />;
+      case 'error': return <AlertCircle size={size} color="#DC2626" />;
+      case 'info': return <Info size={size} color="#0EA5E9" />;
+      default: return <Bell size={size} color="#004694" />;
     }
   };
 

@@ -19,8 +19,8 @@ export const AuthProvider = ({ children }) => {
         if (authDataSerialized) {
           const _authData = JSON.parse(authDataSerialized);
           setUser(_authData);
-          // Background sync on app launch
-          syncUserData(_authData._id || _authData.id, _authData.email);
+          // Background sync on app launch - pass local data to avoid state deletion
+          syncUserData(_authData._id || _authData.id, _authData.email, _authData);
         }
       }
     } catch (error) {
@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const syncUserData = async (userId, userEmail) => {
+  const syncUserData = async (userId, userEmail, localAuthData = null) => {
     if (!userId) return;
     try {
       const { authService, userService } = require('../services/api');
@@ -40,7 +40,12 @@ export const AuthProvider = ({ children }) => {
         const profile = await authService.getProfile(userId);
         const u = profile.user || profile.data || profile;
         if (u) {
-          const updated = { ...user, ...u };
+          const baseData = localAuthData || user || {};
+          const updated = { ...baseData, ...u };
+          // Preserve securely stored password
+          if (baseData.storedPassword) {
+            updated.storedPassword = baseData.storedPassword;
+          }
           setUser(updated);
           await AsyncStorage.setItem('@AuthData', JSON.stringify(updated));
         }
@@ -74,8 +79,8 @@ export const AuthProvider = ({ children }) => {
     if (AsyncStorage) {
       await AsyncStorage.setItem('@AuthData', JSON.stringify(dataToStore));
     }
-    // Background sync
-    syncUserData(userData._id || userData.id, userData.email);
+    // Background sync - pass dataToStore to preserve storedPassword
+    syncUserData(userData._id || userData.id, userData.email, dataToStore);
   };
 
   const logout = async () => {

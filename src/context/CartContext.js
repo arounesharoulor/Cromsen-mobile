@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
+import { userService, authService } from '../services/api';
 
 const CartContext = createContext();
 
@@ -14,16 +15,30 @@ export const CartProvider = ({ children }) => {
       try {
         const cartKey = currentUserId ? `@cart_items_${currentUserId}` : '@cart_items_guest';
         const stored = await AsyncStorage.getItem(cartKey);
+        let localCart = [];
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) {
-            setCartItems(parsed);
-          } else {
-            setCartItems([]);
+            localCart = parsed;
           }
-        } else {
-          setCartItems([]);
         }
+        
+        if (currentUserId) {
+          try {
+            const profileRes = await authService.getProfile(currentUserId);
+            const userProfile = profileRes.user || profileRes.data || profileRes;
+            if (userProfile && userProfile.cart && Array.isArray(userProfile.cart)) {
+               if (userProfile.cart.length > 0 || localCart.length === 0) {
+                 localCart = userProfile.cart;
+                 await AsyncStorage.setItem(cartKey, JSON.stringify(localCart));
+               }
+            }
+          } catch(err) {
+             console.warn('Failed to fetch backend cart', err);
+          }
+        }
+
+        setCartItems(localCart);
       } catch (e) {
         console.error('Error loading cart', e);
       }
@@ -36,6 +51,17 @@ export const CartProvider = ({ children }) => {
       try {
         const cartKey = currentUserId ? `@cart_items_${currentUserId}` : '@cart_items_guest';
         await AsyncStorage.setItem(cartKey, JSON.stringify(cartItems));
+
+        if (currentUserId) {
+          try {
+             await userService.updateProfile(currentUserId, { 
+                cart: cartItems,
+                currentPassword: user?.storedPassword 
+             });
+          } catch(err) {
+             console.warn('Failed to sync cart to backend', err);
+          }
+        }
       } catch (e) {
         console.error('Error saving cart', e);
       }

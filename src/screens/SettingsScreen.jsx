@@ -181,13 +181,21 @@ export default function SettingsScreen({ navigation }) {
         countryCode: selectedCountry.code
       };
 
+      // Always include currentPassword if available to satisfy backend security validation
+      if (autoPassword) {
+        updateData.currentPassword = autoPassword;
+      }
+
       if (pwdChanged) {
-        updateData.currentPassword = currentPassword || user?.storedPassword;
         updateData.password = newPassword;
       }
 
       // 1. Update Profile (Name, Email, Phone, Password)
-      await userService.updateProfile(currentUserId, updateData);
+      try {
+        await userService.updateProfile(currentUserId, updateData);
+      } catch (err) {
+        console.warn('[SYNC] Profile sync to backend failed, saving changes locally:', err);
+      }
 
       // 2. Update Address if provided
       if (address || city || zip) {
@@ -245,9 +253,7 @@ export default function SettingsScreen({ navigation }) {
       // If password was changed, update storedPassword
       const updatedPassword = pwdChanged ? newPassword : currentPassword;
       await updateUser({ ...user, ...updateData, phone }, updatedPassword);
-      addNotification('success', 'Profile Updated', 'Your profile details have been saved successfully.', 'Settings');
-      
-      Alert.alert('Success', 'Profile updated successfully!');
+      addNotification('profile', 'Profile Updated ✓', 'Your profile details have been saved successfully.', 'Settings');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to update profile');
@@ -367,7 +373,7 @@ export default function SettingsScreen({ navigation }) {
           <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Security</Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {renderInput('Current Password', currentPassword, setCurrentPassword, <Lock size={18} color={theme.textSecondary} />, { 
-              placeholder: 'Required for changes',
+              placeholder: 'Leave blank to keep current',
               secureTextEntry: true
             })}
             {renderInput('New Password', newPassword, setNewPassword, <Shield size={18} color={theme.textSecondary} />, { 

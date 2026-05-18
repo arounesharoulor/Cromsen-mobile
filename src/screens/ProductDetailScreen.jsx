@@ -4,6 +4,7 @@ import {
   Dimensions, ActivityIndicator, Modal, Platform, StatusBar, FlatList,
   TextInput, Animated,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { THEME_COLORS, FONTS } from '../styling';
 import { ShoppingCart, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, ArrowLeft, Plus, Minus } from 'lucide-react-native';
@@ -43,8 +44,6 @@ export default function ProductDetailScreen({ navigation, route }) {
   const [qtyInput, setQtyInput] = useState('1');
   const [highlightsOpen, setHighlightsOpen] = useState(true);
   const [reviewsOpen, setReviewsOpen] = useState(true);
-  const [reviewText, setReviewText] = useState('');
-  const [reviewRating, setReviewRating] = useState(5);
   const [localReviews, setLocalReviews] = useState([]);
   const [similarProducts, setSimilarProducts] = useState([]);
   const { addToCart } = useCart();
@@ -54,88 +53,100 @@ export default function ProductDetailScreen({ navigation, route }) {
 
   useEffect(() => { if (productId) load(); }, [productId]);
 
+  // Load on mount and when product changes
   useEffect(() => {
-    if (product) {
+    if (product && productId) {
       const revs = product.reviews || product.ratingsAndReviews || product.ratingAndReviews || product.productReviews || [];
-      setLocalReviews(revs);
-      
-      // If no reviews in product object, try fetching separately
-      if (revs.length === 0) {
-        productService.getReviews(product._id || product.id)
-          .then(res => {
-            const fetchedRevs = Array.isArray(res) ? res : res.data || res.reviews || [];
-            mergeLocalReviews(fetchedRevs);
-          })
-          .catch(err => {
-            mergeLocalReviews([]);
+      // Always try fetching from backend AND merge with local
+      productService.getReviews(productId, product.name)
+        .then(res => {
+          const fetchedRevs = Array.isArray(res) ? res : res.data || res.reviews || [];
+          // Merge backend with what's in the product obj too
+          const allBackend = [...revs];
+          fetchedRevs.forEach(r => {
+            if (!allBackend.some(a => (a.comment || a.text) === (r.comment || r.text))) {
+              allBackend.push(r);
+            }
           });
-      } else {
-        mergeLocalReviews(revs);
-      }
+          mergeWithLocal(productId, allBackend);
+        })
+        .catch(() => mergeWithLocal(productId, revs));
     }
   }, [product]);
 
-  const mergeLocalReviews = async (backendRevs) => {
+  // Refresh reviews every time screen comes into focus (e.g. after submitting from OrderDetailScreen)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (productId) {
+        productService.getReviews(productId, product?.name || '')
+          .then(res => {
+            const fetchedRevs = Array.isArray(res) ? res : res.data || res.reviews || [];
+            mergeWithLocal(productId, fetchedRevs);
+          })
+          .catch(() => mergeWithLocal(productId, []));
+      }
+    }, [productId, product])
+  );
+
+  // Standalone helper that uses productId directly (no stale closure issue)
+  const mergeWithLocal = async (pId, backendRevs) => {
     try {
-      const pId = product?._id || product?.id;
+      // 1. Read from product-specific local store
       const stored = await AsyncStorage.getItem(`@LocalReviews_${pId}`);
       const locals = stored ? JSON.parse(stored) : [];
       
-      // Combine and remove duplicates (by text/time)
-      const combined = [...locals];
+      // 2. Also check the global review store (for reviews saved under any ID format or matched by name)
+      const globalStored = await AsyncStorage.getItem('@GlobalLocalReviews');
+      const globalList = globalStored ? JSON.parse(globalStored) : [];
+      
+      // Get current product name for fallback match
+      const currentProductName = product?.name || '';
+      
+      const globalForProduct = globalList.filter(r => {
+        const idMatch = r.productId && String(r.productId) === String(pId);
+        
+        // 1. Exact case-insensitive match
+        const exactNameMatch = r.productName && currentProductName && 
+          String(r.productName).toLowerCase().trim() === String(currentProductName).toLowerCase().trim();
+          
+        // 2. Substring matches (e.g., "Grooved" matching "Upvc 16MM Zinc Roller Grooved")
+        const substringMatch = r.productName && currentProductName && (
+          String(r.productName).toLowerCase().includes(String(currentProductName).toLowerCase().trim()) ||
+          String(currentProductName).toLowerCase().includes(String(r.productName).toLowerCase().trim())
+        );
+
+        // 3. Word overlap matching (e.g., "UPVC 16MM" matching "UPVC 16MM Zinc Grooved")
+        const rKeywords = String(r.productName || '').toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
+        const pKeywords = String(currentProductName || '').toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
+        const keywordOverlap = rKeywords.some(w => pKeywords.includes(w)) || pKeywords.some(w => rKeywords.includes(w));
+        
+        return idMatch || exactNameMatch || substringMatch || keywordOverlap;
+      });
+      
+      // 3. Merge all sources, deduplicate by comment text
+      const allLocal = [...locals];
+      globalForProduct.forEach(r => {
+        if (!allLocal.some(a => (a.comment || a.text || '') === (r.comment || r.text || ''))) {
+          allLocal.push(r);
+        }
+      });
+
+      // 4. Merge backend reviews on top (deduplicated)
+      const combined = [...allLocal];
       backendRevs.forEach(br => {
-        if (!combined.some(c => c.text === (br.text || br.comment) && c.userId === (br.userId || br.user))) {
+        const brText = br.comment || br.text || '';
+        if (!combined.some(c => (c.comment || c.text || '') === brText)) {
           combined.push(br);
         }
       });
+      
+      console.log(`[REVIEWS] productId=${pId} productName="${currentProductName}" local=${allLocal.length} backend=${backendRevs.length} total=${combined.length}`);
       setLocalReviews(combined);
     } catch (e) {
       setLocalReviews(backendRevs);
     }
   };
 
-  const handleSubmitReview = async () => {
-    if (!reviewText.trim()) return;
-    const newRev = {
-      name: user?.name || 'Guest User',
-      username: user?.name || 'Guest User',
-      user: user?._id || user?.id || null,
-      userId: user?._id || user?.id || null,
-      rating: reviewRating,
-      comment: reviewText,
-      text: reviewText,
-      time: new Date().toISOString(),
-      likes: 0,
-      dislikes: 0,
-      userImage: user?.image || user?.avatar || null
-    };
-    
-    try {
-      if (product) {
-        await productService.addReview(product._id || product.id, newRev);
-        // Save locally too
-        saveReviewLocally(newRev);
-        setLocalReviews([newRev, ...localReviews]);
-        setReviewText('');
-        setReviewRating(5);
-      }
-    } catch (err) {
-      console.warn('Review sync failed, saving locally:', err);
-      saveReviewLocally(newRev);
-      setLocalReviews([newRev, ...localReviews]);
-      setReviewText('');
-    }
-  };
-
-  const saveReviewLocally = async (rev) => {
-    try {
-      const pId = product?._id || product?.id;
-      const stored = await AsyncStorage.getItem(`@LocalReviews_${pId}`);
-      const locals = stored ? JSON.parse(stored) : [];
-      const updated = [rev, ...locals];
-      await AsyncStorage.setItem(`@LocalReviews_${pId}`, JSON.stringify(updated));
-    } catch (e) {}
-  };
 
   const load = async () => {
     try {
@@ -145,13 +156,33 @@ export default function ProductDetailScreen({ navigation, route }) {
       setProduct(mainProd);
       
       // Fetch similar products based on category
-      const catId = mainProd.category?.[0]?._id || mainProd.category?.[0] || mainProd.categoryId;
+      let catId = null;
+      let catName = null;
+      
+      if (Array.isArray(mainProd.category)) {
+        catId = mainProd.category[0]?._id || mainProd.category[0];
+        catName = mainProd.category[0]?.name || mainProd.category[0];
+      } else if (typeof mainProd.category === 'object') {
+        catId = mainProd.category?._id;
+        catName = mainProd.category?.name;
+      } else {
+        catId = mainProd.category || mainProd.categoryId;
+        catName = mainProd.category;
+      }
+      
+      let simList = [];
       if (catId) {
         const sim = await productService.getProducts({ category: catId, limit: 6 });
-        const list = Array.isArray(sim) ? sim : sim.data || sim.products || [];
-        // Filter out current product
-        setSimilarProducts(list.filter(p => (p._id || p.id) !== productId));
+        simList = Array.isArray(sim) ? sim : sim.data || sim.products || [];
       }
+      
+      if (simList.length === 0 && catName && typeof catName === 'string') {
+        const sim = await productService.getProducts({ keyword: catName, limit: 6 });
+        simList = Array.isArray(sim) ? sim : sim.data || sim.products || [];
+      }
+
+      // Filter out current product
+      setSimilarProducts(simList.filter(p => (p._id || p.id) !== productId));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -195,7 +226,13 @@ export default function ProductDetailScreen({ navigation, route }) {
     ? rawImgs.map(getImageUrl) 
     : ['https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800'];
 
-  const price = product.price || 9999;
+  const basePrice = product.price || 9999;
+  let price = basePrice;
+  const currentSizeObj = (product.sizes || product.size || [])[selSize];
+  if (currentSizeObj && typeof currentSizeObj === 'object' && currentSizeObj.price) {
+    price = currentSizeObj.price;
+  }
+
   const rating = product.ratings || 4.7;
 
   const HIGHLIGHTS = [
@@ -265,34 +302,62 @@ export default function ProductDetailScreen({ navigation, route }) {
 
 
         <View style={[s.card, { backgroundColor: theme.background }]}>
-          {/* Color selector */}
-          <Text style={[s.colorLabel, { color: theme.textSecondary }]}>
-            Color: <Text style={[s.colorVal, { color: theme.text }]}>{COLOR_LABELS[selColor]}</Text>
-          </Text>
-          <View style={s.colorRow}>
-            {DEMO_THEME_COLORS.map((c, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[s.colorCircle, { backgroundColor: c }, selColor === i && s.colorCircleActive]}
-                onPress={() => setSelColor(i)}
-              />
-            ))}
-          </View>
+          {/* Color selector (Conditional) */}
+          {product.colors && product.colors.length > 0 ? (
+            <View>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>
+                Color: <Text style={[s.colorVal, { color: theme.text }]}>{product.colors[selColor] || product.colors[0]}</Text>
+              </Text>
+              <View style={s.colorRow}>
+                {product.colors.map((c, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[
+                      s.colorCircle, 
+                      { backgroundColor: c?.hex || c?.value || c?.color || (typeof c === 'string' ? c.toLowerCase() : '#ccc') }, 
+                      selColor === i && s.colorCircleActive
+                    ]}
+                    onPress={() => setSelColor(i)}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : product.color && product.color.length > 0 ? (
+             <View>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>
+                Color: <Text style={[s.colorVal, { color: theme.text }]}>{COLOR_LABELS[selColor]}</Text>
+              </Text>
+              <View style={s.colorRow}>
+                {DEMO_THEME_COLORS.map((c, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.colorCircle, { backgroundColor: c }, selColor === i && s.colorCircleActive]}
+                    onPress={() => setSelColor(i)}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
 
-          {/* Size chart */}
-          <View style={s.sizeRow}>
-            <Text style={s.colorLabel}>Color: </Text>
-            {SIZE_OPTIONS.map((sz, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[s.sizeChip, selSize === i && s.sizeChipActive]}
-                onPress={() => setSelSize(i)}
-              >
-                <Text style={[s.sizeChipTxt, selSize === i && { color: '#FFF' }]}>{sz}</Text>
-              </TouchableOpacity>
-            ))}
-            <Text style={s.sizeChartLink}>Size Chart</Text>
-          </View>
+          {/* Size chart (Conditional) */}
+          {(product.sizes && product.sizes.length > 0) || (product.size && product.size.length > 0) ? (
+            <View style={s.sizeRow}>
+              <Text style={s.colorLabel}>Size: </Text>
+              {(product.sizes || product.size || SIZE_OPTIONS).map((sz, i) => {
+                 const szLabel = typeof sz === 'string' ? sz : sz.name || sz.label || sz;
+                 return (
+                   <TouchableOpacity
+                     key={i}
+                     style={[s.sizeChip, selSize === i && s.sizeChipActive]}
+                     onPress={() => setSelSize(i)}
+                   >
+                     <Text style={[s.sizeChipTxt, selSize === i && { color: '#FFF' }]}>{szLabel}</Text>
+                   </TouchableOpacity>
+                 );
+              })}
+              <Text style={s.sizeChartLink}>Size Chart</Text>
+            </View>
+          ) : null}
 
           {/* Product name & rating */}
           <View style={s.nameRow}>
@@ -348,8 +413,8 @@ export default function ProductDetailScreen({ navigation, route }) {
                   addToCart({
                     id: product._id || product.id,
                     name: product.name,
-                    price: product.price || 9999,
-                    variant: `Size: ${SIZE_OPTIONS[selSize]}, Color: ${COLOR_LABELS[selColor]}`,
+                    price: price,
+                    variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
                     image: imgs[activeImg]
                   }, 1);
                 }}
@@ -364,8 +429,8 @@ export default function ProductDetailScreen({ navigation, route }) {
                 id: product._id || product.id,
                 _id: product._id || product.id,
                 name: product.name,
-                price: product.price || 9999,
-                variant: `Size: ${SIZE_OPTIONS[selSize]}, Color: ${COLOR_LABELS[selColor]}`,
+                price: price,
+                variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
                 image: imgs[activeImg],
                 quantity: 1
               };
@@ -393,125 +458,110 @@ export default function ProductDetailScreen({ navigation, route }) {
               ].map((row, i) => (
                 <View key={i} style={s.hlRow}>
                   <Text style={s.hlCell}>{i === 0 ? 'Dimensions' : ''}</Text>
-                  <Text style={s.hlCell}>{row[0]}</Text>
+              <Text style={s.hlCell}>{row[0]}</Text>
                   <Text style={s.hlCell}>{row[1]}</Text>
                 </View>
               ))}
             </View>
           )}
 
+
+
           {/* RATINGS & REVIEWS (collapsible) */}
           <TouchableOpacity style={s.collapseHeader} onPress={() => setReviewsOpen(!reviewsOpen)}>
-            <Text style={s.collapseTitle}>Ratings & Reviews</Text>
+            <Text style={s.collapseTitle}>Ratings & Reviews {localReviews.length > 0 ? `(${localReviews.length})` : ''}</Text>
             {reviewsOpen ? <ChevronUp size={18} color={THEME_COLORS.text} /> : <ChevronDown size={18} color={THEME_COLORS.text} />}
           </TouchableOpacity>
           {reviewsOpen && (
             <View>
-              {localReviews.map((r, i) => (
-                <View key={i} style={s.reviewCard}>
-                  <View style={s.reviewTop}>
-                    <View style={s.reviewStarBadge}>
-                      <Text style={s.reviewStarBadgeTxt}>★ {r.rating} Good Choice</Text>
-                    </View>
-                    <Text style={s.reviewTime}>{r.time}</Text>
-                  </View>
-                  <Text style={s.reviewTxt}>{r.comment || r.text}</Text>
-                  <View style={s.reviewActions}>
-                    {(r.userImage || r.image || r.avatar) ? (
-                      <Image
-                        source={{ uri: getImageUrl(r.userImage || r.image || r.avatar) }}
-                        style={s.reviewAvatar}
-                      />
-                    ) : null}
-                    <Text style={s.reviewerName}>{r.name || r.username || 'Guest User'}</Text>
-                    <View style={s.reviewLikes}>
-                      <TouchableOpacity style={s.likeBtn}>
-                        <ThumbsUp size={12} color={THEME_COLORS.textSecondary} />
-                        <Text style={s.likeTxt}>{r.likes}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.likeBtn}>
-                        <ThumbsDown size={12} color={THEME_COLORS.textSecondary} />
-                        <Text style={s.likeTxt}>{r.dislikes}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+              {localReviews.length === 0 ? (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <Text style={{ color: THEME_COLORS.textSecondary, fontSize: 14, fontWeight: '600' }}>No reviews yet.</Text>
+                  <Text style={{ color: THEME_COLORS.textSecondary, fontSize: 12, marginTop: 4 }}>Buy this product and be the first to review!</Text>
                 </View>
-              ))}
-              <TouchableOpacity style={s.showAllBtn}>
-                <Text style={s.showAllTxt}>Show All Reviews</Text>
-              </TouchableOpacity>
-              
-              <View style={s.addReviewContainer}>
-                <Text style={s.addReviewTitle}>Write a Review</Text>
-                
-                {/* Star Picker */}
-                <View style={s.starPicker}>
-                  {[1, 2, 3, 4, 5].map((sNum) => (
-                    <TouchableOpacity key={sNum} onPress={() => setReviewRating(sNum)}>
-                      <Text style={[s.pickerStar, sNum <= reviewRating && s.pickerStarActive]}>
-                        {sNum <= reviewRating ? '★' : '☆'}
+              ) : (
+                localReviews.map((r, i) => (
+                  <View key={i} style={s.reviewCard}>
+                    <View style={s.reviewTop}>
+                      <View style={s.reviewStarBadge}>
+                        <Text style={s.reviewStarBadgeTxt}>★ {r.rating || 5}/5</Text>
+                      </View>
+                      <Text style={s.reviewTime}>
+                        {r.time ? new Date(r.time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
                       </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <Text style={s.ratingHint}>{reviewRating} / 5 stars</Text>
-                </View>
-
-                <TextInput
-                  style={s.reviewInput}
-                  placeholder="Tell others what you think..."
-                  value={reviewText}
-                  onChangeText={setReviewText}
-                  multiline
-                />
-                <TouchableOpacity style={s.submitReviewBtn} onPress={handleSubmitReview}>
-                  <Text style={s.submitReviewTxt}>Submit Review</Text>
-                </TouchableOpacity>
-              </View>
+                    </View>
+                    <Text style={s.reviewTxt}>{r.comment || r.text || r.review || ''}</Text>
+                    <View style={s.reviewActions}>
+                      {(r.userImage || r.image || r.avatar) ? (
+                        <Image source={{ uri: getImageUrl(r.userImage || r.image || r.avatar) }} style={s.reviewAvatar} />
+                      ) : null}
+                      <Text style={s.reviewerName}>{r.name || r.username || 'Anonymous'}</Text>
+                      <View style={s.reviewLikes}>
+                        <TouchableOpacity style={s.likeBtn}>
+                          <ThumbsUp size={12} color={THEME_COLORS.textSecondary} />
+                          <Text style={s.likeTxt}>{r.likes || 0}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.likeBtn}>
+                          <ThumbsDown size={12} color={THEME_COLORS.textSecondary} />
+                          <Text style={s.likeTxt}>{r.dislikes || 0}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
             </View>
           )}
 
 
           {/* SIMILAR PRODUCTS */}
-          <View style={s.collapseHeader}>
-            <Text style={s.collapseTitle}>Similar Products</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-            {similarProducts.map((p) => (
-              <TouchableOpacity 
-                key={p._id || p.id} 
-                style={s.similarCard}
-                onPress={() => navigation.push('ProductDetail', { productId: p._id || p.id })}
-              >
-                <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={s.similarImg} />
-                <TouchableOpacity style={s.similarHeart} onPress={() => toggleWishlist(p)}>
-                  <HeartIcon 
-                    size={12} 
-                    color={checkWishlisted(p._id || p.id) ? THEME_COLORS.error : THEME_COLORS.textSecondary} 
-                    filled={checkWishlisted(p._id || p.id)}
-                  />
-                </TouchableOpacity>
-
-                <View style={s.similarInfo}>
-                  <Text style={s.similarName} numberOfLines={1}>{sanitizeData(p.name, 'Product')}</Text>
-                  <View style={s.similarBottom}>
-                    <Text style={s.similarPrice}>₹{(p.price || 0).toLocaleString()}</Text>
-                    <TouchableOpacity 
-                      style={s.similarAdd}
-                      onPress={() => {
-                        addToCart({
-                          ...p,
-                          id: p._id || p.id,
-                          image: getImageUrl(p.image || p.thumbnail)
-                        }, 1);
-                      }}
-                    >
-                      <FrameIcon size={20} />
+          {similarProducts.length > 0 && (
+            <>
+              <View style={s.collapseHeader}>
+                <Text style={s.collapseTitle}>Similar Products</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                {similarProducts.map((p) => (
+                  <TouchableOpacity 
+                    key={p._id || p.id} 
+                    style={s.similarCard}
+                    onPress={() => {
+                      const pId = p._id || p.id;
+                      navigation.push('ProductDetail', { productId: pId });
+                    }}
+                  >
+                    <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={s.similarImg} />
+                    <TouchableOpacity style={s.similarHeart} onPress={() => toggleWishlist(p)}>
+                      <HeartIcon 
+                        size={12} 
+                        color={checkWishlisted(p._id || p.id) ? THEME_COLORS.error : THEME_COLORS.textSecondary} 
+                        filled={checkWishlisted(p._id || p.id)}
+                      />
                     </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+
+                    <View style={s.similarInfo}>
+                      <Text style={s.similarName} numberOfLines={1}>{sanitizeData(p.name, 'Product')}</Text>
+                      <View style={s.similarBottom}>
+                        <Text style={s.similarPrice}>₹{(p.price || 0).toLocaleString()}</Text>
+                        <TouchableOpacity 
+                          style={s.similarAdd}
+                          onPress={() => {
+                            addToCart({
+                              ...p,
+                              id: p._id || p.id,
+                              image: getImageUrl(p.image || p.thumbnail)
+                            }, 1);
+                          }}
+                        >
+                          <FrameIcon size={20} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -549,8 +599,8 @@ export default function ProductDetailScreen({ navigation, route }) {
                 addToCart({
                   id: product._id || product.id,
                   name: product.name,
-                  price: product.price || 9999,
-                  variant: `Size: ${SIZE_OPTIONS[selSize]}, Color: ${COLOR_LABELS[selColor]}`,
+                  price: price,
+                  variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
                   image: imgs[activeImg]
                 }, parseInt(qtyInput) || 1);
                 setShowQtyModal(false);
@@ -613,15 +663,7 @@ const s = StyleSheet.create({
   showAllBtn: { alignItems: 'center', marginVertical: 10 },
   showAllTxt: { fontSize: 13, fontWeight: '800', color: THEME_COLORS.primary },
 
-  addReviewContainer: { marginTop: 10, padding: 14, backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  addReviewTitle: { fontSize: 14, fontWeight: '800', color: THEME_COLORS.text, marginBottom: 10 },
-  starPicker: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  pickerStar: { fontSize: 24, color: '#CBD5E1' },
-  pickerStarActive: { color: '#FACC15' },
-  ratingHint: { fontSize: 12, color: THEME_COLORS.textSecondary, fontWeight: '600', marginLeft: 8 },
-  reviewInput: { backgroundColor: '#FFF', borderRadius: 10, padding: 12, minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12, fontSize: 13 },
-  submitReviewBtn: { backgroundColor: THEME_COLORS.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
-  submitReviewTxt: { color: '#FFF', fontWeight: '900', fontSize: 14 },
+
 
   catName: { fontSize: 12, color: THEME_COLORS.textSecondary, fontWeight: '600', marginBottom: 2 },
   productName: {

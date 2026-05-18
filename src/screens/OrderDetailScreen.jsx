@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions,
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, Modal, TextInput, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MapPin, Calendar, Truck, CheckCircle2, Package, ShoppingBag } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { BackIcon } from '../components/CustomIcons';
-import { sanitizeData, getImageUrl, userService } from '../services/api';
+import { sanitizeData, getImageUrl, userService, productService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
@@ -21,12 +22,95 @@ const ORDER_STATUS_STEPS = [
 
 export default function OrderDetailScreen({ navigation, route }) {
   const { order } = route.params || {};
+  const { user } = useAuth();
+  const { addNotification, checkOrderUpdates } = useNotifications();
   const [showTracking, setShowTracking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentOrder, setCurrentOrder] = useState(order);
 
+  // Review Modal States
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewProductId, setReviewProductId] = useState(null);
+  const [reviewProductName, setReviewProductName] = useState('');
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const handleSubmitReview = async () => {
+    if (!comment.trim()) {
+      alert('Please enter a comment for your review.');
+      return;
+    }
+
+    try {
+      setSubmittingReview(true);
+      
+      const reviewPayload = {
+        name: user?.name || 'Anonymous Buyer',
+        email: user?.email || '',
+        rating: rating,
+        comment: comment.trim(),
+        title: `${rating} Star Review`,
+        review: comment.trim(),
+      };
+
+      const newRev = {
+        ...reviewPayload,
+        productId: reviewProductId,
+        productName: reviewProductName,
+        time: new Date().toISOString(),
+        user: user?._id || user?.id || null,
+        userId: user?._id || user?.id || null,
+        name: user?.name || reviewPayload.name,
+        likes: 0,
+        dislikes: 0,
+        userImage: user?.image || user?.avatar || null
+      };
+
+      // 1. ALWAYS save to local storage first, so the user sees it immediately even if backend is offline/fails
+      try {
+        const stored = await AsyncStorage.getItem(`@LocalReviews_${reviewProductId}`);
+        const locals = stored ? JSON.parse(stored) : [];
+        const updated = [newRev, ...locals];
+        await AsyncStorage.setItem(`@LocalReviews_${reviewProductId}`, JSON.stringify(updated));
+        
+        // Also save to global review store so ProductDetailScreen can always find it
+        const globalStored = await AsyncStorage.getItem('@GlobalLocalReviews');
+        const globalList = globalStored ? JSON.parse(globalStored) : [];
+        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([newRev, ...globalList]));
+        
+        console.log(`[REVIEW] Saved review locally first for productId: ${reviewProductId}`);
+      } catch (err) {
+        console.warn('[REVIEW] Local save error:', err);
+      }
+
+      // 2. Try to sync with backend
+      let backendSuccess = false;
+      try {
+        await productService.addReview(reviewProductId, reviewPayload);
+        backendSuccess = true;
+      } catch (apiErr) {
+        console.warn('Backend sync failed, review remains stored locally:', apiErr);
+      }
+
+      if (backendSuccess) {
+        addNotification('success', 'Review Submitted ✓', `Your review for "${reviewProductName}" has been posted!`, 'Orders');
+      } else {
+        addNotification('success', 'Review Saved Locally', 'Your review was saved locally and will sync later.', 'Orders');
+      }
+      setShowReviewModal(false);
+    } catch (e) {
+      console.error('Error submitting review:', e);
+      addNotification('error', 'Error', 'Failed to submit review.', 'Orders');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   React.useEffect(() => {
     refreshOrder();
+    const interval = setInterval(refreshOrder, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const refreshOrder = async () => {
@@ -34,7 +118,15 @@ export default function OrderDetailScreen({ navigation, route }) {
       const orderId = currentOrder._id || currentOrder.id;
       if (!orderId || String(orderId).startsWith('#')) return;
 
-      const orders = await userService.getOrders(currentOrder.userId);
+      const currentUserId = currentOrder.userId || user?._id || user?.id;
+      const userEmail = user?.email || '';
+
+      // Centralized status change detection
+      if (currentUserId && checkOrderUpdates) {
+        await checkOrderUpdates(currentUserId, userEmail);
+      }
+
+      const orders = await userService.getOrders(currentUserId, userEmail);
       const latest = (Array.isArray(orders) ? orders : orders.data || orders.orders || [])
         .find(o => (o._id === orderId || o.id === orderId));
       
@@ -240,22 +332,52 @@ export default function OrderDetailScreen({ navigation, route }) {
             <Text style={styles.itemCount}>{currentOrder.items?.length || 0} items</Text>
           </View>
 
-          {currentOrder.items?.map((item, idx) => (
-            <View key={idx} style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }]}>
-              <Image 
-                source={{ uri: getImageUrl(item?.image || item?.product?.image || currentOrder?.image) }} 
-                style={styles.itemImg} 
-              />
+          {currentOrder.items?.map((item, idx) => {
+            const statusUpper = String(currentOrder.status).toUpperCase();
+            const canReview = ['DELIVERED', 'CONFIRMED', 'PROCESSING', 'PAID'].includes(statusUpper);
+            const itemProdId = item.productId || (typeof item.product === 'string' ? item.product : (item.product?._id || item.product?.id)) || item._id || item.id;
 
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{sanitizeData(item.name, 'Product')}</Text>
-                <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
-                <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
-                <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
+            return (
+              <View key={idx} style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                <TouchableOpacity 
+                  activeOpacity={0.7}
+                  style={{ flexDirection: 'row', flex: 1, marginBottom: 8 }}
+                  onPress={() => {
+                    if (itemProdId && !String(itemProdId).startsWith('#')) {
+                      navigation.navigate('ProductDetail', { productId: itemProdId });
+                    }
+                  }}
+                >
+                  <Image 
+                    source={{ uri: getImageUrl(item?.image || item?.product?.image || currentOrder?.image) }} 
+                    style={styles.itemImg} 
+                  />
 
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemName}>{sanitizeData(item.name, 'Product')}</Text>
+                    <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
+                    <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
+                    <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {canReview && (
+                  <TouchableOpacity 
+                    style={[styles.writeReviewBtn, { alignSelf: 'flex-start', marginLeft: 64, marginTop: 4 }]} 
+                    onPress={() => {
+                      setReviewProductId(itemProdId);
+                      setReviewProductName(sanitizeData(item.name, 'Product'));
+                      setRating(5);
+                      setComment('');
+                      setShowReviewModal(true);
+                    }}
+                  >
+                    <Text style={styles.writeReviewTxt}>★ Write a Review</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* SUMMARY */}
@@ -284,6 +406,59 @@ export default function OrderDetailScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Premium Product Review Modal */}
+      <Modal visible={showReviewModal} animationType="fade" transparent onRequestClose={() => setShowReviewModal(false)}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={styles.reviewModalSheet}>
+            <Text style={styles.reviewModalTitle}>Write a Review</Text>
+            <Text style={styles.reviewModalSub}>{reviewProductName}</Text>
+
+            {/* Interactive Stars Selector */}
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setRating(star)} style={styles.starTouch}>
+                  <Text style={[styles.starIconText, { color: star <= rating ? '#F2C94C' : '#D1D5DB' }]}>
+                    ★
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Tell us what you like or dislike about this product..."
+              placeholderTextColor="#94A3B8"
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+            />
+
+            <View style={styles.reviewActionButtons}>
+              <TouchableOpacity 
+                style={styles.reviewSubmitBtn} 
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+              >
+                {submittingReview ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.reviewSubmitBtnTxt}>Submit Review</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.reviewCancelBtn} 
+                onPress={() => setShowReviewModal(false)}
+              >
+                <Text style={styles.reviewCancelBtnTxt}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -405,5 +580,112 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     marginBottom: 20, borderWidth: 1, borderColor: '#FFD5D5'
   },
-  cancelBigBtnText: { color: '#EB5757', fontSize: 16, fontWeight: '800' }
+  cancelBigBtnText: { color: '#EB5757', fontSize: 16, fontWeight: '800' },
+
+  // Review Modal Styles
+  reviewModalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(12, 24, 33, 0.75)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 24 
+  },
+  reviewModalSheet: {
+    width: '100%', 
+    maxWidth: 360, 
+    borderRadius: 24, 
+    padding: 24, 
+    alignItems: 'center', 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFF',
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25, 
+    shadowRadius: 15, 
+    elevation: 10
+  },
+  reviewModalTitle: { 
+    fontSize: 20, 
+    fontWeight: '800', 
+    textAlign: 'center', 
+    marginBottom: 6,
+    color: '#0F172A',
+  },
+  reviewModalSub: { 
+    fontSize: 14, 
+    textAlign: 'center', 
+    color: '#64748B', 
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  starsRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    gap: 8 
+  },
+  starTouch: {
+    padding: 4,
+  },
+  starIconText: {
+    fontSize: 36,
+  },
+  reviewInput: {
+    width: '100%', 
+    height: 100, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0', 
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14, 
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    textAlignVertical: 'top',
+    marginBottom: 24,
+  },
+  reviewActionButtons: { 
+    width: '100%', 
+    gap: 10 
+  },
+  reviewSubmitBtn: { 
+    height: 50, 
+    borderRadius: 12, 
+    backgroundColor: THEME_COLORS.primary,
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  reviewSubmitBtnTxt: { 
+    color: '#FFF', 
+    fontSize: 16, 
+    fontWeight: '800' 
+  },
+  reviewCancelBtn: { 
+    height: 50, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  reviewCancelBtnTxt: { 
+    fontSize: 16, 
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  writeReviewBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: THEME_COLORS.primary + '15',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  writeReviewTxt: {
+    color: THEME_COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

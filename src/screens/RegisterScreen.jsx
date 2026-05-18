@@ -177,9 +177,13 @@ export default function RegisterScreen({ navigation }) {
 
       const response = await authService.register(regData);
       
-      // Auto-login after successful registration
+      // Auto-login after successful registration, merging form data to guarantee full session persistence
       const userData = response.user || response.data || response;
-      await authLogin(userData, form.password);
+      const mergedUserData = {
+        ...regData,
+        ...(userData || {})
+      };
+      await authLogin(mergedUserData, form.password);
       
       Alert.alert('Success', 'Account created and logged in successfully!', [
         { text: 'Great!', onPress: () => navigation.replace('Main') }

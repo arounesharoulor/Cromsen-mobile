@@ -137,18 +137,78 @@ export const productService = {
     }
     throw lastError || new Error('Failed to submit review after multiple attempts');
   },
-  getReviews: async (productId) => {
+  getReviews: async (productId, productName = '') => {
     const endpoints = [
       `${BASE_URL}/products/${productId}/reviews`,
+      `${BASE_URL}/products/reviews/${productId}`,
+      `${BASE_URL}/reviews/product/${productId}`,
+      `${BASE_URL}/reviews/products/${productId}`,
+      `${BASE_URL}/product-reviews/product/${productId}`,
+      `${BASE_URL}/product-reviews/${productId}`,
+      `${BASE_URL}/product-reviews?productId=${productId}`,
+      `${BASE_URL}/product-reviews?product=${productId}`,
+      `${BASE_URL}/product-reviews`,
       `${BASE_URL}/reviews?product=${productId}`,
       `${BASE_URL}/reviews?productId=${productId}`,
-      `${BASE_URL}/reviews/${productId}`
+      `${BASE_URL}/reviews/${productId}`,
+      `${BASE_URL}/reviews`, // Fallback plural global
+      
+      // Singular versions
+      `${BASE_URL}/review?product=${productId}`,
+      `${BASE_URL}/review?productId=${productId}`,
+      `${BASE_URL}/review/${productId}`,
+      `${BASE_URL}/review`, // Fallback singular global
+      `${BASE_URL}/product-review?productId=${productId}`,
+      `${BASE_URL}/product-review?product=${productId}`,
+      `${BASE_URL}/product-review/${productId}`,
+      `${BASE_URL}/product-review` // Fallback singular global
     ];
     for (const url of endpoints) {
       try {
+        console.log(`[REVIEWS] Fetching from: GET ${url}`);
         const response = await fetch(url);
-        if (response.ok) return await handleResponse(response);
-      } catch (e) {}
+        if (response.ok) {
+          const resData = await handleResponse(response);
+          const rawList = Array.isArray(resData) ? resData : (resData.data || resData.reviews || []);
+          console.log(`[REVIEWS] GET ${url} returned ${rawList.length} raw reviews`);
+          
+          if (
+            url === `${BASE_URL}/reviews` || 
+            url === `${BASE_URL}/product-reviews` ||
+            url === `${BASE_URL}/review` || 
+            url === `${BASE_URL}/product-review`
+          ) {
+            console.log(`[REVIEWS] Filtering global reviews for productId: ${productId} / name: ${productName}`);
+            const filtered = rawList.filter(r => {
+              const rProdId = r.productId || r.product || (r.product?._id || r.product?.id || '');
+              const idMatch = rProdId && String(rProdId) === String(productId);
+              
+              const rName = r.productName || r.product?.name || r.name || '';
+              const exactNameMatch = rName && productName && 
+                String(rName).toLowerCase().trim() === String(productName).toLowerCase().trim();
+                
+              const substringMatch = rName && productName && (
+                String(rName).toLowerCase().includes(String(productName).toLowerCase().trim()) ||
+                String(productName).toLowerCase().includes(String(rName).toLowerCase().trim())
+              );
+
+              const rKeywords = String(rName).toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
+              const pKeywords = String(productName).toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
+              const keywordOverlap = rKeywords.some(w => pKeywords.includes(w)) || pKeywords.some(w => rKeywords.includes(w));
+              
+              return idMatch || exactNameMatch || substringMatch || keywordOverlap;
+            });
+            console.log(`[REVIEWS] Found ${filtered.length} matching reviews after global filter`);
+            return filtered;
+          }
+          
+          return rawList;
+        } else {
+          console.log(`[REVIEWS] GET ${url} failed with status: ${response.status}`);
+        }
+      } catch (e) {
+        console.warn(`[REVIEWS] Fetch error for ${url}:`, e);
+      }
     }
     return []; 
   },
@@ -186,8 +246,10 @@ export const userService = {
         return await handleResponse(response);
       }
 
-      const errData = await response.json().catch(() => ({}));
-      const errMsg = errData.message || '';
+      const clonedResp = response.clone();
+      const errData = await clonedResp.json().catch(() => ({}));
+      const errMsg = errData.message || JSON.stringify(errData) || '';
+      console.log(`[SYNC] Profile Update Failed (${response.status}):`, errData);
 
       if (response.status === 400 && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('required'))) {
         console.warn('[SYNC] Backend requires password for profile update. Proceeding with local-only update.');
@@ -331,7 +393,8 @@ export const userService = {
         return await handleResponse(updateResp);
       }
 
-      const errData = await updateResp.json().catch(() => ({}));
+      const clonedResp = updateResp.clone();
+      const errData = await clonedResp.json().catch(() => ({}));
       const errMsg = errData.message || '';
       if (updateResp.status === 400 && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('required'))) {
         console.warn('[SYNC] Backend requires password for profile address update. Skipping backend sync, using local state.');

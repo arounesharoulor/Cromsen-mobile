@@ -609,7 +609,7 @@ export default function CheckoutScreen({ navigation, route }) {
   }, 0);
   
   // Align with CartScreen logic for consistency
-  const discount = Math.round(subtotal * 0.15); // 15% discount
+  const discount = 0; // Discount removed as per request
   const packagingFee = 7; // Packaging fee
   const shippingFee = 20; // Shipping fee
   const total = subtotal - discount + packagingFee;
@@ -690,6 +690,7 @@ export default function CheckoutScreen({ navigation, route }) {
               guestEmail: user?.email || '', // Added for backend compatibility
               items: cartItems.map(item => ({
                 ...item,
+                productId: item._id || item.id || '',
                 _id: item._id || item.id || item.product || '',
                 name: sanitizeData(item.name || 'Product', 'Product'),
                 image: getImageUrl(item.image),
@@ -851,6 +852,7 @@ export default function CheckoutScreen({ navigation, route }) {
           email: user?.email || '',
           items: cartItems.map(item => ({
             ...item,
+            productId: item._id || item.id || '',  // Explicitly preserve product ID for reviews
             _id: item._id || item.id || item.product || '',
             name: sanitizeData(item.name || 'Product', 'Product'),
             image: getImageUrl(item.image),
@@ -1024,7 +1026,6 @@ export default function CheckoutScreen({ navigation, route }) {
             <View style={s.priceRow}><Text style={s.priceLbl}>Subtotal</Text><Text style={s.priceVal}>₹{subtotal}</Text></View>
             <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{shippingFee}</Text></View>
             <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{packagingFee}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>Discount (15%)</Text><Text style={[s.priceVal, {color: '#27AE60'}]}>-₹{discount}</Text></View>
             <View style={[s.priceRow, {marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9'}]}>
               <Text style={s.totalLbl}>Order Total</Text>
               <Text style={s.totalVal}>₹{grandTotal}</Text>

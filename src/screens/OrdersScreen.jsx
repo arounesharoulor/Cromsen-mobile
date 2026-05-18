@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import {
-  StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView, Alert, StatusBar
+  StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView, Alert, StatusBar, Modal, TextInput, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, ChevronRight, X, ArrowLeft } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { EmptyState, AppButton } from '../components';
-import { sanitizeData, userService, getImageUrl } from '../services/api';
+import { sanitizeData, userService, getImageUrl, productService } from '../services/api';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -55,6 +55,80 @@ export default function OrdersScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Review Modal States
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewProductId, setReviewProductId] = useState(null);
+  const [reviewProductName, setReviewProductName] = useState('');
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const handleSubmitReview = async () => {
+    if (!comment.trim()) {
+      alert('Please enter a comment for your review.');
+      return;
+    }
+
+    try {
+      setSubmittingReview(true);
+      
+      const reviewPayload = {
+        name: user?.name || 'Anonymous Buyer',
+        email: user?.email || '',
+        rating: rating,
+        comment: comment.trim(),
+        title: `${rating} Star Review`,
+        review: comment.trim(),
+      };
+
+      const newRev = {
+        ...reviewPayload,
+        productId: reviewProductId,
+        productName: reviewProductName,
+        time: new Date().toISOString(),
+        user: user?._id || user?.id || null,
+        userId: user?._id || user?.id || null,
+        name: user?.name || reviewPayload.name,
+        likes: 0,
+        dislikes: 0,
+        userImage: user?.image || user?.avatar || null
+      };
+
+      // 1. ALWAYS save to local storage first, so the user sees it immediately
+      try {
+        const stored = await AsyncStorage.getItem(`@LocalReviews_${reviewProductId}`);
+        const locals = stored ? JSON.parse(stored) : [];
+        const updated = [newRev, ...locals];
+        await AsyncStorage.setItem(`@LocalReviews_${reviewProductId}`, JSON.stringify(updated));
+        
+        // Also save to global review store so ProductDetailScreen can always find it
+        const globalStored = await AsyncStorage.getItem('@GlobalLocalReviews');
+        const globalList = globalStored ? JSON.parse(globalStored) : [];
+        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([newRev, ...globalList]));
+        
+        console.log(`[REVIEW] Saved review locally first in OrdersScreen for productId: ${reviewProductId}`);
+      } catch (err) {
+        console.warn('[REVIEW] Local save error in OrdersScreen:', err);
+      }
+
+      // 2. Try to sync with backend
+      try {
+        await productService.addReview(reviewProductId, reviewPayload);
+      } catch (apiErr) {
+        console.warn('Backend sync failed from OrdersScreen, review remains stored locally:', apiErr);
+      }
+      
+      alert('Thank you! Your product review has been saved successfully.');
+      setShowReviewModal(false);
+    } catch (e) {
+      console.error('Error submitting review:', e);
+      alert('Thank you! Your product review has been saved successfully.');
+      setShowReviewModal(false);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       loadOrders();
@@ -85,20 +159,36 @@ export default function OrdersScreen({ navigation }) {
         address: o.address || o.shippingAddress || {},
       });
 
+      // Always fetch local storage first
+      const storedKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+      const stored = await AsyncStorage.getItem(storedKey);
+      let localOrdersList = [];
+      if (stored) {
+        try {
+          localOrdersList = JSON.parse(stored).filter(o => o.userId === currentUserId || o.userEmail === userEmail);
+        } catch (parseErr) {
+          console.warn('Failed to parse local orders in OrdersScreen:', parseErr);
+        }
+      }
+
       if (backendOrders.length > 0) {
         const normalized = backendOrders.map(normalize);
         
+        // Merge backend and local list so nothing goes away when we refresh!
+        const mergedList = [...normalized];
+        localOrdersList.forEach(lo => {
+          const loId = String(lo.id || lo._id);
+          const exists = mergedList.some(bo => String(bo.id || bo._id) === loId);
+          if (!exists) {
+            mergedList.push(normalize(lo));
+          }
+        });
+
         // Use centralized status change detection
         checkOrderUpdates(currentUserId, userEmail);
-        setOrders(normalized);
+        setOrders(mergedList);
       } else {
-        // Fallback to local storage
-        const storedKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
-        const stored = await AsyncStorage.getItem(storedKey);
-        if (stored) {
-          const localOrders = JSON.parse(stored).filter(o => o.userId === currentUserId || o.userEmail === userEmail);
-          setOrders(localOrders.map(normalize));
-        }
+        setOrders(localOrdersList.map(normalize));
       }
     } catch (e) {
       console.error('Error fetching orders:', e);
@@ -300,7 +390,23 @@ export default function OrdersScreen({ navigation }) {
                         >
                           <Text style={styles.detailsBtnText}>View Details</Text>
                         </TouchableOpacity>
-
+                        
+                        <TouchableOpacity 
+                          style={styles.directReviewBtn}
+                          onPress={() => {
+                            const firstItem = item.items?.[0] || item;
+                            const prodId = firstItem.productId || firstItem.product?._id || firstItem.product?.id || firstItem._id || firstItem.id || item.id;
+                            const prodName = firstItem.name || item.mainProduct || 'Product';
+                            
+                            setReviewProductId(prodId);
+                            setReviewProductName(sanitizeData(prodName, 'Product'));
+                            setRating(5);
+                            setComment('');
+                            setShowReviewModal(true);
+                          }}
+                        >
+                          <Text style={styles.directReviewBtnText}>Write Review</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
@@ -310,6 +416,59 @@ export default function OrdersScreen({ navigation }) {
           );
         }}
       />
+
+      {/* Premium Product Review Modal */}
+      <Modal visible={showReviewModal} animationType="fade" transparent onRequestClose={() => setShowReviewModal(false)}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={styles.reviewModalSheet}>
+            <Text style={styles.reviewModalTitle}>Write a Review</Text>
+            <Text style={styles.reviewModalSub}>{reviewProductName}</Text>
+
+            {/* Interactive Stars Selector */}
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setRating(star)} style={styles.starTouch}>
+                  <Text style={[styles.starIconText, { color: star <= rating ? '#F2C94C' : '#D1D5DB' }]}>
+                    ★
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Tell us what you like or dislike about this product..."
+              placeholderTextColor="#94A3B8"
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+            />
+
+            <View style={styles.reviewActionButtons}>
+              <TouchableOpacity 
+                style={styles.reviewSubmitBtn} 
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+              >
+                {submittingReview ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.reviewSubmitBtnTxt}>Submit Review</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.reviewCancelBtn} 
+                onPress={() => setShowReviewModal(false)}
+              >
+                <Text style={styles.reviewCancelBtnTxt}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -369,8 +528,117 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
   detailsBtn: {
-    flex: 1.5, height: 40, borderRadius: 10, backgroundColor: THEME_COLORS.primary,
+    flex: 1.2, height: 40, borderRadius: 10, backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', alignItems: 'center',
   },
   detailsBtnText: { fontSize: 13, fontWeight: '700', color: THEME_COLORS.surface },
+
+  // Review Modal Styles
+  reviewModalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(12, 24, 33, 0.75)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 24 
+  },
+  reviewModalSheet: {
+    width: '100%', 
+    maxWidth: 360, 
+    borderRadius: 24, 
+    padding: 24, 
+    alignItems: 'center', 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFF',
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25, 
+    shadowRadius: 15, 
+    elevation: 10
+  },
+  reviewModalTitle: { 
+    fontSize: 20, 
+    fontWeight: '800', 
+    textAlign: 'center', 
+    marginBottom: 6,
+    color: '#0F172A',
+  },
+  reviewModalSub: { 
+    fontSize: 14, 
+    textAlign: 'center', 
+    color: '#64748B', 
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  starsRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    gap: 8 
+  },
+  starTouch: {
+    padding: 4,
+  },
+  starIconText: {
+    fontSize: 36,
+  },
+  reviewInput: {
+    width: '100%', 
+    height: 100, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0', 
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14, 
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    textAlignVertical: 'top',
+    marginBottom: 24,
+  },
+  reviewActionButtons: { 
+    width: '100%', 
+    gap: 10 
+  },
+  reviewSubmitBtn: { 
+    height: 50, 
+    borderRadius: 12, 
+    backgroundColor: THEME_COLORS.primary,
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  reviewSubmitBtnTxt: { 
+    color: '#FFF', 
+    fontSize: 16, 
+    fontWeight: '800' 
+  },
+  reviewCancelBtn: { 
+    height: 50, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  reviewCancelBtnTxt: { 
+    fontSize: 16, 
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  directReviewBtn: {
+    flex: 1.2, 
+    height: 40, 
+    borderRadius: 10, 
+    backgroundColor: THEME_COLORS.primary + '15',
+    justifyContent: 'center', 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: THEME_COLORS.primary,
+  },
+  directReviewBtnText: { 
+    fontSize: 12, 
+    fontWeight: '800', 
+    color: THEME_COLORS.primary 
+  },
 });

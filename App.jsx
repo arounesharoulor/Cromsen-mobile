@@ -113,13 +113,13 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <CartProvider>
-            <WishlistProvider>
-              <NotificationProvider>
+          <NotificationProvider>
+            <CartProvider>
+              <WishlistProvider>
                 <AppContent />
-              </NotificationProvider>
-            </WishlistProvider>
-          </CartProvider>
+              </WishlistProvider>
+            </CartProvider>
+          </NotificationProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

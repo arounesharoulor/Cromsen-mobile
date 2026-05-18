@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useCallback, useRef, useEffect } from 'react';
 import { Animated, StyleSheet, Text, View, Dimensions, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Bell, CheckCircle, Info, AlertCircle, ShoppingCart } from 'lucide-react-native';
+import { Bell, CheckCircle, Info, AlertCircle, ShoppingCart, Heart, User } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { userService, productService } from '../services/api';
 import { useAuth } from './AuthContext';
@@ -137,19 +137,54 @@ export const NotificationProvider = ({ children }) => {
         backendOrders.forEach(newOrder => {
           const oldOrder = localOrders.find(o => o.id === newOrder.id);
           if (oldOrder && oldOrder.status !== newOrder.status) {
-            console.log(`[Order Polling] Status change detected for ${newOrder.id}`);
-            const isCancelled = newOrder.status.includes('CANCELLED') || newOrder.status.includes('CANCEL');
+            console.log(`[Order Polling] Status change detected for ${newOrder.id} (${oldOrder.status} -> ${newOrder.status})`);
+            
+            const newStatus = newOrder.status.toUpperCase();
+            let toastType = 'success';
+            let title = `Order ${newStatus}`;
+            
+            if (newStatus.includes('CANCEL')) {
+              toastType = 'error';
+              title = 'Order Cancelled ❌';
+            } else if (newStatus.includes('SHIP')) {
+              toastType = 'info';
+              title = 'Order Shipped 🚚';
+            } else if (newStatus.includes('DELIVERED') || newStatus.includes('DELIVER')) {
+              toastType = 'success';
+              title = 'Order Delivered 🎉';
+            } else if (newStatus.includes('OUT') || newStatus.includes('WAY') || newStatus.includes('ROUTE')) {
+              toastType = 'info';
+              title = 'Out for Delivery 🛵';
+            }
             
             addNotification(
-              isCancelled ? 'error' : 'success', 
-              `Order ${newOrder.status}`, 
-              `Status for Order #${newOrder.id.slice(-6)} has been updated to ${newOrder.status}.`, 
+              toastType,
+              title,
+              `Status for Order #${newOrder.id.slice(-6)} has been updated to ${newStatus}.`,
               'Orders'
             );
           }
         });
       }
-      await AsyncStorage.setItem(ordersKey, JSON.stringify(rawOrders));
+      // Merge backend orders (rawOrders) and existing local orders to prevent deletion
+      let mergedOrders = [...rawOrders];
+      if (stored) {
+        try {
+          const localFullOrders = JSON.parse(stored);
+          if (Array.isArray(localFullOrders)) {
+            localFullOrders.forEach(lo => {
+              const loId = String(lo.id || lo._id);
+              const exists = mergedOrders.some(bo => String(bo.id || bo._id) === loId);
+              if (!exists) {
+                mergedOrders.push(lo);
+              }
+            });
+          }
+        } catch (parseErr) {
+          console.warn('Failed to parse local orders in checkOrderUpdates:', parseErr);
+        }
+      }
+      await AsyncStorage.setItem(ordersKey, JSON.stringify(mergedOrders));
     } catch (e) {
       console.warn('Order status polling failed:', e);
     }
@@ -181,19 +216,46 @@ export const NotificationProvider = ({ children }) => {
           );
         }
 
-        // Detect price changes
+        // Detect price and status changes
         backendProducts.forEach(bp => {
           const bpId = String(bp._id || bp.id);
           const lp = localProducts.find(p => String(p._id || p.id) === bpId);
-          if (lp && Number(lp.price) !== Number(bp.price)) {
-            console.log(`[Product Polling] Price change for ${bp.name}`);
-            addNotification(
-              'info', 
-              'Price Dropped!', 
-              `The price for ${bp.name} has been updated. View details.`, 
-              'ProductDetail', 
-              { productId: bpId }
-            );
+          if (lp) {
+            // 1. Detect price changes
+            if (Number(lp.price) !== Number(bp.price)) {
+              console.log(`[Product Polling] Price change for ${bp.name}`);
+              addNotification(
+                'info',
+                'Price Updated 🏷️',
+                `The price for "${bp.name}" has been updated. View details.`,
+                'ProductDetail',
+                { productId: bpId }
+              );
+            }
+
+            // 2. Detect product status change (Active/Inactive or In Stock/Out of Stock)
+            const oldStatus = String(lp.status || (lp.inStock !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
+            const newStatus = String(bp.status || (bp.inStock !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
+
+            if (oldStatus !== newStatus) {
+              console.log(`[Product Polling] Status change for ${bp.name}: ${oldStatus} -> ${newStatus}`);
+              
+              let title = 'Product Update 📦';
+              let msg = `"${bp.name}" status is now ${newStatus.replace('_', ' ')}.`;
+              let type = 'info';
+
+              if (newStatus.includes('OUT') || newStatus.includes('INACTIVE') || newStatus.includes('OFF')) {
+                type = 'error';
+                title = 'Product Out of Stock ⚠️';
+                msg = `"${bp.name}" is currently out of stock.`;
+              } else if (newStatus.includes('IN_STOCK') || newStatus.includes('ACTIVE') || newStatus.includes('ON')) {
+                type = 'success';
+                title = 'Product Back in Stock! 🎉';
+                msg = `"${bp.name}" is back in stock! Order yours now.`;
+              }
+
+              addNotification(type, title, msg, 'ProductDetail', { productId: bpId });
+            }
           }
         });
       }
@@ -206,18 +268,24 @@ export const NotificationProvider = ({ children }) => {
   const getIcon = (type) => {
     switch (type) {
       case 'cart': return <ShoppingCart size={20} color="#FFF" />;
+      case 'wishlist': return <Heart size={20} color="#FFF" fill="#FFF" />;
+      case 'profile': return <User size={20} color="#FFF" />;
       case 'success': return <CheckCircle size={20} color="#FFF" />;
       case 'error': return <AlertCircle size={20} color="#FFF" />;
+      case 'info': return <Info size={20} color="#FFF" />;
       default: return <Bell size={20} color="#FFF" />;
     }
   };
 
   const getBgColor = (type) => {
     switch (type) {
-      case 'cart': return THEME_COLORS.primary;
-      case 'success': return '#10B981';
-      case 'error': return '#EF4444';
-      default: return THEME_COLORS.secondary;
+      case 'cart': return '#F26522'; // Premium warm brand orange
+      case 'wishlist': return '#E11D48'; // Elegant Crimson Rose Pink
+      case 'profile': return '#4F46E5'; // Sophisticated Indigo Blue
+      case 'success': return '#059669'; // Premium Emerald Green
+      case 'error': return '#DC2626'; // Deep Terracotta Red
+      case 'info': return '#0EA5E9'; // Modern Sky Blue
+      default: return '#004694'; // Brand Navy Blue
     }
   };
 

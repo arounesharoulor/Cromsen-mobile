@@ -17,7 +17,7 @@ export default function CartScreen({ navigation }) {
   const subtotal = Array.isArray(items) 
     ? items.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
-  const discount = Math.round(subtotal * 0.15);
+  const discount = 0;
   const packaging = 7;
   const total = subtotal - discount + packaging;
 
@@ -77,7 +77,6 @@ export default function CartScreen({ navigation }) {
         {/* Bill Details */}
         <View style={styles.billCard}>
           <BillRow label={`Price (${items.length} item${items.length > 1 ? 's' : ''})`} value={`₹${subtotal.toLocaleString()}`} />
-          <BillRow label="Discount (15%)" value={`-₹${discount.toLocaleString()}`} valueColor="#10B981" />
           <BillRow label="Secured Packaging Fee" value={`₹${packaging}`} />
           <View style={styles.totalDivider} />
           <BillRow label="Total Amount" value={`₹${total.toLocaleString()}`} bold />

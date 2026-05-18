@@ -15,24 +15,24 @@ import { useTheme } from '../context/ThemeContext';
 const { width, height } = Dimensions.get('window');
 
 // Map category name keywords → icon component
-const getCategoryIcon = (name, color) => {
+const getCategoryIcon = (name, color, size = 20) => {
   const n = (name || '').toLowerCase();
-  if (n.includes('upvc hardware') || n.includes('upvc hardwares')) return <UpvcHardwareIcon size={24} color={color} />;
-  if (n.includes('upvc tool') || n.includes('tool')) return <UpvcToolsIcon size={24} color={color} />;
-  if (n.includes('pvc door') || n.includes('door')) return <PvcDoorsIcon size={24} color={color} />;
-  if (n.includes('pvc curtain') || n.includes('pvccurtain')) return <PvcCurtainIcon size={24} color={color} />;
-  if (n.includes('honeycomb')) return <HoneycombIcon size={24} color={color} />;
-  if (n.includes('magic screen') || n.includes('magicscreen')) return <MagicScreenIcon size={24} color={color} />;
-  if (n.includes('curtain')) return <CurtainsIcon size={24} color={color} />;
-  if (n.includes('blind')) return <PleatedIcon size={24} color={color} />;
-  if (n.includes('mosquito') || n.includes('net')) return <MosquitoIcon size={24} color={color} />;
-  if (n.includes('fencing') || n.includes('fence')) return <FencingIcon size={24} color={color} />;
-  if (n.includes('balcony')) return <BalconyIcon size={24} color={color} />;
-  if (n.includes('pleated')) return <PleatedIcon size={24} color={color} />;
-  if (n.includes('cabinet hinge') || n.includes('hinge')) return <CabinetHingesIcon size={24} color={color} />;
-  if (n.includes('umbrella')) return <UmbrellaIcon size={24} color={color} />;
-  if (n.includes('machin') || n.includes('other')) return <OtherMachineriesIcon size={24} color={color} />;
-  return <CategoryIcon size={20} color={color} />;
+  if (n.includes('upvc hardware') || n.includes('upvc hardwares')) return <UpvcHardwareIcon size={size} color={color} />;
+  if (n.includes('upvc tool') || n.includes('tool')) return <UpvcToolsIcon size={size} color={color} />;
+  if (n.includes('pvc door') || n.includes('door')) return <PvcDoorsIcon size={size} color={color} />;
+  if (n.includes('pvc curtain') || n.includes('pvccurtain')) return <PvcCurtainIcon size={size} color={color} />;
+  if (n.includes('honeycomb')) return <HoneycombIcon size={size} color={color} />;
+  if (n.includes('magic screen') || n.includes('magicscreen')) return <MagicScreenIcon size={size} color={color} />;
+  if (n.includes('curtain')) return <CurtainsIcon size={size} color={color} />;
+  if (n.includes('blind')) return <PleatedIcon size={size} color={color} />;
+  if (n.includes('mosquito') || n.includes('net')) return <MagicScreenIcon size={size} color={color} />;
+  if (n.includes('fencing') || n.includes('fence')) return <FencingIcon size={size} color={color} />;
+  if (n.includes('balcony')) return <BalconyIcon size={size} color={color} />;
+  if (n.includes('pleated')) return <PleatedIcon size={size} color={color} />;
+  if (n.includes('cabinet hinge') || n.includes('hinge')) return <CabinetHingesIcon size={size} color={color} />;
+  if (n.includes('umbrella')) return <UmbrellaIcon size={size} color={color} />;
+  if (n.includes('machin') || n.includes('other')) return <OtherMachineriesIcon size={size} color={color} />;
+  return <CategoryIcon size={size} color={color} />;
 };
 
 export default function CategoryScreen({ navigation }) {
@@ -140,7 +140,8 @@ export default function CategoryScreen({ navigation }) {
                     <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' }]}>
                        {getCategoryIcon(
                         sanitizeData(cat.name, ''),
-                        isActive ? theme.secondary : theme.primary
+                        isActive ? theme.secondary : theme.primary,
+                        20
                       )}
                     </View>
                     <Text style={[styles.sideLabel, { color: isActive ? theme.secondary : theme.textSecondary, fontWeight: isActive ? '900' : '700' }]} numberOfLines={2}>
@@ -178,14 +179,17 @@ export default function CategoryScreen({ navigation }) {
                     <ActivityIndicator color={theme.primary} style={{ marginTop: 20 }} />
                   ) : products.length > 0 ? (
                     <View style={styles.grid}>
-                      {products.slice(0, 4).map((p, idx) => (
+                      {products.map((p, idx) => (
                         <TouchableOpacity 
                           key={p._id || p.id || idx} 
                           style={styles.gridItem}
                           onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                         >
                           <Image source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl || selectedCat.image) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
-                          <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={1}>{sanitizeData(p.name)}</Text>
+                          <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={2}>{sanitizeData(p.name)}</Text>
+                          {(p.price !== undefined && p.price !== null) && (
+                            <Text style={[styles.gridPrice, { color: theme.primary }]}>₹{Number(p.price).toLocaleString()}</Text>
+                          )}
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -252,7 +256,7 @@ const styles = StyleSheet.create({
 
   /* Sidebar */
   sidebar: {
-    width: 116,
+    width: 86,
     backgroundColor: '#FFFFFF',
     borderRightWidth: 1,
     borderRightColor: '#F1F5F9',
@@ -260,7 +264,7 @@ const styles = StyleSheet.create({
   sideItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 93,
+    height: 80,
     paddingHorizontal: 4,
     position: 'relative',
   },
@@ -276,13 +280,13 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_COLORS.secondary,
   },
   iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
     overflow: 'hidden',
   },
   sideImg: { width: '80%', height: '80%', borderRadius: 4 },
@@ -351,11 +355,11 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-between',
   },
   gridItem: {
-    width: (width - 116 - 32 - 12) / 2,
-    marginBottom: 12,
+    width: '48%',
+    marginBottom: 16,
   },
   gridImg: {
     width: '100%',
@@ -368,6 +372,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: THEME_COLORS.text,
     marginTop: 6,
+    textAlign: 'center',
+  },
+  gridPrice: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: THEME_COLORS.primary,
+    marginTop: 2,
     textAlign: 'center',
   },
 
