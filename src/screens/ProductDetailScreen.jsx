@@ -226,11 +226,33 @@ export default function ProductDetailScreen({ navigation, route }) {
     ? rawImgs.map(getImageUrl) 
     : ['https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800'];
 
-  const basePrice = product.price || 9999;
+  const userRole = user?.role?.toLowerCase();
+  
+  let basePrice = product.price || 9999;
+  if (userRole === 'dealer' && typeof product.dealerPrice === 'number') {
+    basePrice = product.dealerPrice;
+  } else if (userRole === 'retailer' && typeof product.retailPrice === 'number') {
+    basePrice = product.retailPrice;
+  } else if (typeof product.retailPrice === 'number') {
+    basePrice = product.retailPrice;
+  }
+
   let price = basePrice;
   const currentSizeObj = (product.sizes || product.size || [])[selSize];
-  if (currentSizeObj && typeof currentSizeObj === 'object' && currentSizeObj.price) {
-    price = currentSizeObj.price;
+  if (currentSizeObj && typeof currentSizeObj === 'object') {
+    const sizePrice = currentSizeObj.price || currentSizeObj.retailPrice || currentSizeObj.userPrice;
+    if (userRole === 'dealer') {
+      if (currentSizeObj.dealerPrice) {
+        price = currentSizeObj.dealerPrice;
+      } else if (typeof product.dealerPrice === 'number' && typeof product.price === 'number' && product.price > 0) {
+        const ratio = product.dealerPrice / product.price;
+        price = (parseFloat(sizePrice) || parseFloat(basePrice) || 0) * ratio;
+      } else {
+        price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+      }
+    } else {
+      price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+    }
   }
 
   const rating = product.ratings || 4.7;
@@ -542,19 +564,29 @@ export default function ProductDetailScreen({ navigation, route }) {
                     <View style={s.similarInfo}>
                       <Text style={s.similarName} numberOfLines={1}>{sanitizeData(p.name, 'Product')}</Text>
                       <View style={s.similarBottom}>
-                        <Text style={s.similarPrice}>₹{(p.price || 0).toLocaleString()}</Text>
-                        <TouchableOpacity 
-                          style={s.similarAdd}
-                          onPress={() => {
-                            addToCart({
-                              ...p,
-                              id: p._id || p.id,
-                              image: getImageUrl(p.image || p.thumbnail)
-                            }, 1);
-                          }}
-                        >
-                          <FrameIcon size={20} />
-                        </TouchableOpacity>
+                        {(() => {
+                          const pPrice = userRole === 'dealer'
+                            ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
+                            : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+                          return (
+                            <>
+                              <Text style={s.similarPrice}>₹{Number(pPrice).toLocaleString()}</Text>
+                              <TouchableOpacity 
+                                style={s.similarAdd}
+                                onPress={() => {
+                                  addToCart({
+                                    ...p,
+                                    id: p._id || p.id,
+                                    price: pPrice,
+                                    image: getImageUrl(p.image || p.thumbnail)
+                                  }, 1);
+                                }}
+                              >
+                                <FrameIcon size={20} />
+                              </TouchableOpacity>
+                            </>
+                          );
+                        })()}
                       </View>
                     </View>
                   </TouchableOpacity>

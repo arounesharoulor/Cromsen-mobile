@@ -32,41 +32,17 @@ export default function LoginScreen({ navigation }) {
   const { isDarkMode, theme } = useTheme();
   
   // Login Form States
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
-  const [showCountryModal, setShowCountryModal] = useState(false);
-  const [showPwd, setShowPwd] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('dealer'); // 'dealer' or 'retailer'
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-
-  // OTP Verification States
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [sentOtp, setSentOtp] = useState('');
-  const [pendingUser, setPendingUser] = useState(null);
-  const [timer, setTimer] = useState(60);
-  const [otpError, setOtpError] = useState('');
-  const [otpVerifying, setOtpVerifying] = useState(false);
   
-  const timerRef = useRef(null);
-
-  // Handle Countdown Timer for Resend OTP
-  useEffect(() => {
-    if (showOtpModal && timer > 0) {
-      timerRef.current = setInterval(() => {
-        setTimer(t => t - 1);
-      }, 1000);
-    } else if (timer === 0) {
-      clearInterval(timerRef.current);
-    }
-    return () => clearInterval(timerRef.current);
-  }, [showOtpModal, timer]);
-
   const validateForm = () => {
     const e = {};
-    if (!phone) e.phone = 'Mobile number is required';
-    else if (!/^\d{10}$/.test(phone.replace(/\D/g, ''))) e.phone = 'Enter a valid 10-digit number';
+    if (!email) e.email = 'Email address is required';
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email address';
     
     if (!password) e.password = 'Password is required';
     else if (password.length < 6) e.password = 'Password must be at least 6 characters';
@@ -75,102 +51,56 @@ export default function LoginScreen({ navigation }) {
     return Object.keys(e).length === 0;
   };
 
-  const generateAndSendOtp = (cleanPhone) => {
-    // Generate a secure 6-digit random code
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setSentOtp(code);
-    setTimer(60);
-    setOtpInput('');
-    setOtpError('');
-    
-    // Simulate premium SMS OTP delivery using an Alert window
-    setTimeout(() => {
-      Alert.alert(
-        '💬 Cromsen Secure OTP',
-        `Your login verification code is: ${code}\n\nDo not share this code with anyone.`,
-        [{ text: 'Copy Code', onPress: () => {
-          // Simulation copy
-        }}]
-      );
-    }, 800);
-  };
-
   const handleLoginPress = async () => {
     if (!validateForm()) return;
     
     try {
       setLoading(true);
-      const digits = phone.replace(/\D/g, '');
-      const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
+      const cleanEmail = email.trim().toLowerCase();
       
-      // 1. Look up user by phone number from GET /users list to get their email address
-      let targetEmail = `${cleanPhone}@cromsen.com`; // default fallback dummy email
-      
+      // 1. Look up user by email from GET /users list
+      let matchedUser = null;
       try {
         const response = await fetch('https://cromsen-backend.onrender.com/api/users');
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
-          const matchedUser = users.find(u => {
-            const dbDigits = (u.phone || '').replace(/\D/g, '');
-            const inputDigits = cleanPhone;
-            if (dbDigits.length >= 10 && inputDigits.length >= 10) {
-              return dbDigits.slice(-10) === inputDigits.slice(-10);
-            }
-            return dbDigits === inputDigits;
+          matchedUser = users.find(u => {
+            const dbEmail = (u.email || '').trim().toLowerCase();
+            const dbRole = (u.role || '').toLowerCase();
+            return dbEmail === cleanEmail && dbRole === selectedRole.toLowerCase();
           });
-          if (matchedUser && matchedUser.email) {
-            targetEmail = matchedUser.email;
-          }
         }
       } catch (err) {
-        console.warn('Failed to retrieve user email, proceeding with dummy fallback:', err);
+        console.warn('Failed to retrieve user, checking backend failed:', err);
       }
 
-      // 2. Validate password via backend login attempt
-      const loginData = await authService.login(targetEmail, password);
+      if (!matchedUser) {
+        Alert.alert(
+          'Account Not Found',
+          `No registered ${selectedRole === 'dealer' ? 'Dealer' : 'Retailer'} account was found with this email address. Please register first.`
+        );
+        setLoading(false);
+        return;
+      }
       
-      // If correct password, hold session in state, and trigger OTP Modal!
-      setPendingUser(loginData.user || loginData.data || loginData);
-      setLoading(false);
+      const response = await authService.login(cleanEmail, password);
       
-      // Open OTP Modal and trigger simulated SMS Alert
-      setShowOtpModal(true);
-      generateAndSendOtp(cleanPhone);
+      const userData = response.user || response.data || response;
+      await authLogin({ ...matchedUser, ...userData }, password);
       
+      Alert.alert('Success', 'Logged in successfully!', [
+        { text: 'OK', onPress: () => navigation.replace('Main') }
+      ]);
     } catch (err) {
-      Alert.alert('Login Failed', err.message || 'Invalid mobile number or password');
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otpInput.length !== 6) {
-      setOtpError('Please enter a 6-digit code');
-      return;
-    }
-
-    if (otpInput !== sentOtp) {
-      setOtpError('Invalid verification code. Please try again.');
-      return;
-    }
-
-    try {
-      setOtpVerifying(true);
-      // Success! Sign the user in
-      await authLogin(pendingUser, password);
-      setShowOtpModal(false);
-    } catch (err) {
-      setOtpError(err.message || 'OTP authentication failed.');
+      const isNetworkErr = err.message?.toLowerCase().includes('network') || err.message?.toLowerCase().includes('fetch');
+      const errorMsg = isNetworkErr 
+        ? 'Unable to connect to the server. The database server may be warming up (Render free tier) or your device is offline. Please wait 30 seconds and try again.'
+        : (err.message || 'Incorrect password or account mismatch. Please try again.');
+      Alert.alert('Connection Alert', errorMsg);
     } finally {
-      setOtpVerifying(false);
+      setLoading(false);
     }
-  };
-
-  const handleResendOtp = () => {
-    if (timer > 0) return;
-    const cleanPhone = phone.replace(/^\+\d+\s?/, '').replace(/\s/g, '');
-    generateAndSendOtp(cleanPhone);
   };
 
   return (
@@ -189,46 +119,73 @@ export default function LoginScreen({ navigation }) {
 
           {/* Form */}
           <View style={styles.form}>
-            {/* Phone Number Input with Country Code Picker */}
-            <View style={styles.phoneRow}>
-              <TouchableOpacity 
-                style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} 
-                onPress={() => setShowCountryModal(true)}
+            {/* Dealer vs Retailer Role Selector */}
+            <View style={[styles.roleSelectorContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <TouchableOpacity
+                style={[
+                  styles.roleTab,
+                  selectedRole === 'dealer' && { backgroundColor: theme.primary }
+                ]}
+                onPress={() => setSelectedRole('dealer')}
               >
-                <Text style={styles.flagTxt}>{selectedCountry.flag}</Text>
-                <Text style={[styles.countryTxt, { color: theme.text }]}>{selectedCountry.code}</Text>
-                <ChevronDown size={14} color={theme.textSecondary} />
+                <Text
+                  style={[
+                    styles.roleTabText,
+                    { color: selectedRole === 'dealer' ? '#FFF' : theme.textSecondary }
+                  ]}
+                >
+                  Dealer Login
+                </Text>
               </TouchableOpacity>
-              
-              <View style={{ flex: 1 }}>
-                <AppInput
-                  label="Mobile Number"
-                  placeholder="Enter mobile number"
-                  value={phone}
-                  onChangeText={v => setPhone(v.replace(/[^0-9]/g, ''))}
-                  keyboardType="phone-pad"
-                  error={errors.phone}
-                  leftIcon={<Phone size={18} color={theme.textSecondary} />}
-                />
-              </View>
+              <TouchableOpacity
+                style={[
+                  styles.roleTab,
+                  selectedRole === 'retailer' && { backgroundColor: theme.primary }
+                ]}
+                onPress={() => setSelectedRole('retailer')}
+              >
+                <Text
+                  style={[
+                    styles.roleTabText,
+                    { color: selectedRole === 'retailer' ? '#FFF' : theme.textSecondary }
+                  ]}
+                >
+                  Retailer Login
+                </Text>
+              </TouchableOpacity>
             </View>
 
+            {/* Email Address Input */}
             <AppInput
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPwd}
-              error={errors.password}
-              leftIcon={<Lock size={18} color={theme.textSecondary} />}
-              rightIcon={showPwd ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
-              onRightIconPress={() => setShowPwd(v => !v)}
-              contextMenuHidden={true}
-              selectTextOnFocus={false}
+              label="Email Address"
+              placeholder="Enter registered email address"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+              leftIcon={<Mail size={18} color={theme.textSecondary} />}
             />
 
-            <TouchableOpacity style={styles.forgotRow} onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={[styles.forgotTxt, { color: theme.primary }]}>Forgot Password?</Text>
+            {/* Password Field */}
+            <AppInput
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              error={errors.password}
+              leftIcon={<Lock size={18} color={theme.textSecondary} />}
+              rightIcon={showPassword ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+              onRightIconPress={() => setShowPassword(!showPassword)}
+            />
+
+            {/* Forgot Password Link */}
+            <TouchableOpacity 
+              style={styles.forgotPwdContainer}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={[styles.forgotPwdTxt, { color: theme.primary }]}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <AppButton
@@ -251,106 +208,7 @@ export default function LoginScreen({ navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Country Selection Modal */}
-      <Modal visible={showCountryModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowCountryModal(false)} />
-          <View style={[styles.modalSheet, { backgroundColor: theme.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Select Country</Text>
-              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
-                <Text style={[styles.closeBtn, { color: theme.primary }]}>Close</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={COUNTRIES}
-              keyExtractor={item => item.name}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={[styles.countryItem, { borderBottomColor: theme.border }]}
-                  onPress={() => {
-                    setSelectedCountry(item);
-                    setShowCountryModal(false);
-                  }}
-                >
-                  <Text style={styles.countryFlagLarge}>{item.flag}</Text>
-                  <Text style={[styles.countryName, { color: theme.text }]}>{item.name}</Text>
-                  <Text style={[styles.countryCodeVal, { color: theme.textSecondary }]}>{item.code}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Premium OTP Verification Overlay Modal */}
-      <Modal visible={showOtpModal} animationType="fade" transparent onRequestClose={() => setShowOtpModal(false)}>
-        <View style={styles.otpModalOverlay}>
-          <View style={[styles.otpModalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={styles.otpIconWrap}>
-              <ShieldCheck size={48} color={theme.primary} />
-            </View>
-            <Text style={[styles.otpTitle, { color: theme.text }]}>Security Verification</Text>
-            <Text style={[styles.otpSubtitle, { color: theme.textSecondary }]}>
-              Enter the 6-digit verification code sent to {selectedCountry.code} {phone.slice(-4).padStart(phone.length, '•')}
-            </Text>
-
-            <View style={styles.otpInputGroup}>
-              <TextInput
-                style={[styles.otpTextInput, { color: theme.text, borderColor: otpError ? theme.error : theme.border, backgroundColor: theme.background }]}
-                value={otpInput}
-                onChangeText={v => {
-                  setOtpInput(v.replace(/[^0-9]/g, '').slice(0, 6));
-                  if (otpError) setOtpError('');
-                }}
-                keyboardType="number-pad"
-                maxLength={6}
-                placeholder="0 0 0 0 0 0"
-                placeholderTextColor={theme.textSecondary}
-                textAlign="center"
-                autoFocus={true}
-              />
-              {otpError ? <Text style={[styles.otpErrorText, { color: theme.error }]}>{otpError}</Text> : null}
-            </View>
-
-            <View style={styles.otpTimerRow}>
-              {timer > 0 ? (
-                <Text style={[styles.otpTimerTxt, { color: theme.textSecondary }]}>
-                  Resend code in <Text style={{ color: theme.primary, fontWeight: '700' }}>{timer}s</Text>
-                </Text>
-              ) : (
-                <TouchableOpacity onPress={handleResendOtp}>
-                  <Text style={[styles.otpResendBtn, { color: theme.primary }]}>Resend Code via SMS</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.otpActionButtons}>
-              <TouchableOpacity 
-                style={[styles.otpVerifyBtn, { backgroundColor: theme.primary }]} 
-                onPress={handleVerifyOtp}
-                disabled={otpVerifying}
-              >
-                {otpVerifying ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.otpVerifyBtnTxt}>Verify & Login</Text>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.otpCancelBtn, { borderColor: theme.border }]} 
-                onPress={() => {
-                  setShowOtpModal(false);
-                  clearInterval(timerRef.current);
-                }}
-              >
-                <Text style={[styles.otpCancelBtnTxt, { color: theme.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* OTP verification removed in favor of standard password flow */}
     </SafeAreaView>
   );
 }
@@ -365,7 +223,27 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, color: THEME_COLORS.textSecondary, marginTop: 6, fontWeight: '500' },
 
   form: { flex: 1 },
-  phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 6 },
+  roleSelectorContainer: {
+    flexDirection: 'row',
+    borderRadius: 25,
+    borderWidth: 1,
+    padding: 4,
+    marginBottom: 24,
+    height: 50,
+  },
+  roleTab: {
+    flex: 1,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleTabText: {
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 24 },
   countryPicker: {
     height: 48, paddingHorizontal: 12, borderRadius: 24,
     borderWidth: 1, borderColor: THEME_COLORS.border,
@@ -375,9 +253,9 @@ const styles = StyleSheet.create({
   flagTxt: { fontSize: 16 },
   countryTxt: { fontSize: 14, fontWeight: '700', color: THEME_COLORS.text },
 
-  forgotRow: { alignSelf: 'flex-end', marginBottom: 24, marginTop: -8 },
-  forgotTxt: { color: THEME_COLORS.primary, fontSize: 13, fontWeight: '700' },
   loginBtn: { width: '100%', borderRadius: 14 },
+  forgotPwdContainer: { alignSelf: 'flex-end', marginBottom: 24, marginTop: -4 },
+  forgotPwdTxt: { fontSize: 13, fontWeight: '800' },
 
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24, marginBottom: 32 },
   footerTxt: { color: THEME_COLORS.textSecondary, fontSize: 14 },

@@ -12,12 +12,15 @@ import { productService, getImageUrl } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useNotifications } from '../context/NotificationContext';
 import { BackIcon } from '../components/CustomIcons';
+import { useAuth } from '../context/AuthContext';
 
 const TRENDING = ['Blinds', 'Honeycomb', 'Curtains', 'PVC Mesh', 'Wallpaper', 'Acoustic Panel'];
 
 export default function SearchScreen({ navigation }) {
   const { addToCart } = useCart();
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
+  const userRole = user?.role?.toLowerCase();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -182,10 +185,13 @@ export default function SearchScreen({ navigation }) {
                 product={item}
                 onPress={() => navigation.navigate('ProductDetail', { productId: item._id || item.id })}
                 onAddToCart={() => {
+                  const finalPrice = userRole === 'dealer'
+                    ? (typeof item.dealerPrice === 'number' ? item.dealerPrice : item.price || 0)
+                    : (typeof item.retailPrice === 'number' ? item.retailPrice : item.price || 0);
                   addToCart({
                     id: item._id || item.id,
                     name: item.name,
-                    price: item.price || 0,
+                    price: finalPrice,
                     image: getImageUrl(item.image || item.thumbnail || item.img || (item.images && item.images[0]))
                   }, 1);
                   addNotification('cart', 'Added to Cart', `${item.name} added successfully!`, 'Cart');

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Animated, Platform, StyleSheet, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 const CR_APP_THEME = {
@@ -52,7 +52,7 @@ import TabNavigator from './src/navigation/TabNavigator';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { CartProvider } from './src/context/CartContext';
 import { WishlistProvider } from './src/context/WishlistContext';
-import { NotificationProvider } from './src/context/NotificationContext';
+import { NotificationProvider, useNotifications } from './src/context/NotificationContext';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
@@ -100,10 +100,38 @@ function Navigation() {
 
 function AppContent() {
   const { isDarkMode } = useTheme();
+  const { toast, getIcon, getBgColor, toastOpacity, toastY } = useNotifications();
+
+  // Warm up the Render backend in the background on startup
+  useEffect(() => {
+    console.log('[Wakeup] Pinging Render backend in background to warm up instance...');
+    fetch('https://cromsen-backend.onrender.com/api/users').catch(err => {
+      console.log('[Wakeup] Background warm-up ping logged:', err.message);
+    });
+  }, []);
+
   return (
     <NavigationContainer>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
       <Navigation />
+      
+      {toast && (
+        <Animated.View 
+          style={[
+            styles.globalToastContainer, 
+            { 
+              opacity: toastOpacity,
+              transform: [{ translateY: toastY }],
+              backgroundColor: getBgColor(toast.type)
+            }
+          ]}
+        >
+          <View style={styles.globalToastIcon}>
+            {getIcon(toast.type)}
+          </View>
+          <Text style={styles.globalToastText} numberOfLines={2}>{toast.message}</Text>
+        </Animated.View>
+      )}
     </NavigationContainer>
   );
 }
@@ -125,3 +153,33 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  globalToastContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 70 : 50,
+    left: 20,
+    right: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 9999, // Ensure top-priority overlay on Android
+    zIndex: 999999,  // Ensure top-priority overlay on iOS
+  },
+  globalToastIcon: {
+    marginRight: 12,
+  },
+  globalToastText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+    lineHeight: 20,
+  },
+});

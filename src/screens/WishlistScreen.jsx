@@ -11,17 +11,28 @@ import { useCart } from '../context/CartContext';
 import { useNotifications } from '../context/NotificationContext';
 import { getImageUrl, sanitizeData } from '../services/api';
 import { BackIcon, HeartIcon } from '../components/CustomIcons';
+import { useAuth } from '../context/AuthContext';
 
 export default function WishlistScreen({ navigation }) {
   const { wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
+  const userRole = user?.role?.toLowerCase();
+
+  const getRolePrice = (i) => {
+    if (userRole === 'dealer') {
+      return typeof i.dealerPrice === 'number' ? i.dealerPrice : i.price || 0;
+    }
+    return typeof i.retailPrice === 'number' ? i.retailPrice : i.price || 0;
+  };
 
   const moveToCart = (item) => {
+    const finalPrice = getRolePrice(item);
     addToCart({
       id: item.id,
       name: item.name,
-      price: item.price,
+      price: finalPrice,
       image: item.image,
       variant: '',
     }, 1);
@@ -74,7 +85,7 @@ export default function WishlistScreen({ navigation }) {
               />
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={2}>{sanitizeData(item.name, 'Product')}</Text>
-                <Text style={styles.price}>₹{item.price?.toLocaleString()}</Text>
+                <Text style={styles.price}>₹{getRolePrice(item)?.toLocaleString()}</Text>
                 <TouchableOpacity style={styles.cartBtn} onPress={() => moveToCart(item)}>
                   <ShoppingBag size={13} color="#FFF" />
                   <Text style={styles.cartBtnTxt}>Add to Cart</Text>

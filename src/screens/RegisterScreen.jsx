@@ -31,12 +31,14 @@ export default function RegisterScreen({ navigation }) {
   
   // Multi-Step Registration States
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', alternatePhone: '', password: '', confirmPassword: '' });
+  const [selectedRole, setSelectedRole] = useState('dealer'); // 'dealer' or 'retailer'
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [showCountryModal, setShowCountryModal] = useState(false);
-  const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // OTP Verification States
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -71,10 +73,17 @@ export default function RegisterScreen({ navigation }) {
 
   const validateStep2 = () => {
     const e = {};
+    if (!form.name.trim()) e.name = 'Full name is required';
+    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
+    if (form.alternatePhone && !/^\d{10}$/.test(form.alternatePhone.replace(/\D/g, ''))) {
+      e.alternatePhone = 'Enter a valid 10-digit alternate number';
+    }
     if (!form.password) e.password = 'Password is required';
     else if (form.password.length < 6) e.password = 'Password must be at least 6 characters';
-    if (form.password !== form.confirm) e.confirm = 'Passwords do not match';
-    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
+    
+    if (form.password !== form.confirmPassword) {
+      e.confirmPassword = 'Passwords do not match';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -118,13 +127,17 @@ export default function RegisterScreen({ navigation }) {
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
           const matchedUser = users.find(u => {
             const dbDigits = (u.phone || '').replace(/\D/g, '');
-            if (dbDigits.length >= 10 && cleanPhone.length >= 10) {
-              return dbDigits.slice(-10) === cleanPhone.slice(-10);
-            }
-            return dbDigits === cleanPhone;
+            const isPhoneMatch = dbDigits.length >= 10 && cleanPhone.length >= 10
+              ? dbDigits.slice(-10) === cleanPhone.slice(-10)
+              : dbDigits === cleanPhone;
+            const dbRole = (u.role || '').toLowerCase();
+            return isPhoneMatch && dbRole === selectedRole.toLowerCase();
           });
           if (matchedUser) {
-            Alert.alert('Registration Failed', 'An account with this mobile number already exists.');
+            Alert.alert(
+              'Registration Failed',
+              `An account with this mobile number already exists as a ${selectedRole === 'dealer' ? 'Dealer' : 'Retailer'}.`
+            );
             setLoading(false);
             return;
           }
@@ -168,16 +181,18 @@ export default function RegisterScreen({ navigation }) {
       const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
 
       const regData = { 
-        name: form.name.trim() || 'Cromsen Member', 
+        name: form.name.trim(), 
         phone: cleanPhone, 
         countryCode: selectedCountry.code, 
         password: form.password,
-        email: form.email.trim() || `${cleanPhone}@cromsen.com` 
+        email: form.email.trim() || `${cleanPhone}@cromsen.com`,
+        role: selectedRole,
+        alternateNumber: form.alternatePhone ? form.alternatePhone.replace(/\D/g, '') : '',
       };
 
       const response = await authService.register(regData);
       
-      // Auto-login after successful registration, merging form data to guarantee full session persistence
+      // Auto-login after successful registration
       const userData = response.user || response.data || response;
       const mergedUserData = {
         ...regData,
@@ -189,7 +204,11 @@ export default function RegisterScreen({ navigation }) {
         { text: 'Great!', onPress: () => navigation.replace('Main') }
       ]);
     } catch (err) {
-      Alert.alert('Registration Failed', err.message || 'Registration failed.');
+      const isNetworkErr = err.message?.toLowerCase().includes('network') || err.message?.toLowerCase().includes('fetch');
+      const errorMsg = isNetworkErr 
+        ? 'Unable to connect to the server. The database server may be warming up (Render free tier) or your device is offline. Please wait 30 seconds and try again.'
+        : (err.message || 'Registration failed.');
+      Alert.alert('Connection Alert', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -199,8 +218,6 @@ export default function RegisterScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        
 
           {/* Header */}
           <View style={styles.header}>
@@ -213,7 +230,7 @@ export default function RegisterScreen({ navigation }) {
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               {step === 1 
                 ? 'Verify your mobile number with a secure OTP to start registration' 
-                : 'Set up your name, email, and password to finish signing up'
+                : 'Set up your details to finish signing up'
               }
             </Text>
           </View>
@@ -232,6 +249,42 @@ export default function RegisterScreen({ navigation }) {
           <View style={styles.form}>
             {step === 1 ? (
               <>
+                {/* Dealer vs Retailer Role Selector */}
+                <View style={[styles.roleSelectorContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleTab,
+                      selectedRole === 'dealer' && { backgroundColor: theme.primary }
+                    ]}
+                    onPress={() => setSelectedRole('dealer')}
+                  >
+                    <Text
+                      style={[
+                        styles.roleTabText,
+                        { color: selectedRole === 'dealer' ? '#FFF' : theme.textSecondary }
+                      ]}
+                    >
+                      Dealer Register
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleTab,
+                      selectedRole === 'retailer' && { backgroundColor: theme.primary }
+                    ]}
+                    onPress={() => setSelectedRole('retailer')}
+                  >
+                    <Text
+                      style={[
+                        styles.roleTabText,
+                        { color: selectedRole === 'retailer' ? '#FFF' : theme.textSecondary }
+                      ]}
+                    >
+                      Retailer Register
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.phoneRow}>
                   <TouchableOpacity 
                     style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} 
@@ -291,30 +344,37 @@ export default function RegisterScreen({ navigation }) {
                 />
 
                 <AppInput
+                  label="Alternate Number (Optional)"
+                  placeholder="Enter alternate mobile number"
+                  value={form.alternatePhone}
+                  onChangeText={v => set('alternatePhone', v.replace(/[^0-9]/g, ''))}
+                  keyboardType="phone-pad"
+                  error={errors.alternatePhone}
+                  leftIcon={<Phone size={18} color={theme.textSecondary} />}
+                />
+
+                <AppInput
                   label="Password"
-                  placeholder="Create a strong password"
+                  placeholder="Enter your password"
                   value={form.password}
                   onChangeText={v => set('password', v)}
-                  secureTextEntry={!showPwd}
+                  secureTextEntry={!showPassword}
                   error={errors.password}
                   leftIcon={<Lock size={18} color={theme.textSecondary} />}
-                  rightIcon={showPwd ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
-                  onRightIconPress={() => setShowPwd(v => !v)}
-                  hint="Minimum 6 characters"
-                  contextMenuHidden={true}
-                  selectTextOnFocus={false}
+                  rightIcon={showPassword ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+                  onRightIconPress={() => setShowPassword(!showPassword)}
                 />
-                
+
                 <AppInput
                   label="Confirm Password"
-                  placeholder="Re-enter your password"
-                  value={form.confirm}
-                  onChangeText={v => set('confirm', v)}
-                  secureTextEntry={!showPwd}
-                  error={errors.confirm}
+                  placeholder="Confirm your password"
+                  value={form.confirmPassword}
+                  onChangeText={v => set('confirmPassword', v)}
+                  secureTextEntry={!showConfirmPassword}
+                  error={errors.confirmPassword}
                   leftIcon={<Lock size={18} color={theme.textSecondary} />}
-                  contextMenuHidden={true}
-                  selectTextOnFocus={false}
+                  rightIcon={showConfirmPassword ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+                  onRightIconPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 />
 
                 <Text style={[styles.terms, { color: theme.textSecondary }]}>
@@ -501,7 +561,27 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
+  phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 24 },
+  roleSelectorContainer: {
+    flexDirection: 'row',
+    borderRadius: 25,
+    borderWidth: 1,
+    padding: 4,
+    marginBottom: 24,
+    height: 50,
+  },
+  roleTab: {
+    flex: 1,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleTabText: {
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   countryPicker: {
     height: 48, paddingHorizontal: 10, borderRadius: 24,
     borderWidth: 1, borderColor: THEME_COLORS.border,

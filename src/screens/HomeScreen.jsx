@@ -74,7 +74,17 @@ export default function HomeScreen({ navigation, route }) {
   const { cartCount, addToCart } = useCart();
   const { isDarkMode, theme } = useTheme();
   const bannerRef = React.useRef(null);
-  const { notifications, addNotification, checkOrderUpdates, checkProductUpdates } = useNotifications();
+  const { 
+    notifications, 
+    addNotification, 
+    checkOrderUpdates, 
+    checkProductUpdates,
+    toast, 
+    getIcon, 
+    getBgColor, 
+    toastOpacity, 
+    toastY 
+  } = useNotifications();
 
   // Show success toast when redirected from a successful payment
   useEffect(() => {
@@ -85,7 +95,7 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, [route?.params?.paymentSuccess]);
 
-  // Global Order Update Polling
+  // 1. Global Order & Product Update Polling
   useEffect(() => {
     if (user) {
       const userId = user._id || user.id;
@@ -102,19 +112,24 @@ export default function HomeScreen({ navigation, route }) {
         silentRefresh();
       }, 15000);
 
-      // Auto-scroll for banner
-      const bannerTimer = setInterval(() => {
-        const nextIndex = (activeBanner + 1) % BANNER_DATA.length;
-        bannerRef.current?.scrollTo({ x: nextIndex * (width - 40), animated: true });
-        setActiveBanner(nextIndex);
-      }, 5000);
-
       return () => {
         clearInterval(pollInterval);
-        clearInterval(bannerTimer);
       };
     }
-  }, [user, checkOrderUpdates, checkProductUpdates, activeBanner]);
+  }, [user, checkOrderUpdates, checkProductUpdates]);
+
+  // 2. Auto-scroll for Banner
+  useEffect(() => {
+    const bannerTimer = setInterval(() => {
+      setActiveBanner(prev => {
+        const nextIndex = (prev + 1) % BANNER_DATA.length;
+        bannerRef.current?.scrollTo({ x: nextIndex * (width - 40), animated: true });
+        return nextIndex;
+      });
+    }, 5000);
+
+    return () => clearInterval(bannerTimer);
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -234,8 +249,8 @@ export default function HomeScreen({ navigation, route }) {
                 setActiveBanner(index);
               }}
             >
-              {BANNER_DATA.map((item) => (
-                <View key={item.id} style={{ width: width - 40, height: 200 }}>
+              {BANNER_DATA.map((item, index) => (
+                <View key={item.id ? `${item.id}-${index}` : index} style={{ width: width - 40, height: 200 }}>
                   <Image
                     source={{ uri: item.image }}
                     style={[styles.heroBanner, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
@@ -288,17 +303,20 @@ export default function HomeScreen({ navigation, route }) {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.bsScroll}
               >
-                {products.slice(0, 5).map((p) => (
+                {products.slice(0, 5).map((p, index) => (
                   <ProductCard
-                    key={p._id || p.id}
+                    key={p._id || p.id ? `${p._id || p.id}-${index}` : index}
                     product={p}
                     style={{ marginRight: 14 }}
                     onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                     onAddToCart={() => {
+                      const finalPrice = user?.role?.toLowerCase() === 'dealer'
+                        ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
+                        : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
                       addToCart({
                         id: p._id || p.id,
                         name: p.name,
-                        price: p.price || 0,
+                        price: finalPrice,
                         image: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0]))
                       }, 1);
                       addNotification('cart', 'Added to Cart', `${p.name} added successfully!`, 'Cart');
@@ -323,9 +341,9 @@ export default function HomeScreen({ navigation, route }) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.catScroll}
             >
-              {displayCategories.map((cat) => (
+              {displayCategories.map((cat, index) => (
                 <TouchableOpacity
-                  key={cat.id}
+                  key={cat.id ? `${cat.id}-${index}` : index}
                   style={styles.catItem}
                   onPress={() => {
                     if (cat.id === 'all') {
@@ -377,27 +395,32 @@ export default function HomeScreen({ navigation, route }) {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.bsScroll}
               >
-                {trendingProducts.map((p) => (
-                  <TouchableOpacity
-                    key={p._id || p.id}
-                    style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0, overflow: 'hidden' }]}
-                    onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
-                  >
-                    <Image
-                      source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl) }}
-                      style={{ width: '100%', height: '100%', borderRadius: 12, position: 'absolute' }}
-                      resizeMode="cover"
-                    />
-                      <View style={[styles.heroOverlay, { backgroundColor: 'transparent', borderRadius: 12, padding: 15 }]}>
-                        <View style={{ backgroundColor: 'rgba(255,255,255,0.85)', padding: 10, borderRadius: 10, alignSelf: 'flex-start' }}>
-                          <Text style={[styles.heroTitle, { fontSize: 16, color: THEME_COLORS.text, marginBottom: 4 }]}>
-                            {sanitizeData(p.name, 'Product')}
-                          </Text>
-                          <Text style={[styles.heroBtnTxt, { fontSize: 13, color: '#1E3C83' }]}>₹{p.price?.toLocaleString()}</Text>
+                {trendingProducts.map((p, index) => {
+                  const pPrice = user?.role?.toLowerCase() === 'dealer'
+                    ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
+                    : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+                  return (
+                    <TouchableOpacity
+                      key={p._id || p.id ? `${p._id || p.id}-${index}` : index}
+                      style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0, overflow: 'hidden' }]}
+                      onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
+                    >
+                      <Image
+                        source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl) }}
+                        style={{ width: '100%', height: '100%', borderRadius: 12, position: 'absolute' }}
+                        resizeMode="cover"
+                      />
+                        <View style={[styles.heroOverlay, { backgroundColor: 'transparent', borderRadius: 12, padding: 15 }]}>
+                          <View style={{ backgroundColor: 'rgba(255,255,255,0.85)', padding: 10, borderRadius: 10, alignSelf: 'flex-start' }}>
+                            <Text style={[styles.heroTitle, { fontSize: 16, color: THEME_COLORS.text, marginBottom: 4 }]}>
+                              {sanitizeData(p.name, 'Product')}
+                            </Text>
+                            <Text style={[styles.heroBtnTxt, { fontSize: 13, color: '#1E3C83' }]}>₹{pPrice?.toLocaleString()}</Text>
+                          </View>
                         </View>
-                      </View>
-                  </TouchableOpacity>
-                ))}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
           </View>

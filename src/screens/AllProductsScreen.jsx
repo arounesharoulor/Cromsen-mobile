@@ -13,10 +13,13 @@ import { useNotifications } from '../context/NotificationContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from 'react-native';
 import { BackIcon } from '../components/CustomIcons';
+import { useAuth } from '../context/AuthContext';
 
 export default function AllProductsScreen({ navigation, route }) {
   const { addToCart } = useCart();
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
+  const userRole = user?.role?.toLowerCase();
   const { title = 'Products', category, categoryId } = route.params || {};
   const [products, setProducts] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -31,17 +34,24 @@ export default function AllProductsScreen({ navigation, route }) {
     }, [category, categoryId])
   );
 
+  const getRolePrice = React.useCallback((p) => {
+    if (userRole === 'dealer') {
+      return typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0;
+    }
+    return typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0;
+  }, [userRole]);
+
   const applyFilter = React.useCallback(() => {
     let list = [...(products || [])];
     if (search.trim()) {
 
       list = list.filter(p => sanitizeData(p.name).toLowerCase().includes(search.toLowerCase()));
     }
-    if (sortBy === 'price_asc') list.sort((a, b) => (a.price || 0) - (b.price || 0));
-    else if (sortBy === 'price_desc') list.sort((a, b) => (b.price || 0) - (a.price || 0));
+    if (sortBy === 'price_asc') list.sort((a, b) => getRolePrice(a) - getRolePrice(b));
+    else if (sortBy === 'price_desc') list.sort((a, b) => getRolePrice(b) - getRolePrice(a));
     else if (sortBy === 'rating') list.sort((a, b) => (b.ratings || 0) - (a.ratings || 0));
     setFiltered(list);
-  }, [search, products, sortBy]);
+  }, [search, products, sortBy, getRolePrice]);
 
   useEffect(() => {
     applyFilter();
@@ -159,10 +169,11 @@ export default function AllProductsScreen({ navigation, route }) {
               product={item}
               onPress={() => navigation.navigate('ProductDetail', { productId: item._id || item.id })}
               onAddToCart={() => {
+                const finalPrice = getRolePrice(item);
                 addToCart({
                   id: item._id || item.id,
                   name: item.name,
-                  price: item.price || 0,
+                  price: finalPrice,
                   image: getImageUrl(item.image || item.thumbnail || item.img || (item.images && item.images[0]))
                 }, 1);
                 addNotification('cart', 'Added to Cart', `${item.name} added successfully!`, 'Cart');

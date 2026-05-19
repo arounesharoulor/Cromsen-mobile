@@ -11,6 +11,7 @@ import { categoryService, productService, getImageUrl, sanitizeData } from '../s
 import { CategoryIcon, BoldPlusIcon, OtherMachineriesIcon, PvcDoorsIcon, UmbrellaIcon, UpvcHardwareIcon, UpvcToolsIcon, HoneycombIcon, MagicScreenIcon, CurtainsIcon, MosquitoIcon, FencingIcon, BalconyIcon, PvcCurtainIcon, PleatedIcon, CabinetHingesIcon } from '../components/CustomIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,6 +45,8 @@ export default function CategoryScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const { isDarkMode, theme } = useTheme();
+  const { user } = useAuth();
+  const userRole = user?.role?.toLowerCase();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -179,19 +182,24 @@ export default function CategoryScreen({ navigation }) {
                     <ActivityIndicator color={theme.primary} style={{ marginTop: 20 }} />
                   ) : products.length > 0 ? (
                     <View style={styles.grid}>
-                      {products.map((p, idx) => (
-                        <TouchableOpacity 
-                          key={p._id || p.id || idx} 
-                          style={styles.gridItem}
-                          onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
-                        >
-                          <Image source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl || selectedCat.image) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
-                          <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={2}>{sanitizeData(p.name)}</Text>
-                          {(p.price !== undefined && p.price !== null) && (
-                            <Text style={[styles.gridPrice, { color: theme.primary }]}>₹{Number(p.price).toLocaleString()}</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))}
+                      {products.map((p, idx) => {
+                        const pPrice = userRole === 'dealer'
+                          ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
+                          : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+                        return (
+                          <TouchableOpacity 
+                            key={p._id || p.id || idx} 
+                            style={styles.gridItem}
+                            onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
+                          >
+                            <Image source={{ uri: getImageUrl(p.image || (p.images && p.images[0]) || p.thumbnail || p.img || p.imageUrl || selectedCat.image) }} style={[styles.gridImg, { backgroundColor: theme.surface }]} />
+                            <Text style={[styles.gridName, { color: theme.text }]} numberOfLines={2}>{sanitizeData(p.name)}</Text>
+                            {(pPrice !== undefined && pPrice !== null) && (
+                              <Text style={[styles.gridPrice, { color: theme.primary }]}>₹{Number(pPrice).toLocaleString()}</Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   ) : (
                     <Text style={[styles.emptyTxt, { color: theme.textSecondary }]}>No items in this category</Text>

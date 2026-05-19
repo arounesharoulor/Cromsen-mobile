@@ -48,6 +48,44 @@ export const NotificationProvider = ({ children }) => {
   }, [notifications, currentUserId]);
 
   const addNotification = useCallback((type, title, message, screen = null, params = null) => {
+    // 1. Normalize and identify notification categories (case-insensitive)
+    const notifTitle = (title || '').toLowerCase();
+    const notifType = (type || '').toLowerCase();
+
+    const isCartNotif = notifType === 'cart' || notifTitle.includes('cart');
+    const isWishlistNotif = notifType === 'wishlist' || notifTitle.includes('wishlist');
+    const isNewArrivalsNotif = notifTitle.includes('new arrivals') || notifTitle.includes('new arrival');
+    const isProductUpdateNotif = notifTitle.includes('product') || 
+                                 notifTitle.includes('price') || 
+                                 notifTitle.includes('status') || 
+                                 notifTitle.includes('stock') ||
+                                 notifTitle.includes('out of stock') || 
+                                 notifTitle.includes('back in stock') ||
+                                 notifTitle.includes('category');
+
+    // Order Status Notification Filter (Shipped, Delivered, Processing, Cancelled, Pending)
+    const isOrderStatusNotif = notifTitle.includes('order') || 
+                               notifTitle.includes('ship') || 
+                               notifTitle.includes('deliver') || 
+                               notifTitle.includes('process') || 
+                               notifTitle.includes('cancel') ||
+                               notifTitle.includes('pending');
+
+    // 2. Strict Filter Check: Only allow designated notifications
+    const isAllowed = isCartNotif || isWishlistNotif || isNewArrivalsNotif || isProductUpdateNotif || isOrderStatusNotif;
+
+    // Toast-Only overrides (e.g. Order Placed notification should come as toast, but not clutter history)
+    const isOrderPlaced = notifTitle.includes('order placed');
+    if (isOrderPlaced) {
+      showToast(type, title || message);
+      return;
+    }
+
+    if (!isAllowed) {
+      console.log(`[Notification Filter] Ignored disallowed category: "${title}" (Type: ${type})`);
+      return;
+    }
+
     const newNotif = {
       id: Date.now().toString(),
       type,
@@ -75,11 +113,11 @@ export const NotificationProvider = ({ children }) => {
       Animated.timing(toastOpacity, {
         toValue: 1,
         duration: 400,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.spring(toastY, {
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
         bounciness: 8,
         speed: 12,
       }),
@@ -94,7 +132,7 @@ export const NotificationProvider = ({ children }) => {
     Animated.timing(toastOpacity, {
       toValue: 0,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(() => {
       setToast(null);
     });
@@ -192,7 +230,7 @@ export const NotificationProvider = ({ children }) => {
 
   const checkProductUpdates = useCallback(async () => {
     try {
-      const data = await productService.getProducts({ limit: 20 });
+      const data = await productService.getProducts({ limit: 100 });
       const backendProducts = data.products || data.data || (Array.isArray(data) ? data : []);
       if (backendProducts.length === 0) return;
 
@@ -221,19 +259,7 @@ export const NotificationProvider = ({ children }) => {
           const bpId = String(bp._id || bp.id);
           const lp = localProducts.find(p => String(p._id || p.id) === bpId);
           if (lp) {
-            // 1. Detect price changes
-            if (Number(lp.price) !== Number(bp.price)) {
-              console.log(`[Product Polling] Price change for ${bp.name}`);
-              addNotification(
-                'info',
-                'Price Updated 🏷️',
-                `The price for "${bp.name}" has been updated. View details.`,
-                'ProductDetail',
-                { productId: bpId }
-              );
-            }
-
-            // 2. Detect product status change (Active/Inactive or In Stock/Out of Stock)
+            // 1. Detect product status change (Active/Inactive or In Stock/Out of Stock)
             const oldStatus = String(lp.status || (lp.inStock !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
             const newStatus = String(bp.status || (bp.inStock !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
 
@@ -255,6 +281,38 @@ export const NotificationProvider = ({ children }) => {
               }
 
               addNotification(type, title, msg, 'ProductDetail', { productId: bpId });
+            }
+
+            // 2. Detect other admin-side modifications (name, description, category)
+            const hasNameChange = lp.name && bp.name && lp.name !== bp.name;
+            const hasDescChange = lp.description && bp.description && lp.description !== bp.description;
+            
+            // Extract flat string keys if category is populated as an object
+            const lpCatStr = typeof lp.category === 'object' && lp.category ? String(lp.category._id || lp.category.name || '') : String(lp.category || '');
+            const bpCatStr = typeof bp.category === 'object' && bp.category ? String(bp.category._id || bp.category.name || '') : String(bp.category || '');
+            const hasCategoryChange = lp.category && bp.category && lpCatStr !== bpCatStr;
+
+            if (hasNameChange || hasDescChange || hasCategoryChange) {
+              console.log(`[Product Polling] Admin modifications detected for ${bp.name}`);
+              
+              let updateType = 'Product Updated 📦';
+              let updateMsg = `The product details for "${bp.name}" have been updated by the admin.`;
+              
+              if (hasNameChange) {
+                updateType = 'Product Renamed 🏷️';
+                updateMsg = `"${lp.name}" has been renamed to "${bp.name}".`;
+              } else if (hasCategoryChange) {
+                updateType = 'Product Category Updated 📁';
+                updateMsg = `"${bp.name}" category is now updated.`;
+              }
+
+              addNotification(
+                'info',
+                updateType,
+                updateMsg,
+                'ProductDetail',
+                { productId: bpId }
+              );
             }
           }
         });
@@ -292,27 +350,10 @@ export const NotificationProvider = ({ children }) => {
   return (
     <NotificationContext.Provider value={{ 
       notifications, addNotification, markAsRead, removeNotification, clearAll, 
-      checkOrderUpdates, checkProductUpdates 
+      checkOrderUpdates, checkProductUpdates,
+      toast, getIcon, getBgColor, toastOpacity, toastY
     }}>
       {children}
-      
-      {toast && (
-        <Animated.View 
-          style={[
-            styles.toastContainer, 
-            { 
-              opacity: toastOpacity,
-              transform: [{ translateY: toastY }],
-              backgroundColor: getBgColor(toast.type)
-            }
-          ]}
-        >
-          <View style={styles.toastIcon}>
-            {getIcon(toast.type)}
-          </View>
-          <Text style={styles.toastText} numberOfLines={2}>{toast.message}</Text>
-        </Animated.View>
-      )}
     </NotificationContext.Provider>
   );
 };
@@ -338,8 +379,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-    elevation: 10,
-    zIndex: 99999,
+    elevation: 999,
+    zIndex: 999999,
   },
   toastIcon: {
     marginRight: 12,

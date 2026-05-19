@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield, ChevronDown, Search, Pencil, Eye, EyeOff } from 'lucide-react-native';
+import { User, Mail, Phone, Lock, MapPin, ArrowLeft, Camera, Save, Bell, Moon, Tag, Globe, Shield, ChevronDown, Search, Pencil, Eye, EyeOff, Zap, FileText, Percent } from 'lucide-react-native';
 
 import { THEME_COLORS } from '../theme';
 import { useAuth } from '../context/AuthContext';
@@ -62,8 +62,29 @@ export default function SettingsScreen({ navigation }) {
   // App Settings States
   const [pushEnabled, setPushEnabled] = useState(true);
   const [promoEnabled, setPromoEnabled] = useState(false);
+  const [oneClickEnabled, setOneClickEnabled] = useState(false);
+  const [autoInvoiceEnabled, setAutoInvoiceEnabled] = useState(true);
+  const [gstInclusiveEnabled, setGstInclusiveEnabled] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const { isDarkMode, toggleTheme, theme } = useTheme();
+  const { isDarkMode, theme } = useTheme();
+
+  const handleToggleOneClick = async (val) => {
+    setOneClickEnabled(val);
+    await AsyncStorage.setItem('@Pref_OneClick', JSON.stringify(val));
+    addNotification('profile', 'Preferences Updated ✓', `One-click checkout is now ${val ? 'enabled' : 'disabled'}.`, 'Settings');
+  };
+
+  const handleToggleAutoInvoice = async (val) => {
+    setAutoInvoiceEnabled(val);
+    await AsyncStorage.setItem('@Pref_AutoInvoice', JSON.stringify(val));
+    addNotification('profile', 'Preferences Updated ✓', `Auto-email invoices is now ${val ? 'enabled' : 'disabled'}.`, 'Settings');
+  };
+
+  const handleToggleGSTInclusive = async (val) => {
+    setGstInclusiveEnabled(val);
+    await AsyncStorage.setItem('@Pref_GSTInclusive', JSON.stringify(val));
+    addNotification('profile', 'Preferences Updated ✓', `GST display format is now ${val ? 'inclusive' : 'exclusive'}.`, 'Settings');
+  };
 
   const currentUserId = user?._id || user?.id;
 
@@ -140,6 +161,19 @@ export default function SettingsScreen({ navigation }) {
             }
           } catch (err) {
             console.warn('Backend address fetch failed:', err);
+          }
+          
+          // 4. Load application B2B preferences
+          try {
+            const oneClick = await AsyncStorage.getItem('@Pref_OneClick');
+            const autoInvoice = await AsyncStorage.getItem('@Pref_AutoInvoice');
+            const gstInclusive = await AsyncStorage.getItem('@Pref_GSTInclusive');
+
+            if (oneClick !== null) setOneClickEnabled(JSON.parse(oneClick));
+            if (autoInvoice !== null) setAutoInvoiceEnabled(JSON.parse(autoInvoice));
+            if (gstInclusive !== null) setGstInclusiveEnabled(JSON.parse(gstInclusive));
+          } catch (prefErr) {
+            console.warn('Preferences load failed:', prefErr);
           }
           
         } catch (e) {
@@ -427,15 +461,47 @@ export default function SettingsScreen({ navigation }) {
 
             <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: theme.border }]}>
               <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
-                <Moon size={18} color={theme.primary} />
+                <Zap size={18} color={theme.primary} />
               </View>
               <View style={styles.settingTextWrap}>
-                <Text style={[styles.settingTitle, { color: theme.text }]}>Dark Mode</Text>
-                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Match system theme</Text>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>One-Click Checkout</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Bypass cart screens for instant orders</Text>
               </View>
               <Switch
-                value={isDarkMode}
-                onValueChange={toggleTheme}
+                value={oneClickEnabled}
+                onValueChange={handleToggleOneClick}
+                trackColor={{ false: theme.border, true: theme.secondary }}
+                thumbColor="#FFF"
+              />
+            </View>
+
+            <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: theme.border }]}>
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
+                <FileText size={18} color={theme.primary} />
+              </View>
+              <View style={styles.settingTextWrap}>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Auto-Email Invoice</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Receive PDF invoices in Gmail instantly</Text>
+              </View>
+              <Switch
+                value={autoInvoiceEnabled}
+                onValueChange={handleToggleAutoInvoice}
+                trackColor={{ false: theme.border, true: theme.secondary }}
+                thumbColor="#FFF"
+              />
+            </View>
+
+            <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: theme.border }]}>
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.background }]}>
+                <Percent size={18} color={theme.primary} />
+              </View>
+              <View style={styles.settingTextWrap}>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Show Price with GST</Text>
+                <Text style={[styles.settingSub, { color: theme.textSecondary }]}>Show prices inclusive of 18% GST</Text>
+              </View>
+              <Switch
+                value={gstInclusiveEnabled}
+                onValueChange={handleToggleGSTInclusive}
                 trackColor={{ false: theme.border, true: theme.secondary }}
                 thumbColor="#FFF"
               />

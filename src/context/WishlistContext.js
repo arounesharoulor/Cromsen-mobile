@@ -76,6 +76,8 @@ export function WishlistProvider({ children }) {
         id: product._id || product.id,
         name: product.name,
         price: product.price,
+        dealerPrice: product.dealerPrice,
+        retailPrice: product.retailPrice,
         image: product.image || product.images?.[0],
       }];
       saveWishlist(updated);

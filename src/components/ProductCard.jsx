@@ -6,15 +6,20 @@ import { getImageUrl, sanitizeData } from '../services/api';
 import { CartIcon, FrameIcon, HeartIcon } from './CustomIcons';
 import { useWishlist } from '../context/WishlistContext';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProductCard({ product, onPress, onAddToCart, style }) {
   const { toggleWishlist, isWishlisted } = useWishlist();
   const { isDarkMode, theme } = useTheme();
+  const { user } = useAuth();
   const wishlisted = product && isWishlisted(product._id || product.id);
 
   const name = sanitizeData(product?.name, 'Product');
   
-  const price = typeof product?.price === 'number' ? product.price : (parseFloat(product?.price) || 0);
+  const userRole = user?.role?.toLowerCase();
+  const price = userRole === 'dealer'
+    ? (typeof product?.dealerPrice === 'number' ? product.dealerPrice : (parseFloat(product?.dealerPrice) || typeof product?.price === 'number' ? product.price : parseFloat(product?.price) || 0))
+    : (typeof product?.retailPrice === 'number' ? product.retailPrice : (typeof product?.price === 'number' ? product.price : parseFloat(product?.price) || 0));
   
   const categoryObj = product?.category?.[0] || product?.categoryName || 'Item';
   const category = sanitizeData(categoryObj, 'Item');
