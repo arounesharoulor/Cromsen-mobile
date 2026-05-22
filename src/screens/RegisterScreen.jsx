@@ -3,14 +3,34 @@ import {
   StyleSheet, Text, View, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, TextInput, ActivityIndicator
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Phone, Lock, Eye, EyeOff, ArrowLeft, ChevronDown, Mail, ShieldCheck } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
 import { authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useNotifications } from '../context/NotificationContext';
 import { LogoIcon } from '../components/CustomIcons';
+import Constants from 'expo-constants';
+import { initializeApp, getApp, getApps } from 'firebase/app'; // Web Auth (Expo Go)
+import { getAuth, PhoneAuthProvider, signInWithCredential, signInWithPhoneNumber } from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+
+// Web Config for Expo Go Fallback
+const firebaseConfig = {
+  apiKey: "AIzaSyDjpkybdIic7Tn6gHunap7rhPb06onwpS4",
+  authDomain: "cromsen-8ba80.firebaseapp.com",
+  projectId: "cromsen-8ba80",
+  storageBucket: "cromsen-8ba80.firebasestorage.app",
+  messagingSenderId: "729282764152",
+  appId: "1:729282764152:web:999215b8812bd56e04fc8d",
+  measurementId: "G-XF35EM9DVV"
+};
+
+// Initialize Web Firebase safely
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const webAuth = getAuth(app);
 
 const COUNTRIES = [
   { name: 'India', code: '+91', flag: '🇮🇳' },
@@ -28,6 +48,7 @@ const COUNTRIES = [
 export default function RegisterScreen({ navigation }) {
   const { login: authLogin } = useAuth();
   const { isDarkMode, theme } = useTheme();
+  const { showToast } = useNotifications();
   
   // Multi-Step Registration States
   const [step, setStep] = useState(1);
@@ -65,8 +86,8 @@ export default function RegisterScreen({ navigation }) {
 
   const validateStep1 = () => {
     const e = {};
-    if (!form.phone) e.phone = 'Mobile number is required';
-    else if (!/^\d{10}$/.test(form.phone.replace(/\D/g, ''))) e.phone = 'Enter a valid 10-digit number';
+    if (!form.email) e.email = 'Email address is required';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -74,10 +95,10 @@ export default function RegisterScreen({ navigation }) {
   const validateStep2 = () => {
     const e = {};
     if (!form.name.trim()) e.name = 'Full name is required';
-    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
-    if (form.alternatePhone && !/^\d{10}$/.test(form.alternatePhone.replace(/\D/g, ''))) {
-      e.alternatePhone = 'Enter a valid 10-digit alternate number';
-    }
+    
+    if (!form.phone) e.phone = 'Mobile number is required';
+    else if (!/^\d{10}$/.test(form.phone.replace(/\D/g, ''))) e.phone = 'Enter a valid 10-digit number';
+
     if (!form.password) e.password = 'Password is required';
     else if (form.password.length < 6) e.password = 'Password must be at least 6 characters';
     
@@ -88,55 +109,78 @@ export default function RegisterScreen({ navigation }) {
     return Object.keys(e).length === 0;
   };
 
-  const generateAndSendOtp = (cleanPhone) => {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setSentOtp(code);
+  // Firebase Auth states
+  const recaptchaVerifier = useRef(null);
+  const [confirmation, setConfirmation] = useState(null);
+
+  const getNativeAuth = () => {
+    // CRITICAL: If we are in Expo Go, we MUST NOT even try to require
+    // because the native constructor will crash the app immediately.
+    if (Constants.appOwnership === 'expo') {
+      return null;
+    }
+
+    try {
+      const native = require('@react-native-firebase/auth');
+      return native?.default || null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const generateAndSendOtp = async (email) => {
     setTimer(60);
     setOtpInput('');
     setOtpError('');
+    setLoading(true);
     
-    // Simulate SMS delivery
-    setTimeout(() => {
-      Alert.alert(
-        '💬 Cromsen Secure OTP',
-        `Your registration verification code is: ${code}\n\nDo not share this code with anyone.`,
-        [{ text: 'Copy Code', onPress: () => {} }]
-      );
-    }, 800);
+    console.log(`[OTP] Attempting to send Email OTP to ${email}`);
+
+    try {
+      // In a real app, you would call a backend service to send an email OTP
+      // For now, we simulate success and log to terminal
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      setSentOtp(code);
+      setLoading(false);
+
+      console.log('=============================================');
+      console.log(`🚀 [SIMULATED EMAIL SENT TO ${email}]`);
+      console.log(`🔑 DEV OTP CODE: ${code}`);
+      console.log(`(Real Email integration required for production)`);
+      console.log('=============================================');
+    } catch (err) {
+      setLoading(false);
+      console.warn('[OTP] Error:', err.message);
+      Alert.alert('Error', 'Failed to send verification email.');
+    }
   };
 
   const handleResendOtp = () => {
     if (timer > 0) return;
-    const digits = form.phone.replace(/\D/g, '');
-    const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
-    generateAndSendOtp(cleanPhone);
+    generateAndSendOtp(form.email);
   };
 
   const handleSendOtp = async () => {
     if (!validateStep1()) return;
     try {
       setLoading(true);
-      const digits = form.phone.replace(/\D/g, '');
-      const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
+      const cleanEmail = form.email.trim().toLowerCase();
 
-      // 1. Verify if phone number already exists before sending OTP
+      // 1. Verify if email already exists before sending OTP
       try {
         const response = await fetch('https://cromsen-backend.onrender.com/api/users');
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
           const matchedUser = users.find(u => {
-            const dbDigits = (u.phone || '').replace(/\D/g, '');
-            const isPhoneMatch = dbDigits.length >= 10 && cleanPhone.length >= 10
-              ? dbDigits.slice(-10) === cleanPhone.slice(-10)
-              : dbDigits === cleanPhone;
+            const dbEmail = (u.email || '').toLowerCase().trim();
             const dbRole = (u.role || '').toLowerCase();
-            return isPhoneMatch && dbRole === selectedRole.toLowerCase();
+            return dbEmail === cleanEmail && dbRole === selectedRole.toLowerCase();
           });
           if (matchedUser) {
             Alert.alert(
               'Registration Failed',
-              `An account with this mobile number already exists as a ${selectedRole === 'dealer' ? 'Dealer' : 'Retailer'}.`
+              `An account with this email address already exists as a ${selectedRole === 'dealer' ? 'Dealer' : 'Retailer'}.`
             );
             setLoading(false);
             return;
@@ -149,9 +193,9 @@ export default function RegisterScreen({ navigation }) {
       setLoading(false);
       // Trigger the OTP Modal and send the code!
       setShowOtpModal(true);
-      generateAndSendOtp(cleanPhone);
+      generateAndSendOtp(cleanEmail);
     } catch (err) {
-      Alert.alert('Registration Failed', err.message || 'Could not verify mobile number');
+      Alert.alert('Registration Failed', err.message || 'Could not verify email address');
       setLoading(false);
     }
   };
@@ -162,15 +206,28 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
-    if (otpInput !== sentOtp) {
+    setOtpVerifying(true);
+    
+    try {
+      if (confirmation) {
+        // Unified verification (Works for both Native and Web)
+        await confirmation.confirm(otpInput);
+      } else if (otpInput !== sentOtp) {
+        // Simulated terminal fallback verification
+        setOtpError('Invalid verification code.');
+        setOtpVerifying(false);
+        return;
+      }
+      
+      // Success! Move to Step 2
+      setShowOtpModal(false);
+      clearInterval(timerRef.current);
+      setStep(2);
+    } catch (err) {
       setOtpError('Invalid verification code. Please try again.');
-      return;
+    } finally {
+      setOtpVerifying(false);
     }
-
-    setShowOtpModal(false);
-    clearInterval(timerRef.current);
-    // OTP Verified! Advance to details step
-    setStep(2);
   };
 
   const handleCompleteRegistration = async () => {
@@ -214,8 +271,10 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
+  const insets = useSafeAreaInsets();
+  
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
@@ -225,24 +284,31 @@ export default function RegisterScreen({ navigation }) {
               <LogoIcon size={50} color={theme.primary} />
             </View>
             <Text style={[styles.title, { color: theme.text }]}>
-              {step === 1 ? 'Verify Phone' : 'Create Account'}
+              {step === 1 ? 'Verify Email' : 'Create Account'}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               {step === 1 
-                ? 'Verify your mobile number with a secure OTP to start registration' 
+                ? 'Verify your email address with a secure OTP to start registration' 
                 : 'Set up your details to finish signing up'
               }
             </Text>
           </View>
 
-          {/* Step Progress Indicator */}
-          <View style={styles.stepIndicatorRow}>
+      {/* Recaptcha needed for Expo Go Fallback */}
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification={false}
+      />
+
+      {/* Step Progress Indicator */}
+      <View style={styles.stepIndicatorRow}>
             <View style={[styles.stepDot, { backgroundColor: theme.primary }]} />
             <View style={[styles.stepLine, { backgroundColor: step >= 2 ? theme.primary : theme.border }]} />
             <View style={[styles.stepDot, { backgroundColor: step >= 2 ? theme.primary : theme.border }]} />
           </View>
           <Text style={[styles.stepIndicatorText, { color: theme.textSecondary }]}>
-            {step === 1 ? 'Step 1: Mobile Verification' : 'Step 2: Account Details'}
+            {step === 1 ? 'Step 1: Email Verification' : 'Step 2: Account Details'}
           </Text>
 
           {/* Form Content */}
@@ -285,31 +351,19 @@ export default function RegisterScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.phoneRow}>
-                  <TouchableOpacity 
-                    style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} 
-                    onPress={() => setShowCountryModal(true)}
-                  >
-                    <Text style={styles.flagTxt}>{selectedCountry.flag}</Text>
-                    <Text style={[styles.countryTxt, { color: theme.text }]}>{selectedCountry.code}</Text>
-                    <ChevronDown size={14} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                  
-                  <View style={{ flex: 1 }}>
-                    <AppInput
-                      label="Mobile Number (Mandatory)"
-                      placeholder="Enter your mobile number"
-                      value={form.phone}
-                      onChangeText={v => set('phone', v.replace(/[^0-9]/g, ''))}
-                      keyboardType="phone-pad"
-                      error={errors.phone}
-                      leftIcon={<Phone size={18} color={theme.textSecondary} />}
-                    />
-                  </View>
-                </View>
+                <AppInput
+                  label="Email Address (Mandatory)"
+                  placeholder="name@example.com"
+                  value={form.email}
+                  onChangeText={v => set('email', v)}
+                  error={errors.email}
+                  leftIcon={<Mail size={18} color={theme.textSecondary} />}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
 
                 <Text style={[styles.terms, { color: theme.textSecondary, textAlign: 'left', marginBottom: 28 }]}>
-                   We will send a secure 6-digit OTP code to verify ownership of this number.
+                   We will send a secure 6-digit OTP code to verify ownership of this email address.
                 </Text>
 
                 <AppButton
@@ -332,16 +386,28 @@ export default function RegisterScreen({ navigation }) {
                   autoCapitalize="words"
                 />
 
-                <AppInput
-                  label="Email Address"
-                  placeholder="name@example.com"
-                  value={form.email}
-                  onChangeText={v => set('email', v)}
-                  error={errors.email}
-                  leftIcon={<Mail size={18} color={theme.textSecondary} />}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
+                <View style={styles.phoneRow}>
+                  <TouchableOpacity 
+                    style={[styles.countryPicker, { backgroundColor: theme.surface, borderColor: theme.border }]} 
+                    onPress={() => setShowCountryModal(true)}
+                  >
+                    <Text style={styles.flagTxt}>{selectedCountry.flag}</Text>
+                    <Text style={[styles.countryTxt, { color: theme.text }]}>{selectedCountry.code}</Text>
+                    <ChevronDown size={14} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  
+                  <View style={{ flex: 1 }}>
+                    <AppInput
+                      label="Mobile Number"
+                      placeholder="Enter mobile number"
+                      value={form.phone}
+                      onChangeText={v => set('phone', v.replace(/[^0-9]/g, ''))}
+                      keyboardType="phone-pad"
+                      error={errors.phone}
+                      leftIcon={<Phone size={18} color={theme.textSecondary} />}
+                    />
+                  </View>
+                </View>
 
                 <AppInput
                   label="Alternate Number (Optional)"
@@ -396,7 +462,7 @@ export default function RegisterScreen({ navigation }) {
                     style={[styles.backToStep1Btn, { borderColor: theme.border }]} 
                     onPress={() => setStep(1)}
                   >
-                    <Text style={[styles.backToStep1Txt, { color: theme.textSecondary }]}>Change Mobile Number</Text>
+                    <Text style={[styles.backToStep1Txt, { color: theme.textSecondary }]}>Change Email Address</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -457,7 +523,7 @@ export default function RegisterScreen({ navigation }) {
             </View>
             <Text style={[styles.otpTitle, { color: theme.text }]}>Security Verification</Text>
             <Text style={[styles.otpSubtitle, { color: theme.textSecondary }]}>
-              Enter the 6-digit verification code sent to {selectedCountry.code} {form.phone.slice(-4).padStart(form.phone.length, '•')}
+              Enter the 6-digit verification code sent to {form.email}
             </Text>
 
             <View style={styles.otpInputGroup}>
@@ -485,7 +551,7 @@ export default function RegisterScreen({ navigation }) {
                 </Text>
               ) : (
                 <TouchableOpacity onPress={handleResendOtp}>
-                  <Text style={[styles.otpResendBtn, { color: theme.primary }]}>Resend Code via SMS</Text>
+                  <Text style={[styles.otpResendBtn, { color: theme.primary }]}>Resend Code via Email</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -516,7 +582,7 @@ export default function RegisterScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

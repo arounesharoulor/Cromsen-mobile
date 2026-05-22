@@ -17,7 +17,7 @@ export default function CartItem({ item, onRemove, onIncrease, onDecrease }) {
         <Image source={{ uri: item.image }} style={[styles.img, { backgroundColor: theme.background }]} />
         <View style={styles.details}>
           <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{sanitizeData(item.name, 'Product')}</Text>
-          <Text style={[styles.meta, { color: theme.textSecondary }]}>Size: 1/4 • Color: Brown</Text>
+          <Text style={[styles.meta, { color: theme.textSecondary }]}>{item.variant || 'Standard'}</Text>
           <View style={styles.ratingRow}>
             <Text style={[styles.ratingTxt, { color: isDarkMode ? '#10B981' : '#27AE60' }]}>4.8 ★</Text>
             <Text style={[styles.reviews, { color: theme.textSecondary }]}>(172 reviews)</Text>

@@ -3,7 +3,8 @@ import {
   StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView, Alert, StatusBar, Modal, TextInput, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Package, ChevronRight, X, ArrowLeft } from 'lucide-react-native';
+import { Package, ChevronRight, X, ArrowLeft, Video, Plus, Image as ImageIcon } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { THEME_COLORS } from '../theme';
 import { EmptyState, AppButton } from '../components';
 import { sanitizeData, userService, getImageUrl, productService } from '../services/api';
@@ -21,17 +22,37 @@ const STATUS_CONFIG = {
   'SHIPPED': { color: '#2F80ED', bg: '#F2F8FF' },
   'DELIVERED': { color: '#27AE60', bg: '#F2FFF7' },
   'CANCELLED': { color: '#EB5757', bg: '#FFF2F2' },
+  'RETURN REQUESTED': { color: '#F2994A', bg: '#FFF9F3' },
+  'RETURN COMPLETED': { color: '#9B51E0', bg: '#F9F2FF' },
+  'RETURNED': { color: '#9B51E0', bg: '#F9F2FF' },
+  'REFUNDED': { color: '#27AE60', bg: '#F2FFF7' },
+  'REFUND TRACKING': { color: '#2F80ED', bg: '#F2F8FF' },
+  'REPLACEMENT REQUESTED': { color: '#F2994A', bg: '#FFF9F3' },
+  'REPLACEMENT COMPLETED': { color: '#27AE60', bg: '#F2FFF7' },
+  'REPLACEMENT DELIVERED': { color: '#27AE60', bg: '#F2FFF7' },
+  'REPLACEMENT PROCESSING': { color: '#F2994A', bg: '#FFF9F3' },
 };
+
+const RETURN_REASONS = [
+  "Manufacturing Defect",
+  "Damage during Transit",
+  "Wrong Item Received",
+  "Quality Not as Expected",
+  "Product Not as Described",
+  "Size/Fit Issue",
+  "Other"
+];
 
 const DEMO_ORDERS = [
   {
     id: '#ORD-9921',
-    date: 'OCT 24, 2023',
-    status: 'ORDER CONFIRMED',
+    date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase(),
+    status: 'DELIVERED',
     total: 120.00,
     itemsCount: 3,
-    mainProduct: 'Curtains',
+    mainProduct: 'Premium Curtains',
     image: 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=400',
+    items: [{ name: 'Premium Curtains', quantity: 3, price: 40, image: 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=400' }]
   },
   {
     id: '#ORD-9922',
@@ -41,6 +62,7 @@ const DEMO_ORDERS = [
     itemsCount: 1,
     mainProduct: 'PVC Mesh',
     image: 'https://images.unsplash.com/photo-1585412727339-54e4bae3bbf9?auto=format&fit=crop&q=80&w=400',
+    items: [{ name: 'PVC Mesh', quantity: 1, price: 120, image: 'https://images.unsplash.com/photo-1585412727339-54e4bae3bbf9?auto=format&fit=crop&q=80&w=400' }]
   },
 ];
 
@@ -62,6 +84,137 @@ export default function OrdersScreen({ navigation }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  
+  // Return/Replace Modal States
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [requestType, setRequestType] = useState('Return');
+  const [media, setMedia] = useState([]);
+  const [returnReason, setReturnReason] = useState('');
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+
+  const pickMedia = async () => {
+    Alert.alert(
+      "Add Media",
+      "Choose a source",
+      [
+        {
+          text: "Camera",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              alert('Sorry, we need camera permissions to make this work!');
+              return;
+            }
+            let result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              allowsEditing: true,
+              aspect: [4, 3],
+              quality: 0.8,
+            });
+            if (!result.canceled) {
+              setMedia([...media, result.assets[0]]);
+            }
+          }
+        },
+        {
+          text: "Gallery",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              alert('Sorry, we need gallery permissions to make this work!');
+              return;
+            }
+            let result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              allowsEditing: true,
+              aspect: [4, 3],
+              quality: 0.8,
+            });
+            if (!result.canceled) {
+              setMedia([...media, result.assets[0]]);
+            }
+          }
+        },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
+  };
+
+  const removeMedia = (index) => {
+    const newMedia = [...media];
+    newMedia.splice(index, 1);
+    setMedia(newMedia);
+  };
+
+  const handleReturnReplaceSubmit = async () => {
+    if (!returnReason.trim()) {
+      alert('Please provide a reason for ' + requestType.toLowerCase());
+      return;
+    }
+    if (media.length === 0) {
+      alert('Please upload at least one image or video of the product');
+      return;
+    }
+
+    try {
+      setSubmittingRequest(true);
+      const requestPayload = {
+        orderId: selectedOrder.id || selectedOrder._id,
+        productId: selectedItem?.productId || selectedItem?.product?._id || selectedItem?.id,
+        productName: selectedItem?.name || selectedOrder.mainProduct,
+        type: requestType,
+        reason: returnReason === 'Other' ? `Other: ${comment}` : returnReason.trim(),
+        media: media.map(m => m.uri),
+        timestamp: new Date().toISOString(),
+        customerName: user?.name || 'Customer',
+        customerEmail: user?.email || '',
+        status: 'PENDING'
+      };
+
+      const storedKey = `@ReturnRequests_${user?._id || user?.id}`;
+      const stored = await AsyncStorage.getItem(storedKey);
+      const requests = stored ? JSON.parse(stored) : [];
+      await AsyncStorage.setItem(storedKey, JSON.stringify([requestPayload, ...requests]));
+
+      console.log(`[${requestType}] Saved request with customer details:`, { name: requestPayload.customerName, email: requestPayload.customerEmail });
+
+      addNotification('success', `${requestType} Request Received`, `We have received your ${requestType.toLowerCase()} request for ${selectedItem?.name || selectedOrder.mainProduct}.`, 'Orders');
+      setShowReturnModal(false);
+      alert(`Your ${requestType.toLowerCase()} request has been submitted successfully.`);
+    } catch (e) {
+      console.error('Error submitting request:', e);
+      alert('Failed to submit request.');
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
+  const isReturnReplaceEligible = (order) => {
+    if (!order) return false;
+    const statusUpper = String(order.status).trim().toUpperCase();
+    
+    // Don't show if already returned/replaced or in progress
+    if (statusUpper.includes('RETURN') || statusUpper.includes('REPLACEMENT') || statusUpper.includes('REFUND')) return false;
+
+    // Only allow for DELIVERED orders per website policy
+    if (statusUpper !== 'DELIVERED') return false;
+
+    try {
+      const orderDate = new Date(order.date);
+      if (isNaN(orderDate.getTime())) return true; 
+
+      // 7-day return policy + 3 days estimated delivery time
+      const totalEligibleDays = 10; 
+      const expiryDate = new Date(orderDate);
+      expiryDate.setDate(expiryDate.getDate() + totalEligibleDays);
+      
+      return new Date() < expiryDate;
+    } catch (e) {
+      return true;
+    }
+  };
 
   const handleSubmitReview = async () => {
     if (!comment.trim()) {
@@ -79,6 +232,9 @@ export default function OrdersScreen({ navigation }) {
         comment: comment.trim(),
         title: `${rating} Star Review`,
         review: comment.trim(),
+        images: media.map(m => m.uri),
+        media: media.map(m => m.uri),
+        date: new Date().toISOString()
       };
 
       const newRev = {
@@ -89,6 +245,7 @@ export default function OrdersScreen({ navigation }) {
         user: user?._id || user?.id || null,
         userId: user?._id || user?.id || null,
         name: user?.name || reviewPayload.name,
+        email: user?.email || reviewPayload.email,
         likes: 0,
         dislikes: 0,
         userImage: user?.image || user?.avatar || null
@@ -146,18 +303,50 @@ export default function OrdersScreen({ navigation }) {
       const backendOrders = Array.isArray(data) ? data : data.data || data.orders || [];
 
       // Normalize backend schema to app schema
-      const normalize = (o) => ({
-        id: o.id || o._id || `#ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-        date: o.date || (o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() : ''),
-        status: o.status || 'ORDER CONFIRMED',
-        total: o.total || o.totalAmount || 0,
-        itemsCount: o.itemsCount || (o.items ? o.items.length : 0),
-        mainProduct: o.mainProduct || (o.items && o.items[0] ? sanitizeData(o.items[0].name, 'Product') : 'Product'),
-        image: o.image || (o.items && o.items[0] ? getImageUrl(o.items[0].image) : '') || 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=400',
-        userId: o.userId || currentUserId,
-        items: o.items || [],
-        address: o.address || o.shippingAddress || {},
-      });
+      const normalize = (o) => {
+        // Build the display ID exactly like the admin dashboard
+        let displayId = o.id || o._id;
+        if (o.orderId) {
+          const oid = String(o.orderId).toUpperCase();
+          if (oid.startsWith('CIM-') || oid.startsWith('CIW-') || oid.startsWith('CIDM-')) {
+            // It has a prefix, but let's ensure it has the '#' and is uppercase
+            if (!oid.includes('#')) {
+              displayId = oid.replace('CIM-', 'CIM-#').replace('CIW-', 'CIW-#').replace('CIDM-', 'CIDM-#');
+            } else {
+              displayId = oid;
+            }
+          } else if (typeof o.orderId === 'number' || !isNaN(o.orderId)) {
+            // It's a numerical sequence, match dashboard format
+            displayId = `CIM-#${o.orderId}`;
+          } else {
+            displayId = oid;
+          }
+        } else if (displayId && String(displayId).length > 20) {
+          // It's likely a raw MongoDB ObjectId, convert to standard format for consistency
+          displayId = `CIM-#${String(displayId).slice(-4).toUpperCase()}`;
+        } else if (!displayId) {
+          displayId = `#ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+        } else {
+          // Ensure short IDs like #01EC78A4 are uppercase
+          displayId = String(displayId).toUpperCase();
+        }
+
+        return {
+          _id: o._id || o.id || `local-${Math.random().toString(36).substr(2, 9)}`,
+          id: displayId,
+          orderId: o.orderId,
+          date: o.date || (o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() : ''),
+          createdAt: o.createdAt || new Date().toISOString(), // Preserve original timestamp for sorting
+          status: o.status || 'ORDER CONFIRMED',
+          total: o.total || o.totalAmount || 0,
+          itemsCount: o.itemsCount || (o.items ? o.items.length : 0),
+          mainProduct: o.mainProduct || (o.items && o.items[0] ? sanitizeData(o.items[0].name, 'Product') : 'Product'),
+          image: o.image || (o.items && o.items[0] ? getImageUrl(o.items[0].image) : '') || 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=400',
+          userId: o.userId || currentUserId,
+          items: o.items || [],
+          address: o.address || o.shippingAddress || {},
+        };
+      };
 
       // Always fetch local storage first
       const storedKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
@@ -174,13 +363,27 @@ export default function OrdersScreen({ navigation }) {
       if (backendOrders.length > 0) {
         const normalized = backendOrders.map(normalize);
         
-        // Merge backend and local list so nothing goes away when we refresh!
-        const mergedList = [...normalized];
+        // Merge backend and local list, ensuring no duplicate _ids or display IDs
+        const mergedList = [];
+        const seenIds = new Set();
+
+        // Process backend orders first
+        normalized.forEach(bo => {
+          if (!seenIds.has(String(bo._id)) && !seenIds.has(String(bo.id))) {
+            mergedList.push(bo);
+            seenIds.add(String(bo._id));
+            seenIds.add(String(bo.id));
+          }
+        });
+
+        // Add local orders if they don't exist in backend
         localOrdersList.forEach(lo => {
-          const loId = String(lo.id || lo._id);
-          const exists = mergedList.some(bo => String(bo.id || bo._id) === loId);
-          if (!exists) {
+          const loDisplayId = normalize(lo).id;
+          const loId = String(lo._id || lo.id);
+          if (!seenIds.has(loId) && !seenIds.has(loDisplayId)) {
             mergedList.push(normalize(lo));
+            seenIds.add(loId);
+            seenIds.add(loDisplayId);
           }
         });
 
@@ -206,66 +409,86 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  const handleCancelOrder = async (orderId) => {
-    Alert.alert(
-      'Cancel Order',
-      'Are you sure you want to cancel this order?',
-      [
-        { text: 'No', style: 'cancel' },
-        { 
-          text: 'Yes, Cancel', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              
-              // Only call backend if it's a real MongoDB ObjectId (not our local fallback #ORD- string)
-              if (!String(orderId).startsWith('#')) {
-                await userService.updateOrderStatus(orderId, 'Cancelled');
-              }
-              
-              const updatedOrders = orders.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'CANCELLED' } : o);
-              setOrders(updatedOrders);
-              
-              const currentUserId = user?._id || user?.id;
-              if (currentUserId) {
-                await AsyncStorage.setItem(`@UserOrders_${currentUserId}`, JSON.stringify(updatedOrders));
-              }
-              
-              Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
-            } catch (e) {
-              console.error('Error cancelling order:', e);
-              Alert.alert('Error', 'Failed to cancel order. Please try again.');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+
+  const handleCancelOrder = (orderId) => {
+    setCancellingOrderId(orderId);
+    setCancelReason('');
+    setCustomReason('');
+    setShowCancelModal(true);
+  };
+
+  const submitCancellation = async () => {
+    if (!cancelReason) {
+      Alert.alert('Required', 'Please select a reason for cancellation');
+      return;
+    }
+
+    const finalReason = cancelReason === 'Other' ? customReason : cancelReason;
+    if (cancelReason === 'Other' && !customReason.trim()) {
+      Alert.alert('Required', 'Please specify your reason');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setShowCancelModal(false);
+      
+      // Update backend with reason if it's a real order
+      if (!String(cancellingOrderId).startsWith('#')) {
+        await userService.updateOrderStatus(cancellingOrderId, 'Cancelled', { 
+          reason: finalReason,
+          cancelledBy: 'Customer'
+        });
+      }
+      
+      const updatedOrders = orders.map(o => (o.id === cancellingOrderId || o._id === cancellingOrderId) ? { ...o, status: 'CANCELLED' } : o);
+      setOrders(updatedOrders);
+      
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        await AsyncStorage.setItem(`@UserOrders_${currentUserId}`, JSON.stringify(updatedOrders));
+      }
+      
+      Alert.alert('Order Cancelled', 'Your order has been cancelled. Our team has been notified.');
+    } catch (e) {
+      console.error('Error cancelling order:', e);
+      Alert.alert('Error', 'Failed to cancel order. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getOrdersForTab = (tabLabel) => {
-    return orders.filter(o => {
+    let filtered = orders.filter(o => {
       const s = String(o.status).toUpperCase();
       if (tabLabel === 'Active') {
-        return s !== 'DELIVERED' && s !== 'CANCELLED';
+        return s !== 'DELIVERED' && s !== 'CANCELLED' && !s.includes('COMPLETED') && !s.includes('RETURNED') && !s.includes('REFUNDED');
       } else if (tabLabel === 'Delivered') {
-        return s === 'DELIVERED';
+        return s === 'DELIVERED' || s.includes('COMPLETED');
       } else if (tabLabel === 'Cancelled') {
         return s === 'CANCELLED';
       }
       return true; // 'All'
     });
+
+    // Sort by timestamp (newest first)
+    return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   };
 
   const TABS = [
     { label: 'All', count: orders.length },
     { label: 'Active', count: orders.filter(o => {
       const s = String(o.status).toUpperCase();
-      return s !== 'DELIVERED' && s !== 'CANCELLED';
+      return s !== 'DELIVERED' && s !== 'CANCELLED' && !s.includes('COMPLETED');
     }).length },
-    { label: 'Delivered', count: orders.filter(o => String(o.status).toUpperCase() === 'DELIVERED').length },
+    { label: 'Delivered', count: orders.filter(o => {
+      const s = String(o.status).toUpperCase();
+      return s === 'DELIVERED' || s.includes('COMPLETED') || s.includes('DELIVERED');
+    }).length },
     { label: 'Cancelled', count: orders.filter(o => String(o.status).toUpperCase() === 'CANCELLED').length },
   ];
 
@@ -312,6 +535,64 @@ export default function OrdersScreen({ navigation }) {
         </ScrollView>
       </View>
 
+      {/* Cancellation Modal */}
+      <Modal visible={showCancelModal} animationType="slide" transparent onRequestClose={() => setShowCancelModal(false)}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={styles.reviewModalSheet}>
+            <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={[styles.reviewModalTitle, { marginBottom: 0 }]}>Cancel Order</Text>
+              <TouchableOpacity onPress={() => setShowCancelModal(false)}>
+                <Text style={{ fontSize: 24, color: '#94A3B8' }}>×</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.reviewModalSub, { marginBottom: 20 }]}>Please select a reason for cancelling this order</Text>
+
+            <View style={styles.reasonsWrapper}>
+              {[
+                'Change in product specifications', 
+                'Revised project timeline', 
+                'Accidental duplicate purchase', 
+                'Found a more suitable alternative', 
+                'Shipping schedule exceeds requirements', 
+                'Financial/Budgetary revisions',
+                'Other'
+              ].map((reason) => (
+                <TouchableOpacity 
+                  key={reason} 
+                  style={[styles.reasonChip, cancelReason === reason && styles.reasonChipSelected]}
+                  onPress={() => setCancelReason(reason)}
+                >
+                  <Text style={[styles.reasonChipTxt, cancelReason === reason && styles.reasonChipTxtSelected]}>{reason}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {cancelReason === 'Other' && (
+              <TextInput
+                style={[styles.reviewInput, { height: 80, marginTop: 12 }]}
+                placeholder="Specify your reason..."
+                placeholderTextColor="#94A3B8"
+                value={customReason}
+                onChangeText={setCustomReason}
+                multiline
+                numberOfLines={3}
+              />
+            )}
+
+            <View style={[styles.reviewActionButtons, { marginTop: 24 }]}>
+              <TouchableOpacity 
+                style={[styles.reviewSubmitBtn, { backgroundColor: '#EB5757' }]} 
+                onPress={submitCancellation}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.reviewSubmitBtnTxt}>Confirm Cancellation</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <FlatList
         ref={flatListRef}
         data={TABS}
@@ -335,28 +616,39 @@ export default function OrdersScreen({ navigation }) {
               ) : (
                 <FlatList
                   data={tabOrders}
-                  keyExtractor={o => o.id}
+                  keyExtractor={o => String(o._id || o.id)}
                   contentContainerStyle={styles.list}
                   showsVerticalScrollIndicator={false}
-                  renderItem={({ item }) => (
+                  renderItem={({ item }) => {
+                    const statusUpper = String(item.status).toUpperCase();
+                    const isReplacement = statusUpper.includes('REPLACEMENT');
+                    return (
                     <View style={[
                       styles.card, 
                       { backgroundColor: theme.surface, borderColor: theme.border },
-                      (item.status === 'CANCELLED' || item.status === 'DELIVERED') && { opacity: 0.85 }
+                      (statusUpper === 'CANCELLED' || statusUpper === 'DELIVERED' || statusUpper.includes('COMPLETED')) && { opacity: 0.85 }
                     ]}>
                       <View style={styles.cardHeader}>
                         <View>
-                          <Text style={styles.cardDate}>{item.date}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.cardDate}>{item.date}</Text>
+                            {isReplacement && (
+                              <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                <Text style={{ fontSize: 8, fontWeight: '800', color: THEME_COLORS.secondary }}>REPLACEMENT</Text>
+                              </View>
+                            )}
+                          </View>
                           <Text style={styles.cardId}>{item.id}</Text>
                         </View>
-                        <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6' }]}>
-                          <Text style={[styles.statusText, { color: STATUS_CONFIG[String(item.status).toUpperCase()]?.color || '#6B7280' }]}>
+
+                        <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6', paddingVertical: 2, paddingHorizontal: 8 }]}>
+                          <Text style={[styles.statusText, { color: STATUS_CONFIG[String(item.status).toUpperCase()]?.color || '#6B7280', fontSize: 9 }]}>
                             {item.status}
                           </Text>
                         </View>
                       </View>
 
-                      <View style={styles.cardBody}>
+                      <View style={[styles.cardBody, { marginBottom: 12 }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: 120 }}>
                           {item.items && item.items.length > 0 ? (
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingRight: 4 }}>
@@ -370,52 +662,169 @@ export default function OrdersScreen({ navigation }) {
                           )}
                         </View>
                         <View style={styles.productInfo}>
-                          <Text style={styles.productName} numberOfLines={1}>{String(item.mainProduct)}</Text>
+                          <Text style={[styles.productName, { fontSize: 13 }]} numberOfLines={1}>{String(item.mainProduct)}</Text>
                           {item.itemsCount > 1 && (
-                            <Text style={styles.itemsCount}>{String(item.itemsCount)} items</Text>
+                            <Text style={[styles.itemsCount, { fontSize: 11 }]}>{String(item.itemsCount)} items</Text>
                           )}
                         </View>
-                        <Text style={styles.cardPrice}>₹{item.total.toFixed(2)}</Text>
+                        <Text style={[styles.cardPrice, { fontSize: 14 }]}>₹{item.total.toFixed(2)}</Text>
                       </View>
 
-                      <View style={styles.cardActions}>
-                        {item.status !== 'CANCELLED' && item.status !== 'DELIVERED' && item.status !== 'Refund Tracking' && (
-                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
-                            <Text style={styles.cancelBtnText}>Cancel</Text>
-                          </TouchableOpacity>
-                        )}
+                      <View style={[styles.cardActions, { flexWrap: 'wrap' }]}>
                         <TouchableOpacity 
                           style={styles.detailsBtn}
                           onPress={() => navigation.navigate('OrderDetail', { order: item })}
                         >
                           <Text style={styles.detailsBtnText}>View Details</Text>
                         </TouchableOpacity>
+
+                        {item.status !== 'CANCELLED' && item.status !== 'DELIVERED' && item.status !== 'Refund Tracking' && (
+                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
+                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                          </TouchableOpacity>
+                        )}
                         
-                        <TouchableOpacity 
-                          style={styles.directReviewBtn}
-                          onPress={() => {
-                            const firstItem = item.items?.[0] || item;
-                            const prodId = firstItem.productId || firstItem.product?._id || firstItem.product?.id || firstItem._id || firstItem.id || item.id;
-                            const prodName = firstItem.name || item.mainProduct || 'Product';
-                            
-                            setReviewProductId(prodId);
-                            setReviewProductName(sanitizeData(prodName, 'Product'));
-                            setRating(5);
-                            setComment('');
-                            setShowReviewModal(true);
-                          }}
-                        >
-                          <Text style={styles.directReviewBtnText}>Write Review</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 10 }}>
+                          <TouchableOpacity 
+                            style={[styles.actionBtn, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30' }]} 
+                            onPress={() => {
+                              const firstItem = item.items?.[0] || item;
+                              const prodId = firstItem.productId || firstItem.product?._id || firstItem.product?.id || firstItem._id || firstItem.id || item.id;
+                              const prodName = firstItem.name || item.mainProduct || 'Product';
+                              setReviewProductId(prodId);
+                              setReviewProductName(sanitizeData(prodName, 'Product'));
+                              setRating(5);
+                              setComment('');
+                              setShowReviewModal(true);
+                            }}
+                          >
+                            <Text style={[styles.actionBtnTxt, { color: theme.primary }]}>★ Review</Text>
+                          </TouchableOpacity>
+
+                          {isReturnReplaceEligible(item) && (
+                            <>
+                              <TouchableOpacity 
+                                style={[styles.actionBtn, { backgroundColor: '#FFF2F2', borderColor: '#FFD5D5' }]} 
+                                onPress={() => {
+                                  setSelectedOrder(item);
+                                  setSelectedItem(item.items?.[0] || item);
+                                  setRequestType('Return');
+                                  setMedia([]);
+                                  setReturnReason('');
+                                  setShowReturnModal(true);
+                                }}
+                              >
+                                <Text style={[styles.actionBtnTxt, { color: '#EB5757' }]}>Return</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={[styles.actionBtn, { backgroundColor: '#F2F8FF', borderColor: '#D5E6FF' }]} 
+                                onPress={() => {
+                                  setSelectedOrder(item);
+                                  setSelectedItem(item.items?.[0] || item);
+                                  setRequestType('Replace');
+                                  setMedia([]);
+                                  setReturnReason('');
+                                  setShowReturnModal(true);
+                                }}
+                              >
+                                <Text style={[styles.actionBtnTxt, { color: THEME_COLORS.secondary }]}>Replace</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
                       </View>
                     </View>
-                  )}
+                  );
+                }}
                 />
               )}
             </View>
           );
         }}
       />
+
+      <Modal visible={showReturnModal} animationType="slide" transparent onRequestClose={() => setShowReturnModal(false)}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={[styles.reviewModalSheet, { maxHeight: '90%' }]}>
+            <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={[styles.reviewModalTitle, { marginBottom: 0 }]}>{requestType} Order</Text>
+              <TouchableOpacity onPress={() => setShowReturnModal(false)}>
+                <X size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.reviewModalSub, { marginBottom: 12 }]}>{selectedItem?.name || selectedOrder?.mainProduct}</Text>
+
+            <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>Reason for {requestType}</Text>
+              
+              <View style={[styles.reasonsWrapper, { marginBottom: 4 }]}>
+                {RETURN_REASONS.map((reason) => (
+                  <TouchableOpacity 
+                    key={reason} 
+                    style={[styles.reasonChip, { paddingVertical: 4, paddingHorizontal: 10 }, returnReason === reason && styles.reasonChipSelected]}
+                    onPress={() => setReturnReason(returnReason === reason ? '' : reason)}
+                  >
+                    <Text style={[styles.reasonChipTxt, { fontSize: 11 }, returnReason === reason && styles.reasonChipTxtSelected]}>{reason}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {returnReason === 'Other' && (
+                <TextInput
+                  style={[styles.reviewInput, { height: 80, marginTop: 12 }]}
+                  placeholder="Please specify your reason..."
+                  placeholderTextColor="#94A3B8"
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                  numberOfLines={3}
+                />
+              )}
+
+              <Text style={styles.inputLabel}>Upload Images or Video</Text>
+              <View style={styles.mediaContainer}>
+                {media.map((item, index) => (
+                  <View key={index} style={{ alignItems: 'center' }}>
+                    <View style={styles.mediaPreview}>
+                      <Image source={{ uri: item.uri }} style={styles.mediaItem} />
+                      <TouchableOpacity style={styles.removeMediaBtn} onPress={() => removeMedia(index)}>
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={{ fontSize: 9, color: '#94A3B8', marginTop: 2, fontWeight: '600' }}>Optional</Text>
+                  </View>
+                ))}
+                
+                {media.length < 5 && (
+                  <TouchableOpacity style={styles.addMediaBtn} onPress={pickMedia}>
+                    <Plus size={24} color="#94A3B8" />
+                    <Text style={styles.addMediaText}>Add</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={{ fontSize: 11, color: '#EB5757', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 }}>
+                Note: Returns/Replacements are accepted within 7 days of delivery for manufacturing defects.
+              </Text>
+
+              <View style={[styles.reviewActionButtons, { marginTop: 20 }]}>
+                <TouchableOpacity 
+                  style={[styles.reviewSubmitBtn, requestType === 'Return' ? { backgroundColor: '#EB5757' } : { backgroundColor: THEME_COLORS.secondary }]} 
+                  onPress={handleReturnReplaceSubmit}
+                  disabled={submittingRequest}
+                >
+                  {submittingRequest ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.reviewSubmitBtnTxt}>Submit {requestType}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Premium Product Review Modal */}
       <Modal visible={showReviewModal} animationType="fade" transparent onRequestClose={() => setShowReviewModal(false)}>
@@ -446,7 +855,25 @@ export default function OrdersScreen({ navigation }) {
               maxLength={200}
             />
 
-            <View style={styles.reviewActionButtons}>
+            <Text style={styles.inputLabel}>Add Photos or Video (Optional)</Text>
+            <View style={styles.mediaContainer}>
+              {media.map((m, index) => (
+                <View key={index} style={styles.mediaPreview}>
+                  <Image source={{ uri: m.uri }} style={styles.mediaItem} />
+                  <TouchableOpacity style={styles.removeMediaBtn} onPress={() => removeMedia(index)}>
+                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {media.length < 5 && (
+                <TouchableOpacity style={styles.addMediaBtn} onPress={pickMedia}>
+                  <Plus size={24} color="#94A3B8" />
+                  <Text style={styles.addMediaText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={[styles.reviewActionButtons, { marginTop: 16 }]}>
               <TouchableOpacity 
                 style={styles.reviewSubmitBtn} 
                 onPress={handleSubmitReview}
@@ -499,9 +926,9 @@ const styles = StyleSheet.create({
 
   list: { padding: 20, paddingBottom: 100 },
   card: {
-    backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
+    backgroundColor: '#FFF', borderRadius: 14, padding: 12, marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
     borderWidth: 1, borderColor: '#F1F5F9',
   },
   disabledCard: {
@@ -627,18 +1054,111 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   directReviewBtn: {
-    flex: 1.2, 
+    paddingHorizontal: 12,
     height: 40, 
     borderRadius: 10, 
-    backgroundColor: THEME_COLORS.primary + '15',
+    backgroundColor: THEME_COLORS.primary + '10',
     justifyContent: 'center', 
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: THEME_COLORS.primary,
+    borderColor: THEME_COLORS.primary + '30',
   },
   directReviewBtnText: { 
     fontSize: 12, 
     fontWeight: '800', 
     color: THEME_COLORS.primary 
+  },
+  reasonsWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  reasonChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reasonChipSelected: {
+    backgroundColor: THEME_COLORS.primary,
+    borderColor: THEME_COLORS.primary,
+  },
+  reasonChipTxt: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  reasonChipTxtSelected: {
+    color: '#FFF',
+  },
+  actionBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionBtnTxt: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: 'Plus Jakarta Sans',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: THEME_COLORS.text,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  mediaContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 8,
+  },
+  mediaPreview: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    position: 'relative',
+  },
+  mediaItem: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  removeMediaBtn: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#EB5757',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  addMediaBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#94A3B8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  addMediaText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

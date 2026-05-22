@@ -86,6 +86,35 @@ export const authService = {
     });
     return handleResponse(response);
   },
+  sendOtp: async (phone, otp) => {
+    const endpoints = [
+      `${BASE_URL}/users/send-otp`,
+      `${BASE_URL}/users/otp`,
+      `${BASE_URL}/users/generate-otp`,
+      `${BASE_URL}/otp/send`,
+      `${BASE_URL}/auth/send-otp`,
+      `${BASE_URL}/send-otp`
+    ];
+    
+    let lastError;
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, otp, mobile: phone }), // Try both 'phone' and 'mobile' keys
+        });
+        
+        if (response.ok) {
+          console.log(`[OTP] Send success via ${url}`);
+          return await handleResponse(response);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error('OTP endpoint not found on backend');
+  },
   getProfile: async (userId) => {
     const response = await fetch(`${BASE_URL}/users/${userId}/profile`);
     return handleResponse(response);
@@ -99,7 +128,8 @@ export const productService = {
     return handleResponse(response);
   },
   getProductById: async (id) => {
-    const response = await fetch(`${BASE_URL}/products/${id}`);
+    // Add timestamp to bypass potential caching issues
+    const response = await fetch(`${BASE_URL}/products/${id}?t=${Date.now()}`);
     return handleResponse(response);
   },
   searchProducts: async (query) => {
@@ -329,8 +359,8 @@ export const userService = {
 
     try {
       // 1. Get current user data to merge addresses
-      console.log(`[SYNC] Fetching current user for address merge: GET ${BASE_URL}/users/profile/${userId}`);
-      const getResp = await fetch(`${BASE_URL}/users/profile/${userId}`);
+      console.log(`[SYNC] Fetching current user for address merge: GET ${BASE_URL}/users/${userId}/profile`);
+      const getResp = await fetch(`${BASE_URL}/users/${userId}/profile`);
       let user;
       if (getResp.ok) {
         const data = await getResp.json();
@@ -377,7 +407,7 @@ export const userService = {
       }
       
       // 2. Push updated addresses to backend
-      const updateUrl = `${BASE_URL}/users/profile/${userId}`;
+      const updateUrl = `${BASE_URL}/users/${userId}/profile`;
       console.log(`[SYNC] Syncing Addresses: PUT ${updateUrl}`);
       const updateBody = { addresses: updatedAddresses };
       if (password) updateBody.currentPassword = password;
@@ -430,7 +460,7 @@ export const userService = {
       body: JSON.stringify(updateBody),
     });
     if (patchResp.status === 404) {
-      const fbResp = await fetch(`${BASE_URL}/users/profile/${userId}`, {
+      const fbResp = await fetch(`${BASE_URL}/users/${userId}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateBody),

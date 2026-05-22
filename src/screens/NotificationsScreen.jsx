@@ -76,31 +76,47 @@ export default function NotificationsScreen({ navigation }) {
       <TouchableOpacity 
         style={[styles.notifCard, !item.read && styles.unreadCard]} 
         onPress={() => handlePress(item)}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <View style={[
-          styles.iconBox, 
-          !item.read && (item.type === 'error' ? { backgroundColor: '#FEE2E2' } : styles.unreadIconBox)
-        ]}>
-          {getIcon(item.type, item.read)}
-        </View>
-        <View style={styles.notifContent}>
-          <View style={styles.notifHeader}>
-            <Text style={[styles.notifTitle, !item.read && styles.unreadText]}>{item.title}</Text>
-            <View style={styles.timeRow}>
-              <Clock size={12} color="#94A3B8" />
-              <Text style={styles.timeTxt}>{formatTime(item.date || item.timestamp)}</Text>
+        {/* Accent Bar */}
+        <View style={[styles.accentBar, { backgroundColor: getIcon(item.type, false).props.color }]} />
+        
+        <View style={styles.contentContainer}>
+          <View style={[
+            styles.iconBox, 
+            !item.read && (item.type === 'error' ? { backgroundColor: '#FEE2E2' } : styles.unreadIconBox)
+          ]}>
+            {getIcon(item.type, item.read)}
+          </View>
+          
+          <View style={styles.textContainer}>
+            <View style={styles.notifHeader}>
+              <Text style={[styles.notifTitle, !item.read && styles.unreadText]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              {!item.read && <View style={styles.unreadDot} />}
+            </View>
+            
+            <Text style={styles.notifMsg} numberOfLines={2}>
+              {item.message}
+            </Text>
+            
+            <View style={styles.footerRow}>
+              <View style={styles.timeRow}>
+                <Clock size={11} color="#94A3B8" />
+                <Text style={styles.timeTxt}>{formatTime(item.date || item.timestamp)}</Text>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.inlineDeleteBtn} 
+                onPress={() => removeNotification(item.id)}
+              >
+                <X size={14} color="#94A3B8" />
+                <Text style={styles.deleteLabel}>Dismiss</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.notifMsg}>{item.message}</Text>
         </View>
-      </TouchableOpacity>
-      
-      <TouchableOpacity 
-        style={styles.deleteBtn} 
-        onPress={() => removeNotification(item.id)}
-      >
-        <X size={16} color="#94A3B8" />
       </TouchableOpacity>
     </View>
   );
@@ -108,7 +124,6 @@ export default function NotificationsScreen({ navigation }) {
   const renderSectionHeader = ({ section: { title } }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionLine} />
     </View>
   );
 
@@ -120,9 +135,9 @@ export default function NotificationsScreen({ navigation }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <ArrowLeft size={22} color={THEME_COLORS.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>Updates & Alerts</Text>
         <TouchableOpacity onPress={clearAll} style={styles.clearAllBtn}>
-          <Trash2 size={20} color={THEME_COLORS.error} />
+          <Text style={styles.clearAllTxt}>Clear All</Text>
         </TouchableOpacity>
       </View>
 
@@ -131,8 +146,8 @@ export default function NotificationsScreen({ navigation }) {
           <View style={styles.emptyIconCircle}>
             <Bell size={40} color="#CBD5E1" />
           </View>
-          <Text style={styles.emptyTitle}>No Notifications Yet</Text>
-          <Text style={styles.emptySubtitle}>We'll notify you about orders, arrivals, and profile updates.</Text>
+          <Text style={styles.emptyTitle}>All caught up!</Text>
+          <Text style={styles.emptySubtitle}>No new notifications at the moment.</Text>
         </View>
       ) : (
         <SectionList
@@ -150,69 +165,105 @@ export default function NotificationsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#FAFBFC' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#FFF',
+    paddingHorizontal: 20, paddingVertical: 18, backgroundColor: '#FFF',
     borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 38, height: 38, borderRadius: 12,
     backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#F1F5F9',
   },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: THEME_COLORS.primary },
-  clearAllBtn: { padding: 4 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#0F172A', letterSpacing: -0.5 },
+  clearAllBtn: { 
+    paddingHorizontal: 12, paddingVertical: 6, 
+    borderRadius: 8, backgroundColor: '#FEF2F2' 
+  },
+  clearAllTxt: { fontSize: 12, fontWeight: '800', color: THEME_COLORS.error },
   
-  list: { padding: 16 },
-  cardWrapper: { position: 'relative', marginBottom: 12 },
+  list: { padding: 16, paddingBottom: 40 },
+  cardWrapper: { marginBottom: 16 },
   notifCard: {
-    flexDirection: 'row',
     backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#F1F5F9',
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
   unreadCard: {
-    borderColor: THEME_COLORS.primary + '20',
-    backgroundColor: THEME_COLORS.primary + '05',
+    backgroundColor: '#FFF',
+    borderColor: THEME_COLORS.primary + '15',
   },
-  deleteBtn: {
+  accentBar: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 4,
-    zIndex: 10,
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  contentContainer: {
+    flexDirection: 'row',
+    padding: 16,
   },
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   unreadIconBox: {
-    backgroundColor: THEME_COLORS.primary + '15',
+    backgroundColor: THEME_COLORS.primary + '08',
+    borderColor: THEME_COLORS.primary + '15',
   },
-  notifContent: { flex: 1, paddingRight: 20 },
+  textContainer: { flex: 1 },
   notifHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
-  notifTitle: { fontSize: 15, fontWeight: '700', color: '#64748B' },
-  unreadText: { color: THEME_COLORS.text, fontWeight: '900' },
+  notifTitle: { fontSize: 15, fontWeight: '800', color: '#334155' },
+  unreadText: { color: '#0F172A' },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: THEME_COLORS.primary,
+  },
+  notifMsg: { 
+    fontSize: 13, 
+    color: '#64748B', 
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+    paddingTop: 10,
+  },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  timeTxt: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-  notifMsg: { fontSize: 13, color: '#64748B', lineHeight: 18 },
+  timeTxt: { fontSize: 11, color: '#94A3B8', fontWeight: '700' },
+  inlineDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  deleteLabel: { fontSize: 11, fontWeight: '800', color: '#94A3B8' },
 
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyIconCircle: {

@@ -10,12 +10,14 @@ import { WebView } from 'react-native-webview';
 import { THEME_COLORS } from '../theme';
 import { ArrowLeft, Check, ChevronRight, Plus, Trash2, MapPin, ClipboardList, CreditCard, ChevronDown, Search } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { Modal as RNModal, FlatList } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Modal as RNModal, FlatList, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
 import { getImageUrl, sanitizeData, userService } from '../services/api';
 import Razorpay from '@codearcade/expo-razorpay';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 
 
@@ -127,6 +129,15 @@ function AddAddressForm({ onSave, initialData, user }) {
   };
 
   const [form, setForm] = useState(getInitialForm());
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [region, setRegion] = useState({
+    latitude: 20.5937, // India center fallback
+    longitude: 78.9629,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
+  const [marker, setMarker] = useState(null);
+
   const [errors, setErrors] = useState({});
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(
@@ -278,40 +289,108 @@ function AddAddressForm({ onSave, initialData, user }) {
 
         <TouchableOpacity 
           style={f.locateMeBtn} 
+          disabled={loadingLocation}
           onPress={async () => {
             try {
+              setLoadingLocation(true);
               let { status } = await Location.requestForegroundPermissionsAsync();
               if (status !== 'granted') {
+                setLoadingLocation(false);
                 Alert.alert('Permission Denied', 'Please enable location permissions to use this feature.');
                 return;
               }
 
-              Alert.alert('Fetching Location', 'Please wait while we get your current address...');
-              let location = await Location.getCurrentPositionAsync({});
-              const { latitude, longitude } = location.coords;
+              let location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.High,
+              });
               
-              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-              const data = await res.json();
-              if (data.address) {
-                const a = data.address;
+              const { latitude, longitude } = location.coords;
+              const newRegion = {
+                latitude,
+                longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              };
+              setRegion(newRegion);
+              setMarker({ latitude, longitude });
+
+              // Use Expo's reverse geocoding (uses native services like Google/Apple Maps)
+              const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+              
+              if (address) {
+                // Combine house, street, and area into Address Line 1
+                const houseInfo = address.name && address.name !== address.street ? address.name : '';
+                const streetInfo = address.street || '';
+                const areaInfo = address.district || address.subregion || '';
+                
+                const fullLine1 = [houseInfo, streetInfo, areaInfo]
+                  .filter(Boolean)
+                  .join(', ');
+
                 setForm(f => ({
                   ...f,
-                  pincode: a.postcode || f.pincode,
-                  state: a.state || a.state_district || f.state,
-                  city: a.city || a.town || a.village || f.city,
-                  line1: a.road || a.suburb || a.pedestrian || f.line1,
-                  line2: a.neighbourhood || a.suburb || f.line2,
+                  pincode: address.postalCode || f.pincode,
+                  state: address.region || f.state,
+                  city: address.city || address.subregion || address.district || f.city,
+                  line1: fullLine1 || f.line1,
+                  line2: '', // Keep line 2 empty as requested
                 }));
                 Alert.alert('Success', 'Address auto-filled from your current location!');
               }
             } catch (e) {
+              console.error(e);
               Alert.alert('Error', 'Failed to fetch location. Please check your GPS and internet connection.');
+            } finally {
+              setLoadingLocation(false);
             }
           }}
         >
-          <MapPin size={16} color={THEME_COLORS.primary} />
-          <Text style={f.locateMeTxt}>Use Current Location</Text>
+          {loadingLocation ? (
+            <ActivityIndicator size="small" color={THEME_COLORS.primary} />
+          ) : (
+            <MapPin size={16} color={THEME_COLORS.primary} />
+          )}
+          <Text style={f.locateMeTxt}>{loadingLocation ? 'Fetching Location...' : 'Use Current Location'}</Text>
         </TouchableOpacity>
+
+        {/* Google Map View */}
+        <View style={{ height: 200, borderRadius: 12, overflow: 'hidden', marginBottom: 20, borderWidth: 1.5, borderColor: '#E2E8F0' }}>
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={{ flex: 1 }}
+            region={region}
+            onPress={async (e) => {
+              const { latitude, longitude } = e.nativeEvent.coordinate;
+              setMarker({ latitude, longitude });
+              try {
+                const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (address) {
+                  const houseInfo = address.name && address.name !== address.street ? address.name : '';
+                  const streetInfo = address.street || '';
+                  const areaInfo = address.district || address.subregion || '';
+                  
+                  const fullLine1 = [houseInfo, streetInfo, areaInfo]
+                    .filter(Boolean)
+                    .join(', ');
+
+                  setForm(f => ({
+                    ...f,
+                    pincode: address.postalCode || f.pincode,
+                    state: address.region || f.state,
+                    city: address.city || address.subregion || address.district || f.city,
+                    line1: fullLine1 || f.line1,
+                    line2: '', // Keep line 2 empty
+                  }));
+                }
+              } catch (err) {
+                console.warn('Geocoding error:', err);
+              }
+            }}
+          >
+            {marker && <Marker coordinate={marker} />}
+          </MapView>
+        </View>
+
 
         <Text style={f.sectionLabel}>Save Address as</Text>
         <View style={f.saveAsRow}>
@@ -379,6 +458,7 @@ export default function CheckoutScreen({ navigation, route }) {
   const cartItems = directItem ? [directItem] : contextCartItems;
   
   const { user, updateUser } = useAuth();
+  const { addNotification } = useNotifications();
   const [addresses, setAddresses] = useState([]);
   const [step, setStep] = useState(0);
   const [selAddr, setSelAddr] = useState(null);
@@ -585,6 +665,7 @@ export default function CheckoutScreen({ navigation, route }) {
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
         await AsyncStorage.setItem(ordersKey, JSON.stringify([finalOrderWithPayment, ...orders]));
 
+        addNotification('success', 'Order Placed ✓', `Your order ${finalOrder.id} has been placed successfully!`, 'Orders');
         clearCart();
         navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
 
@@ -635,7 +716,36 @@ export default function CheckoutScreen({ navigation, route }) {
       // Place Order Logic
       try {
         const selectedAddress = addresses.find(a => (a.id === selAddr || a._id === selAddr));
-        const orderId = `#ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+        
+        // Fetch all orders to find the highest numerical sequence ID (e.g., from CIM-#1004 to CIM-#1005)
+        let nextOrderNum = 1001; 
+        try {
+          const allOrdersResp = await fetch('https://cromsen-backend.onrender.com/api/orders');
+          if (allOrdersResp.ok) {
+            const allOrdersData = await allOrdersResp.json();
+            const allOrders = Array.isArray(allOrdersData) ? allOrdersData : (allOrdersData.orders || allOrdersData.data || []);
+            
+            // Find the highest number in existing CIDM, CIM or CIW IDs
+            const sequenceNumbers = allOrders
+              .map(o => {
+                const idStr = String(o.id || o._id || '');
+                const match = idStr.match(/(?:CIM|CIW|CIDM)-?#(\d+)/);
+                return match ? parseInt(match[1], 10) : null;
+              })
+              .filter(n => n !== null);
+            
+            if (sequenceNumbers.length > 0) {
+              nextOrderNum = Math.max(...sequenceNumbers) + 1;
+            } else {
+              nextOrderNum = 1001 + allOrders.length;
+            }
+          }
+        } catch (err) {
+          console.warn('Order sequence fetch failed:', err);
+          nextOrderNum = Math.floor(1005 + Math.random() * 9000);
+        }
+
+        const orderId = `CIM-#${nextOrderNum}`;
         const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
         
         const firstItem = cartItems[0] || {};
@@ -674,6 +784,7 @@ export default function CheckoutScreen({ navigation, route }) {
             // STEP 2: PREPARE ORDER FOR ADMIN TABLE
             const finalOrder = {
               id: orderId,
+              orderId: nextOrderNum, // Send only the number to let backend/admin dashboard format it correctly
               date: date,
               status: 'Processing',
               paymentStatus: 'Pending',
@@ -765,6 +876,8 @@ export default function CheckoutScreen({ navigation, route }) {
               const orders = storedOrders ? JSON.parse(storedOrders) : [];
               await AsyncStorage.setItem(ordersKey, JSON.stringify([finalOrderWithPayment, ...orders]));
  
+              addNotification('success', 'Order Placed ✓', `Your order ${finalOrder.id} has been placed successfully!`, 'Orders');
+ 
               if (!directItem) clearCart();
               navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
             } else {
@@ -839,6 +952,7 @@ export default function CheckoutScreen({ navigation, route }) {
         // COD Flow
         const newOrder = {
           id: orderId,
+          orderId: nextOrderNum, // Send only the number to let backend/admin dashboard format it correctly
           date: date,
           status: 'Processing',
           paymentStatus: 'Pending',
@@ -868,6 +982,7 @@ export default function CheckoutScreen({ navigation, route }) {
           guestEmail: user?.email || '',
           total: grandTotal,
           totalAmount: grandTotal,
+          orderId: nextOrderNum, // Added for backend compatibility
           shippingAddress: {
             name: selectedAddress.name || user?.name || 'Guest',
             address: selectedAddress.full || selectedAddress.address,
@@ -890,6 +1005,8 @@ export default function CheckoutScreen({ navigation, route }) {
         const storedOrders = await AsyncStorage.getItem(ordersKey);
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
         await AsyncStorage.setItem(ordersKey, JSON.stringify([newOrder, ...orders]));
+
+        addNotification('success', 'Order Placed ✓', `Your order ${newOrder.id} has been placed successfully!`, 'Orders');
 
         if (!directItem) clearCart();
         alert('Order Placed Successfully!');
@@ -1014,6 +1131,7 @@ export default function CheckoutScreen({ navigation, route }) {
               <Image source={{ uri: getImageUrl(item.image) }} style={s.itemThumb} />
               <View style={s.itemInfo}>
                 <Text style={s.itemName} numberOfLines={1}>{sanitizeData(item.name, 'Product')}</Text>
+                <Text style={[s.itemPrice, { fontSize: 10, marginBottom: 2 }]} numberOfLines={1}>{item.variant || 'Standard'}</Text>
                 <Text style={s.itemPrice}>₹{item.price} x {item.quantity}</Text>
               </View>
               <Text style={s.itemSubtotal}>₹{item.price * item.quantity}</Text>

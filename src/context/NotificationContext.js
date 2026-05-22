@@ -183,22 +183,26 @@ export const NotificationProvider = ({ children }) => {
             
             if (newStatus.includes('CANCEL')) {
               toastType = 'error';
-              title = 'Order Cancelled ❌';
+              title = 'Order Cancelled';
             } else if (newStatus.includes('SHIP')) {
               toastType = 'info';
-              title = 'Order Shipped 🚚';
+              title = 'Order Shipped';
             } else if (newStatus.includes('DELIVERED') || newStatus.includes('DELIVER')) {
               toastType = 'success';
-              title = 'Order Delivered 🎉';
+              title = 'Order Delivered';
             } else if (newStatus.includes('OUT') || newStatus.includes('WAY') || newStatus.includes('ROUTE')) {
               toastType = 'info';
-              title = 'Out for Delivery 🛵';
+              title = 'Out for Delivery';
             }
+            
+            const displayId = String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW-#') 
+              ? newOrder.id 
+              : `#${newOrder.id.slice(-6)}`;
             
             addNotification(
               toastType,
               title,
-              `Status for Order #${newOrder.id.slice(-6)} has been updated to ${newStatus}.`,
+              `Status for Order ${displayId} has been updated to ${newStatus}.`,
               'Orders'
             );
           }
@@ -351,7 +355,7 @@ export const NotificationProvider = ({ children }) => {
     <NotificationContext.Provider value={{ 
       notifications, addNotification, markAsRead, removeNotification, clearAll, 
       checkOrderUpdates, checkProductUpdates,
-      toast, getIcon, getBgColor, toastOpacity, toastY
+      toast, getIcon, getBgColor, toastOpacity, toastY, showToast
     }}>
       {children}
     </NotificationContext.Provider>

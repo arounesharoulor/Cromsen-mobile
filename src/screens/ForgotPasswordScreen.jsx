@@ -10,6 +10,7 @@ import { AppButton, AppInput } from '../components';
 import { LogoIcon } from '../components/CustomIcons';
 import { userService } from '../services/api';
 import { THEME_COLORS } from '../theme';
+import { useNotifications } from '../context/NotificationContext';
 
 const COUNTRIES = [
   { name: 'India', code: '+91', flag: '🇮🇳' },
@@ -26,6 +27,7 @@ const COUNTRIES = [
 
 export default function ForgotPasswordScreen({ navigation }) {
   const { isDarkMode, theme } = useTheme();
+  const { showToast } = useNotifications();
 
   // Multi-step States
   const [step, setStep] = useState(1); // 1: Verify Mobile, 2: Setup New Password
@@ -84,20 +86,53 @@ export default function ForgotPasswordScreen({ navigation }) {
     return Object.keys(e).length === 0;
   };
 
-  const generateAndSendOtp = (cleanPhone) => {
+  const generateAndSendOtp = async (cleanPhone) => {
     const code = String(Math.floor(100000 + Math.random() * 900000));
+    const fullPhone = `${selectedCountry.code}${cleanPhone}`;
+    
     setSentOtp(code);
     setTimer(60);
     setOtpInput('');
     setOtpError('');
     
-    setTimeout(() => {
-      Alert.alert(
-        '💬 Cromsen Secure OTP',
-        `Your password recovery verification code is: ${code}\n\nDo not share this code with anyone.`,
-        [{ text: 'Copy Code', onPress: () => {} }]
-      );
-    }, 800);
+    console.log(`[OTP-Recovery] Attempting to send ${code} to ${fullPhone}`);
+
+    try {
+      const { authService } = require('../services/api');
+      await authService.sendOtp(fullPhone, code);
+      console.log('[OTP-Recovery] Backend send successful');
+    } catch (err) {
+      console.warn('[OTP-Recovery] Backend send failed. Trying Direct Fast2SMS Integration...');
+      
+      try {
+        // --- TEXTBELT DIRECT INTEGRATION (1 Free SMS/Day) ---
+        const tbResponse = await fetch('https://textbelt.com/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: fullPhone,
+            message: `Your Cromsen Password Reset OTP is: ${code}`,
+            key: 'textbelt',
+          })
+        });
+
+        const tbData = await tbResponse.json();
+        if (tbData.success) {
+          console.log('[OTP-Recovery] Textbelt free SMS dispatched successfully to', fullPhone);
+          return;
+        } else {
+          console.warn('[OTP-Recovery] Textbelt Limit Reached or Error:', tbData.error);
+        }
+      } catch (err) {
+        console.warn('[OTP-Recovery] Textbelt network error:', err);
+      }
+      
+      console.log('=============================================');
+      console.log(`🚀 [SIMULATED SMS SENT TO ${fullPhone}]`);
+      console.log(`🔑 DEV OTP CODE: ${code}`);
+      console.log(`(Real SMS requires Twilio/MSG91 backend integration)`);
+      console.log('=============================================');
+    }
   };
 
   const handleResendOtp = () => {

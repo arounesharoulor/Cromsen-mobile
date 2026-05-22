@@ -23,6 +23,12 @@
     },
     "android": {
       "package": "com.cromsen.app",
+      "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        }
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/CromsenAppicon.png",
         "backgroundColor": "#000000"
@@ -35,6 +41,8 @@
       }
     },
     "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
       [
         "expo-build-properties",
         {
@@ -51,3 +59,4 @@
     "newArchEnabled": true
   }
 }
+

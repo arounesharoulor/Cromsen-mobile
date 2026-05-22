@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity, Image,
   Dimensions, ActivityIndicator, Modal, Platform, StatusBar, FlatList,
-  TextInput, Animated,
+  TextInput, Animated, RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -36,12 +36,16 @@ export default function ProductDetailScreen({ navigation, route }) {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selColor, setSelColor] = useState(0);
-  const [selSize, setSelSize] = useState(2);
+  const [selSize, setSelSize] = useState(0);
+  const [selLength, setSelLength] = useState(0);
+  const [selFitting, setSelFitting] = useState(0);
+  const [selVariant, setSelVariant] = useState(0);
   const [wishlisted, setWishlisted] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [showQtyModal, setShowQtyModal] = useState(false);
   const [showQtySelector, setShowQtySelector] = useState(false);
   const [qtyInput, setQtyInput] = useState('1');
+  const [refreshing, setRefreshing] = useState(false);
   const [highlightsOpen, setHighlightsOpen] = useState(true);
   const [reviewsOpen, setReviewsOpen] = useState(true);
   const [localReviews, setLocalReviews] = useState([]);
@@ -192,7 +196,13 @@ export default function ProductDetailScreen({ navigation, route }) {
     else setQtyInput(q => q === '1' ? val : q + val);
   };
 
-  if (loading) return (
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  if (loading && !refreshing) return (
     <View style={[s.center, { backgroundColor: theme.background }]}>
       <ActivityIndicator color={theme.secondary} size="large" />
     </View>
@@ -238,20 +248,47 @@ export default function ProductDetailScreen({ navigation, route }) {
   }
 
   let price = basePrice;
-  const currentSizeObj = (product.sizes || product.size || [])[selSize];
-  if (currentSizeObj && typeof currentSizeObj === 'object') {
-    const sizePrice = currentSizeObj.price || currentSizeObj.retailPrice || currentSizeObj.userPrice;
-    if (userRole === 'dealer') {
-      if (currentSizeObj.dealerPrice) {
-        price = currentSizeObj.dealerPrice;
-      } else if (typeof product.dealerPrice === 'number' && typeof product.price === 'number' && product.price > 0) {
-        const ratio = product.dealerPrice / product.price;
-        price = (parseFloat(sizePrice) || parseFloat(basePrice) || 0) * ratio;
+  
+  // 1. Dynamic Size/Length/Fitting Price Calculation
+  const lengths = product.lengths || product.lengthOptions || product.length || [];
+  const fittings = product.fittings || product.fittingOptions || product.fiting || product.fitting || [];
+  const sizes = product.sizes || product.size || [];
+  const variants = product.variants || product.variations || product.varients || product.variant || [];
+
+  if (variants.length > 0) {
+    const currentVariant = variants[selVariant];
+    if (typeof currentVariant === 'object') {
+       price = (userRole === 'dealer' ? currentVariant.dealerPrice : currentVariant.retailPrice) || currentVariant.price || price;
+    }
+  } else if (lengths.length > 0) {
+    const currentLength = lengths[selLength];
+    if (typeof currentLength === 'object') {
+      price = (userRole === 'dealer' ? currentLength.dealerPrice : currentLength.retailPrice) || currentLength.price || price;
+    }
+  } else if (sizes.length > 0) {
+    const currentSizeObj = sizes[selSize];
+    if (currentSizeObj && typeof currentSizeObj === 'object') {
+      const sizePrice = currentSizeObj.price || currentSizeObj.retailPrice || currentSizeObj.userPrice;
+      if (userRole === 'dealer') {
+        if (currentSizeObj.dealerPrice) {
+          price = currentSizeObj.dealerPrice;
+        } else if (typeof product.dealerPrice === 'number' && typeof product.price === 'number' && product.price > 0) {
+          const ratio = product.dealerPrice / product.price;
+          price = (parseFloat(sizePrice) || parseFloat(basePrice) || 0) * ratio;
+        } else {
+          price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+        }
       } else {
         price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
       }
-    } else {
-      price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+    }
+  }
+
+  // Add Fitting Surcharge if applicable
+  if (fittings.length > 0) {
+    const currentFitting = fittings[selFitting];
+    if (typeof currentFitting === 'object' && currentFitting.price) {
+      price += (parseFloat(currentFitting.price) || 0);
     }
   }
 
@@ -296,7 +333,13 @@ export default function ProductDetailScreen({ navigation, route }) {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={{ paddingBottom: 110 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[THEME_COLORS.primary]} tintColor={THEME_COLORS.primary} />
+        }
+      >
         {/* Image Carousel */}
         <View>
           <FlatList
@@ -361,8 +404,68 @@ export default function ProductDetailScreen({ navigation, route }) {
             </View>
           ) : null}
 
-          {/* Size chart (Conditional) */}
-          {(product.sizes && product.sizes.length > 0) || (product.size && product.size.length > 0) ? (
+          {/* Length Selection */}
+          {lengths.length > 0 && (
+            <View style={[s.optionSection, { borderTopWidth: 0 }]}>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Length: <Text style={{ color: theme.text }}>{typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]}</Text></Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.optionsRow}>
+                {lengths.map((len, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.optionChip, selLength === i && s.optionChipActive]}
+                    onPress={() => setSelLength(i)}
+                  >
+                    <Text style={[s.optionChipTxt, selLength === i && { color: '#FFF' }]}>
+                      {typeof len === 'object' ? len.name : len}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Fitting Selection */}
+          {fittings.length > 0 && (
+            <View style={s.optionSection}>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Fitting: <Text style={{ color: theme.text }}>{typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]}</Text></Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.optionsRow}>
+                {fittings.map((fit, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.optionChip, selFitting === i && s.optionChipActive]}
+                    onPress={() => setSelFitting(i)}
+                  >
+                    <Text style={[s.optionChipTxt, selFitting === i && { color: '#FFF' }]}>
+                      {typeof fit === 'object' ? fit.name : fit}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Variant Selection */}
+          {variants.length > 0 && (
+            <View style={s.optionSection}>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Variant: <Text style={{ color: theme.text }}>{typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]}</Text></Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.optionsRow}>
+                {variants.map((v, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.optionChip, selVariant === i && s.optionChipActive]}
+                    onPress={() => setSelVariant(i)}
+                  >
+                    <Text style={[s.optionChipTxt, selVariant === i && { color: '#FFF' }]}>
+                      {typeof v === 'object' ? v.name : v}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Existing Size chart (Conditional) */}
+          {lengths.length === 0 && ((product.sizes && product.sizes.length > 0) || (product.size && product.size.length > 0)) ? (
             <View style={s.sizeRow}>
               <Text style={s.colorLabel}>Size: </Text>
               {(product.sizes || product.size || SIZE_OPTIONS).map((sz, i) => {
@@ -377,7 +480,9 @@ export default function ProductDetailScreen({ navigation, route }) {
                    </TouchableOpacity>
                  );
               })}
-              <Text style={s.sizeChartLink}>Size Chart</Text>
+              <TouchableOpacity onPress={() => {/* Show Size Chart logic */}}>
+                <Text style={s.sizeChartLink}>Size Chart</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -432,11 +537,25 @@ export default function ProductDetailScreen({ navigation, route }) {
                 onPress={() => {
                   setShowQtySelector(true);
                   // Optionally add to cart immediately with qty 1
+                  const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
+                  const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
+                  const variantLabel = variants.length > 0 ? (typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]) : '';
+                  const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
+                  const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
+                  
+                  let variantStr = '';
+                  if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
+                  if (lenLabel) variantStr += `Length: ${lenLabel}, `;
+                  if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+                  if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
+                  if (colorLabel) variantStr += `Color: ${colorLabel}`;
+                  variantStr = variantStr.replace(/, $/, '');
+
                   addToCart({
                     id: product._id || product.id,
                     name: product.name,
                     price: price,
-                    variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
+                    variant: variantStr,
                     image: imgs[activeImg]
                   }, 1);
                 }}
@@ -447,14 +566,28 @@ export default function ProductDetailScreen({ navigation, route }) {
             )}
 
             <TouchableOpacity style={s.buyNowBtn} onPress={() => {
+              const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
+              const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
+              const variantLabel = variants.length > 0 ? (typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]) : '';
+              const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
+              const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
+              
+              let variantStr = '';
+              if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
+              if (lenLabel) variantStr += `Length: ${lenLabel}, `;
+              if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+              if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
+              if (colorLabel) variantStr += `Color: ${colorLabel}`;
+              variantStr = variantStr.replace(/, $/, '');
+
               const directItem = {
                 id: product._id || product.id,
                 _id: product._id || product.id,
                 name: product.name,
                 price: price,
-                variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
+                variant: variantStr,
                 image: imgs[activeImg],
-                quantity: 1
+                quantity: parseInt(qtyInput) || 1
               };
               navigation.navigate('Checkout', { directItem });
             }}>
@@ -628,11 +761,25 @@ export default function ProductDetailScreen({ navigation, route }) {
             <TouchableOpacity
               style={s.applyBtn}
               onPress={() => {
+                const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
+                const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
+                const variantLabel = variants.length > 0 ? (typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]) : '';
+                const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
+                const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
+                
+                let variantStr = '';
+                if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
+                if (lenLabel) variantStr += `Length: ${lenLabel}, `;
+                if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+                if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
+                if (colorLabel) variantStr += `Color: ${colorLabel}`;
+                variantStr = variantStr.replace(/, $/, '');
+
                 addToCart({
                   id: product._id || product.id,
                   name: product.name,
                   price: price,
-                  variant: `Size: ${((product.sizes || product.size || SIZE_OPTIONS)[selSize]?.name || (product.sizes || product.size || SIZE_OPTIONS)[selSize]?.label || (product.sizes || product.size || SIZE_OPTIONS)[selSize])}, Color: ${((product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || 'Default')}`,
+                  variant: variantStr,
                   image: imgs[activeImg]
                 }, parseInt(qtyInput) || 1);
                 setShowQtyModal(false);
@@ -688,6 +835,15 @@ const s = StyleSheet.create({
   sizeChipActive: { backgroundColor: '#555', borderColor: '#555' },
   sizeChipTxt: { fontSize: 12, fontWeight: '700', color: THEME_COLORS.text },
   sizeChartLink: { fontSize: 12, color: THEME_COLORS.primary, fontWeight: '700', marginLeft: 4 },
+
+  optionSection: { paddingVertical: 12, borderTopWidth: 1, borderTopColor: THEME_COLORS.border },
+  optionsRow: { gap: 10, paddingRight: 10 },
+  optionChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0',
+  },
+  optionChipActive: { backgroundColor: THEME_COLORS.primary, borderColor: THEME_COLORS.primary },
+  optionChipTxt: { fontSize: 13, fontWeight: '700', color: '#64748B' },
 
   nameRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
   likeTxt: { fontSize: 11, fontWeight: '700', color: THEME_COLORS.textSecondary },

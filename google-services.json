@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "729282764152",
+    "project_id": "cromsen-8ba80",
+    "storage_bucket": "cromsen-8ba80.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:729282764152:android:f2428412d87e538a04fc8d",
+        "android_client_info": {
+          "package_name": "com.cromsen.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsWaRVTJko-6Gx7UaApjAzJ_2VsMUfxrs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
