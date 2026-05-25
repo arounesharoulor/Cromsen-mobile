@@ -469,6 +469,66 @@ export default function CheckoutScreen({ navigation, route }) {
   const [paymentHtml, setPaymentHtml] = useState('');
   const [showWebView, setShowWebView] = useState(false);
   const [pendingOrderDetails, setPendingOrderDetails] = useState(null);
+  const [instSelections, setInstSelections] = useState({});
+
+  useEffect(() => {
+    try {
+      console.log('[Checkout] cartItems:', JSON.stringify(cartItems, null, 2));
+    } catch (e) {}
+  }, [cartItems]);
+
+  // Robust number parsing and installation price resolution
+  const _parseNumber = (v) => {
+    if (typeof v === 'number') return v;
+    if (v === null || typeof v === 'undefined') return 0;
+    const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const resolveInstallationRate = (item) => {
+    const candidates = [
+      item.installationRatePerSqFt,
+      item.installationRatePerSqft,
+      item.installationPricePerSqft,
+      item.installationPerSqFt,
+      item.installationRate,
+      item.installation_per_sqft,
+      item.installation_rate,
+    ];
+    for (const c of candidates) {
+      const val = _parseNumber(c);
+      if (val > 0) return val;
+    }
+    // check nested structures
+    if (item.installation && typeof item.installation === 'object') {
+      const inst = item.installation;
+      const nested = inst.ratePerSqFt || inst.rate || inst.perSqFt || inst.pricePerSqft || inst.price;
+      const val = _parseNumber(nested);
+      if (val > 0) return val;
+    }
+    return 0;
+  };
+
+  const resolveBaseInstallationPrice = (item) => {
+    if (typeof item.baseInstallationPrice === 'number') return item.baseInstallationPrice;
+    const val = _parseNumber(item.baseInstallationPrice || item.installationPrice || item.installation_price || item.base_installation_price);
+    return val || 0;
+  };
+
+  const getItemInstallationPrice = (item) => {
+    const sqFtMult = (typeof item.sqFt !== 'undefined') ? (_parseNumber(item.sqFt) || 1) : 1;
+    const rate = resolveInstallationRate(item);
+    if (rate > 0) {
+      const goodSq = sqFtMult > 0 ? sqFtMult : 1;
+      return rate * goodSq;
+    }
+    const base = resolveBaseInstallationPrice(item);
+    if (base > 0) return base;
+    const instPriceNum = _parseNumber(item.installationPrice);
+    if (instPriceNum > 0) return instPriceNum;
+    return 500;
+  };
+
 
 
   useFocusEffect(
@@ -686,14 +746,32 @@ export default function CheckoutScreen({ navigation, route }) {
 
   const subtotal = cartItems.reduce((acc, item) => {
     const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
-    return acc + (price * (item.quantity || 1));
+    const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+    return acc + (price * sqFtMult * (item.quantity || 1));
+  }, 0);
+
+  const totalSqFt = cartItems.reduce((acc, item) => {
+    const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+    if (sqFtMult > 1) {
+      return acc + (sqFtMult * (item.quantity || 1));
+    }
+    return acc;
+  }, 0);
+  
+  const totalInstallation = cartItems.reduce((acc, item, idx) => {
+    const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+    if (isInstalled) {
+      const instPriceSingle = getItemInstallationPrice(item);
+      return acc + (instPriceSingle * (item.quantity || 1));
+    }
+    return acc;
   }, 0);
   
   // Align with CartScreen logic for consistency
   const discount = 0; // Discount removed as per request
   const packagingFee = 7; // Packaging fee
   const shippingFee = 20; // Shipping fee
-  const total = subtotal - discount + packagingFee;
+  const total = subtotal - discount + packagingFee + totalInstallation;
   const grandTotal = total + shippingFee;
 
 
@@ -725,11 +803,17 @@ export default function CheckoutScreen({ navigation, route }) {
             const allOrdersData = await allOrdersResp.json();
             const allOrders = Array.isArray(allOrdersData) ? allOrdersData : (allOrdersData.orders || allOrdersData.data || []);
             
-            // Find the highest number in existing CIDM, CIM or CIW IDs
             const sequenceNumbers = allOrders
               .map(o => {
-                const idStr = String(o.id || o._id || '');
-                const match = idStr.match(/(?:CIM|CIW|CIDM)-?#(\d+)/);
+                const orderIdVal = o.orderId;
+                if (typeof orderIdVal === 'number' || (orderIdVal && !isNaN(orderIdVal))) {
+                  return parseInt(orderIdVal, 10);
+                }
+                const idStr = String(o.orderId || o.id || o._id || '');
+                let match = idStr.match(/#(\d+)/);
+                if (!match) {
+                  match = idStr.match(/(\d+)/);
+                }
                 return match ? parseInt(match[1], 10) : null;
               })
               .filter(n => n !== null);
@@ -745,7 +829,7 @@ export default function CheckoutScreen({ navigation, route }) {
           nextOrderNum = Math.floor(1005 + Math.random() * 9000);
         }
 
-        const orderId = `CIM-#${nextOrderNum}`;
+        const orderId = `CIM-${nextOrderNum}`;
         const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
         
         const firstItem = cartItems[0] || {};
@@ -784,7 +868,7 @@ export default function CheckoutScreen({ navigation, route }) {
             // STEP 2: PREPARE ORDER FOR ADMIN TABLE
             const finalOrder = {
               id: orderId,
-              orderId: nextOrderNum, // Send only the number to let backend/admin dashboard format it correctly
+              orderId: orderId, // Pass the full formatted ID (e.g. CIM-#1011) to the admin dashboard
               date: date,
               status: 'Processing',
               paymentStatus: 'Pending',
@@ -799,14 +883,28 @@ export default function CheckoutScreen({ navigation, route }) {
               userId: user?._id || user?.id,
               email: user?.email || '',
               guestEmail: user?.email || '', // Added for backend compatibility
-              items: cartItems.map(item => ({
-                ...item,
-                productId: item._id || item.id || '',
-                _id: item._id || item.id || item.product || '',
-                name: sanitizeData(item.name || 'Product', 'Product'),
-                image: getImageUrl(item.image),
-                price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
-              })),
+              items: cartItems.map((item, idx) => {
+                const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+                const instPrice = getItemInstallationPrice(item);
+
+                let variantStr = item.variant || 'Standard';
+                if (variantStr.includes('Installation:')) {
+                  variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+                } else {
+                  variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+                }
+                return {
+                  ...item,
+                  productId: item._id || item.id || '',
+                  _id: item._id || item.id || item.product || '',
+                  name: sanitizeData(item.name || 'Product', 'Product'),
+                  image: getImageUrl(item.image),
+                  price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+                  needsInstallation: isInstalled,
+                  installationPrice: isInstalled ? instPrice : 0,
+                  variant: variantStr
+                };
+              }),
               address: selectedAddress,
               shippingAddress: {
                 name: selectedAddress.name || user?.name || 'Guest',
@@ -952,7 +1050,7 @@ export default function CheckoutScreen({ navigation, route }) {
         // COD Flow
         const newOrder = {
           id: orderId,
-          orderId: nextOrderNum, // Send only the number to let backend/admin dashboard format it correctly
+          orderId: orderId, // Pass the full formatted ID to the admin dashboard
           date: date,
           status: 'Processing',
           paymentStatus: 'Pending',
@@ -964,14 +1062,28 @@ export default function CheckoutScreen({ navigation, route }) {
           image: getImageUrl(firstItem.image),
           userId: user?._id || user?.id,
           email: user?.email || '',
-          items: cartItems.map(item => ({
-            ...item,
-            productId: item._id || item.id || '',  // Explicitly preserve product ID for reviews
-            _id: item._id || item.id || item.product || '',
-            name: sanitizeData(item.name || 'Product', 'Product'),
-            image: getImageUrl(item.image),
-            price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0
-          })),
+          items: cartItems.map((item, idx) => {
+            const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+            const instPrice = getItemInstallationPrice(item);
+
+            let variantStr = item.variant || 'Standard';
+            if (variantStr.includes('Installation:')) {
+              variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+            } else {
+              variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+            }
+            return {
+              ...item,
+              productId: item._id || item.id || '',  // Explicitly preserve product ID for reviews
+              _id: item._id || item.id || item.product || '',
+              name: sanitizeData(item.name || 'Product', 'Product'),
+              image: getImageUrl(item.image),
+              price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+              needsInstallation: isInstalled,
+              installationPrice: isInstalled ? instPrice : 0,
+              variant: variantStr
+            };
+          }),
           address: selectedAddress,
         };
 
@@ -982,7 +1094,7 @@ export default function CheckoutScreen({ navigation, route }) {
           guestEmail: user?.email || '',
           total: grandTotal,
           totalAmount: grandTotal,
-          orderId: nextOrderNum, // Added for backend compatibility
+          orderId: orderId, // Pass full formatted ID
           shippingAddress: {
             name: selectedAddress.name || user?.name || 'Guest',
             address: selectedAddress.full || selectedAddress.address,
@@ -1126,22 +1238,61 @@ export default function CheckoutScreen({ navigation, route }) {
             <Text style={s.sectionTitle}>Order Items</Text>
             <Text style={s.itemCountTxt}>{cartItems.length} items</Text>
           </View>
-          {cartItems.map((item, idx) => (
-            <View key={idx} style={s.itemSummaryRow}>
-              <Image source={{ uri: getImageUrl(item.image) }} style={s.itemThumb} />
-              <View style={s.itemInfo}>
-                <Text style={s.itemName} numberOfLines={1}>{sanitizeData(item.name, 'Product')}</Text>
-                <Text style={[s.itemPrice, { fontSize: 10, marginBottom: 2 }]} numberOfLines={1}>{item.variant || 'Standard'}</Text>
-                <Text style={s.itemPrice}>₹{item.price} x {item.quantity}</Text>
+          {cartItems.map((item, idx) => {
+            const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+            const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+            const instPrice = getItemInstallationPrice(item);
+
+            return (
+              <View key={idx} style={s.itemSummaryRow}>
+                <Image source={{ uri: getImageUrl(item.image) }} style={s.itemThumb} />
+                <View style={s.itemInfo}>
+                  <Text style={s.itemName} numberOfLines={1}>{sanitizeData(item.name, 'Product')}</Text>
+                  <Text style={[s.itemPrice, { fontSize: 10, marginBottom: 2 }]} numberOfLines={1}>{item.variant || 'Standard'}</Text>
+                  
+                  {/* Installation Option Toggles (larger for better visibility) */}
+                  <View style={s.installRow}>
+                    <TouchableOpacity
+                      style={[s.installBtn, !isInstalled ? s.installBtnActive : null]}
+                      onPress={() => setInstSelections(prev => ({ ...prev, [idx]: false }))}
+                    >
+                      <Text style={[s.installBtnTxt, !isInstalled ? s.installBtnTxtActive : null]}>Self Install</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[s.installBtn, isInstalled ? s.installBtnCompanyActive : null]}
+                      onPress={() => setInstSelections(prev => ({ ...prev, [idx]: true }))}
+                    >
+                      <Text style={[s.installBtnTxt, isInstalled ? s.installBtnCompanyTxtActive : null]}>By Company (+₹{instPrice})</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {__DEV__ ? (
+                    <Text style={{ fontSize: 11, color: '#999', marginTop: 6 }}>
+                      {`rate:${String(item.installationRatePerSqFt)} base:${String(item.baseInstallationPrice)} rawKeys:${Object.keys(item).filter(k=>k.toLowerCase().includes('install')).join(',')}`}
+                    </Text>
+                  ) : null}
+
+                  <Text style={s.itemPrice}>
+                    {item.sqFt && item.sqFt !== '1' ? `₹${item.price} x ${item.sqFt} sq.ft ` : `₹${item.price} `} 
+                    (Qty: {item.quantity})
+                  </Text>
+                </View>
+                <Text style={s.itemSubtotal}>₹{(parseFloat(item.price) || 0) * (parseFloat(item.sqFt) || 1) * (item.quantity || 1)}</Text>
               </View>
-              <Text style={s.itemSubtotal}>₹{item.price * item.quantity}</Text>
-            </View>
-          ))}
+            );
+          })}
 
 
           {/* Price Summary */}
           <View style={s.priceSummary}>
+            {totalSqFt > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>Total Area</Text><Text style={s.priceVal}>{totalSqFt} sq.ft</Text></View>
+            )}
             <View style={s.priceRow}><Text style={s.priceLbl}>Subtotal</Text><Text style={s.priceVal}>₹{subtotal}</Text></View>
+            {totalInstallation > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>Installation Fee</Text><Text style={s.priceVal}>₹{totalInstallation}</Text></View>
+            )}
             <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{shippingFee}</Text></View>
             <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{packagingFee}</Text></View>
             <View style={[s.priceRow, {marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9'}]}>
@@ -1300,5 +1451,28 @@ const s = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
   primaryBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  installRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 8, gap: 10, flexWrap: 'wrap' },
+  installBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  installBtnActive: {
+    borderColor: THEME_COLORS.primary,
+    backgroundColor: THEME_COLORS.primary + '10',
+  },
+  installBtnCompanyActive: {
+    borderColor: '#059669',
+    backgroundColor: '#05966910',
+  },
+  installBtnTxt: { fontSize: 13, fontWeight: '800', color: '#64748B' },
+  installBtnTxtActive: { color: THEME_COLORS.primary },
+  installBtnCompanyTxtActive: { color: '#059669' },
 });
 

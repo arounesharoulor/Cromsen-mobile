@@ -37,7 +37,7 @@
     "updates": {},
     "extra": {
       "eas": {
-        "projectId": "0eaedf75-b67d-4995-9ab6-c1856869c2b4"
+        "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
       }
     },
     "plugins": [
@@ -59,4 +59,3 @@
     "newArchEnabled": true
   }
 }
-

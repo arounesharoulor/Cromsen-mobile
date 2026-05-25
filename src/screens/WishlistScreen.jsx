@@ -32,9 +32,12 @@ export default function WishlistScreen({ navigation }) {
     addToCart({
       id: item.id,
       name: item.name,
-      price: finalPrice,
+      price: typeof finalPrice === 'number' ? finalPrice : (parseFloat(finalPrice) || 0),
+      priceSource: 'wishlist',
       image: item.image,
       variant: '',
+      installationRatePerSqFt: parseFloat(item.installationRatePerSqFt || item.installationRatePerSqft || item.installationPricePerSqft || item.installationPerSqFt || item.installationRate || 0) || 0,
+      baseInstallationPrice: parseFloat(item.installationPrice || item.installationFee || item.installationCost || 0) || 0,
     }, 1);
     addNotification('cart', 'Added to Cart', `${item.name} moved to cart!`, 'Cart');
     removeFromWishlist(item.id);

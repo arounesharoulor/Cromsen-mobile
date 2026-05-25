@@ -7,7 +7,7 @@ import { userService, authService } from '../services/api';
 const WishlistContext = createContext();
 
 export function WishlistProvider({ children }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { addNotification } = useNotifications();
   const currentUserId = user?._id || user?.id;
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -37,6 +37,9 @@ export function WishlistProvider({ children }) {
             }
           } catch(err) {
              console.warn('Failed to fetch backend wishlist', err);
+             if (err.message && err.message.toLowerCase().includes('user not found')) {
+                 if (logout) logout();
+             }
           }
         }
         
@@ -61,6 +64,9 @@ export function WishlistProvider({ children }) {
            });
         } catch(err) {
            console.warn('Failed to sync wishlist to backend', err);
+           if (err.message && err.message.toLowerCase().includes('user not found')) {
+               if (logout) logout();
+           }
         }
       }
     } catch (e) {

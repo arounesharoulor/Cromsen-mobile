@@ -308,16 +308,10 @@ export default function OrdersScreen({ navigation }) {
         let displayId = o.id || o._id;
         if (o.orderId) {
           const oid = String(o.orderId).toUpperCase();
-          if (oid.startsWith('CIM-') || oid.startsWith('CIW-') || oid.startsWith('CIDM-')) {
-            // It has a prefix, but let's ensure it has the '#' and is uppercase
-            if (!oid.includes('#')) {
-              displayId = oid.replace('CIM-', 'CIM-#').replace('CIW-', 'CIW-#').replace('CIDM-', 'CIDM-#');
-            } else {
-              displayId = oid;
-            }
-          } else if (typeof o.orderId === 'number' || !isNaN(o.orderId)) {
-            // It's a numerical sequence, match dashboard format
-            displayId = `CIM-#${o.orderId}`;
+          const match = oid.match(/(?:CIM|CIW|CIDM)?-?#?(\d+)/);
+          if (match) {
+            const prefix = oid.startsWith('CIW') ? 'CIW' : oid.startsWith('CIDM') ? 'CIDM' : 'CIM';
+            displayId = `${prefix}-#${match[1]}`;
           } else {
             displayId = oid;
           }

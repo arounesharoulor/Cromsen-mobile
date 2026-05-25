@@ -15,11 +15,14 @@ export default function CartScreen({ navigation }) {
   const { isDarkMode, theme } = useTheme();
 
   const subtotal = Array.isArray(items) 
-    ? items.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.quantity) || 0), 0)
+    ? items.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0), 0)
+    : 0;
+  const totalInstallation = Array.isArray(items)
+    ? items.reduce((s, i) => s + (Number(i?.installationPrice) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
   const discount = 0;
   const packaging = 7;
-  const total = subtotal - discount + packaging;
+  const total = subtotal - discount + packaging + totalInstallation;
 
   if (items.length === 0) {
     return (
@@ -77,6 +80,9 @@ export default function CartScreen({ navigation }) {
         {/* Bill Details */}
         <View style={styles.billCard}>
           <BillRow label={`Price (${items.length} item${items.length > 1 ? 's' : ''})`} value={`₹${subtotal.toLocaleString()}`} />
+          {totalInstallation > 0 && (
+            <BillRow label="Installation Fee" value={`₹${totalInstallation.toLocaleString()}`} />
+          )}
           <BillRow label="Secured Packaging Fee" value={`₹${packaging}`} />
           <View style={styles.totalDivider} />
           <BillRow label="Total Amount" value={`₹${total.toLocaleString()}`} bold />

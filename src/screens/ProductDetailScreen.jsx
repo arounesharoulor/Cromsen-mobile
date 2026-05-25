@@ -40,11 +40,13 @@ export default function ProductDetailScreen({ navigation, route }) {
   const [selLength, setSelLength] = useState(0);
   const [selFitting, setSelFitting] = useState(0);
   const [selVariant, setSelVariant] = useState(0);
+  const [customFitting, setCustomFitting] = useState('');
   const [wishlisted, setWishlisted] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [showQtyModal, setShowQtyModal] = useState(false);
   const [showQtySelector, setShowQtySelector] = useState(false);
   const [qtyInput, setQtyInput] = useState('1');
+  const [sqFt, setSqFt] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [highlightsOpen, setHighlightsOpen] = useState(true);
   const [reviewsOpen, setReviewsOpen] = useState(true);
@@ -292,6 +294,9 @@ export default function ProductDetailScreen({ navigation, route }) {
     }
   }
 
+  // Add Installation Fee if required
+
+
   const rating = product.ratings || 4.7;
 
   const HIGHLIGHTS = [
@@ -441,8 +446,34 @@ export default function ProductDetailScreen({ navigation, route }) {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+
+              {/* Custom Fitting Input */}
+              <View style={{ marginTop: 12 }}>
+                <Text style={[s.colorLabel, { fontSize: 11, marginBottom: 4 }]}>Or provide Custom Fitting Specs:</Text>
+                <TextInput
+                  style={[s.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+                  placeholder="Enter details (e.g. 15mm holes, specific gap...)"
+                  placeholderTextColor={theme.textSecondary}
+                  value={customFitting}
+                  onChangeText={setCustomFitting}
+                />
+              </View>
             </View>
           )}
+
+          {/* Square Feet Input */}
+          <View style={s.optionSection}>
+            <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Square Feet (sq.ft):</Text>
+            <TextInput
+              style={[s.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              placeholder="Enter square feet manually"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="numeric"
+              value={sqFt}
+              onChangeText={setSqFt}
+            />
+          </View>
+
 
           {/* Variant Selection */}
           {variants.length > 0 && (
@@ -543,20 +574,29 @@ export default function ProductDetailScreen({ navigation, route }) {
                   const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
                   const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
                   
+                  const finalSqFt = sqFt || '1';
+                  
                   let variantStr = '';
                   if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
                   if (lenLabel) variantStr += `Length: ${lenLabel}, `;
                   if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+                  if (customFitting.trim()) variantStr += `Custom Fit: ${customFitting.trim()}, `;
                   if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
-                  if (colorLabel) variantStr += `Color: ${colorLabel}`;
+                  if (colorLabel) variantStr += `Color: ${colorLabel}, `;
+                  variantStr += `SqFt: ${finalSqFt}`;
                   variantStr = variantStr.replace(/, $/, '');
 
                   addToCart({
                     id: product._id || product.id,
                     name: product.name,
-                    price: price,
+                    price: typeof price === 'number' ? price : (parseFloat(price) || 0),
+                    priceSource: 'productDetail',
                     variant: variantStr,
-                    image: imgs[activeImg]
+                    image: imgs[activeImg],
+                    // installation handled in Checkout screen
+                    sqFt: finalSqFt,
+                    installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
+                    baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
                   }, 1);
                 }}
               >
@@ -564,7 +604,7 @@ export default function ProductDetailScreen({ navigation, route }) {
                 <Text style={s.addCartTxt}>Add to Cart</Text>
               </TouchableOpacity>
             )}
-
+ 
             <TouchableOpacity style={s.buyNowBtn} onPress={() => {
               const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
               const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
@@ -572,22 +612,31 @@ export default function ProductDetailScreen({ navigation, route }) {
               const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
               const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
               
+              const finalSqFt = sqFt || '1';
+              
               let variantStr = '';
               if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
               if (lenLabel) variantStr += `Length: ${lenLabel}, `;
               if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+              if (customFitting.trim()) variantStr += `Custom Fit: ${customFitting.trim()}, `;
               if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
-              if (colorLabel) variantStr += `Color: ${colorLabel}`;
+              if (colorLabel) variantStr += `Color: ${colorLabel}, `;
+              variantStr += `SqFt: ${finalSqFt}`;
               variantStr = variantStr.replace(/, $/, '');
-
+ 
               const directItem = {
                 id: product._id || product.id,
                 _id: product._id || product.id,
                 name: product.name,
-                price: price,
+                price: typeof price === 'number' ? price : (parseFloat(price) || 0),
+                installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
+                baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
+                priceSource: 'productDetail',
                 variant: variantStr,
                 image: imgs[activeImg],
-                quantity: parseInt(qtyInput) || 1
+                quantity: parseInt(qtyInput) || 1,
+                // installation handled in Checkout screen
+                sqFt: finalSqFt
               };
               navigation.navigate('Checkout', { directItem });
             }}>
@@ -706,12 +755,14 @@ export default function ProductDetailScreen({ navigation, route }) {
                               <Text style={s.similarPrice}>₹{Number(pPrice).toLocaleString()}</Text>
                               <TouchableOpacity 
                                 style={s.similarAdd}
-                                onPress={() => {
+                                  onPress={() => {
                                   addToCart({
                                     ...p,
                                     id: p._id || p.id,
                                     price: pPrice,
-                                    image: getImageUrl(p.image || p.thumbnail)
+                                    image: getImageUrl(p.image || p.thumbnail),
+                                    installationRatePerSqFt: parseFloat(p.installationRatePerSqFt || p.installationRatePerSqft || p.installationPricePerSqft || p.installationPerSqFt || p.installationRate || 0) || 0,
+                                    baseInstallationPrice: parseFloat(p.installationPrice || p.installationFee || p.installationCost || 0) || 0,
                                   }, 1);
                                 }}
                               >
@@ -767,20 +818,27 @@ export default function ProductDetailScreen({ navigation, route }) {
                 const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
                 const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
                 
+                const finalSqFt = sqFt || '1';
+                
                 let variantStr = '';
                 if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
                 if (lenLabel) variantStr += `Length: ${lenLabel}, `;
                 if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
+                if (customFitting.trim()) variantStr += `Custom Fit: ${customFitting.trim()}, `;
                 if (sizeLabel && !lenLabel) variantStr += `Size: ${sizeLabel}, `;
-                if (colorLabel) variantStr += `Color: ${colorLabel}`;
+                if (colorLabel) variantStr += `Color: ${colorLabel}, `;
+                variantStr += `SqFt: ${finalSqFt}`;
                 variantStr = variantStr.replace(/, $/, '');
 
                 addToCart({
                   id: product._id || product.id,
                   name: product.name,
-                  price: price,
+                  price: typeof price === 'number' ? price : (parseFloat(price) || 0),
+                  priceSource: 'productDetail',
                   variant: variantStr,
-                  image: imgs[activeImg]
+                  image: imgs[activeImg],
+                  // installation handled in Checkout screen
+                  sqFt: finalSqFt
                 }, parseInt(qtyInput) || 1);
                 setShowQtyModal(false);
                 navigation.navigate('Cart');
@@ -844,6 +902,11 @@ const s = StyleSheet.create({
   },
   optionChipActive: { backgroundColor: THEME_COLORS.primary, borderColor: THEME_COLORS.primary },
   optionChipTxt: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  
+  input: {
+    height: 48, borderRadius: 12, borderWidth: 1.5,
+    paddingHorizontal: 16, fontSize: 14, marginTop: 4,
+  },
 
   nameRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
   likeTxt: { fontSize: 11, fontWeight: '700', color: THEME_COLORS.textSecondary },

@@ -316,8 +316,11 @@ export default function HomeScreen({ navigation, route }) {
                       addToCart({
                         id: p._id || p.id,
                         name: p.name,
-                        price: finalPrice,
-                        image: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0]))
+                        price: typeof finalPrice === 'number' ? finalPrice : (parseFloat(finalPrice) || 0),
+                        priceSource: 'homeList',
+                        image: getImageUrl(p.image || p.thumbnail || p.img || (p.images && p.images[0])),
+                        installationRatePerSqFt: parseFloat(p.installationRatePerSqFt || p.installationRatePerSqft || p.installationPricePerSqft || p.installationPerSqFt || p.installationRate || 0) || 0,
+                        baseInstallationPrice: parseFloat(p.installationPrice || p.installationFee || p.installationCost || 0) || 0,
                       }, 1);
                       addNotification('cart', 'Added to Cart', `${p.name} added successfully!`, 'Cart');
                     }}

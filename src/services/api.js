@@ -122,19 +122,45 @@ export const authService = {
 };
 
 export const productService = {
+  // Normalize a single product object to include canonical installation fields
+  _normalizeProduct: (p) => {
+    if (!p || typeof p !== 'object') return p;
+    const installationRatePerSqFt = (typeof p.installationRatePerSqFt === 'number')
+      ? p.installationRatePerSqFt
+      : (parseFloat(p.installationRatePerSqFt || p.installationRatePerSqft || p.installationPricePerSqft || p.installationPerSqFt || p.installationRate || p.installationRatePerSquareFoot) || 0);
+
+    const baseInstallationPrice = (typeof p.baseInstallationPrice === 'number')
+      ? p.baseInstallationPrice
+      : (parseFloat(p.installationPrice || p.installationFee || p.installationCost || p.baseInstallationPrice || 0) || 0);
+
+    return { ...p, installationRatePerSqFt, baseInstallationPrice };
+  },
+
   getProducts: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const response = await fetch(`${BASE_URL}/products?${query}`);
-    return handleResponse(response);
+    const data = await handleResponse(response);
+    // Normalize list shapes
+    if (Array.isArray(data)) return data.map(productService._normalizeProduct);
+    const list = data.products || data.data || [];
+    if (Array.isArray(list)) return { ...data, products: list.map(productService._normalizeProduct) };
+    return productService._normalizeProduct(data);
   },
   getProductById: async (id) => {
     // Add timestamp to bypass potential caching issues
     const response = await fetch(`${BASE_URL}/products/${id}?t=${Date.now()}`);
-    return handleResponse(response);
+    const data = await handleResponse(response);
+    // If wrapped response with data/product
+    const prod = data.data || data.product || data;
+    return productService._normalizeProduct(prod);
   },
   searchProducts: async (query) => {
     const response = await fetch(`${BASE_URL}/products/search?q=${query}`);
-    return handleResponse(response);
+    const data = await handleResponse(response);
+    if (Array.isArray(data)) return data.map(productService._normalizeProduct);
+    const list = data.products || data.data || [];
+    if (Array.isArray(list)) return { ...data, products: list.map(productService._normalizeProduct) };
+    return productService._normalizeProduct(data);
   },
   addReview: async (productId, reviewData) => {
     // Try multiple endpoint patterns for reviews

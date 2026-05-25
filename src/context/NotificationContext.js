@@ -27,8 +27,8 @@ export const NotificationProvider = ({ children }) => {
         } else {
           setNotifications([]);
         }
-      } catch (e) { 
-        console.error('Error loading notifications:', e); 
+      } catch (e) {
+        console.error('Error loading notifications:', e);
       }
     };
     loadNotifs();
@@ -40,8 +40,8 @@ export const NotificationProvider = ({ children }) => {
       try {
         const notifKey = currentUserId ? `@UserNotifications_${currentUserId}` : '@UserNotifications_guest';
         await AsyncStorage.setItem(notifKey, JSON.stringify(notifications));
-      } catch (e) { 
-        console.error('Error saving notifications:', e); 
+      } catch (e) {
+        console.error('Error saving notifications:', e);
       }
     };
     saveNotifs();
@@ -55,21 +55,21 @@ export const NotificationProvider = ({ children }) => {
     const isCartNotif = notifType === 'cart' || notifTitle.includes('cart');
     const isWishlistNotif = notifType === 'wishlist' || notifTitle.includes('wishlist');
     const isNewArrivalsNotif = notifTitle.includes('new arrivals') || notifTitle.includes('new arrival');
-    const isProductUpdateNotif = notifTitle.includes('product') || 
-                                 notifTitle.includes('price') || 
-                                 notifTitle.includes('status') || 
-                                 notifTitle.includes('stock') ||
-                                 notifTitle.includes('out of stock') || 
-                                 notifTitle.includes('back in stock') ||
-                                 notifTitle.includes('category');
+    const isProductUpdateNotif = notifTitle.includes('product') ||
+      notifTitle.includes('price') ||
+      notifTitle.includes('status') ||
+      notifTitle.includes('stock') ||
+      notifTitle.includes('out of stock') ||
+      notifTitle.includes('back in stock') ||
+      notifTitle.includes('category');
 
     // Order Status Notification Filter (Shipped, Delivered, Processing, Cancelled, Pending)
-    const isOrderStatusNotif = notifTitle.includes('order') || 
-                               notifTitle.includes('ship') || 
-                               notifTitle.includes('deliver') || 
-                               notifTitle.includes('process') || 
-                               notifTitle.includes('cancel') ||
-                               notifTitle.includes('pending');
+    const isOrderStatusNotif = notifTitle.includes('order') ||
+      notifTitle.includes('ship') ||
+      notifTitle.includes('deliver') ||
+      notifTitle.includes('process') ||
+      notifTitle.includes('cancel') ||
+      notifTitle.includes('pending');
 
     // 2. Strict Filter Check: Only allow designated notifications
     const isAllowed = isCartNotif || isWishlistNotif || isNewArrivalsNotif || isProductUpdateNotif || isOrderStatusNotif;
@@ -105,7 +105,7 @@ export const NotificationProvider = ({ children }) => {
   const showToast = (type, message) => {
     console.log(`[Toast] Triggered: ${message}`);
     setToast({ type, message });
-    
+
     toastOpacity.setValue(0);
     toastY.setValue(-50);
 
@@ -176,11 +176,11 @@ export const NotificationProvider = ({ children }) => {
           const oldOrder = localOrders.find(o => o.id === newOrder.id);
           if (oldOrder && oldOrder.status !== newOrder.status) {
             console.log(`[Order Polling] Status change detected for ${newOrder.id} (${oldOrder.status} -> ${newOrder.status})`);
-            
+
             const newStatus = newOrder.status.toUpperCase();
             let toastType = 'success';
             let title = `Order ${newStatus}`;
-            
+
             if (newStatus.includes('CANCEL')) {
               toastType = 'error';
               title = 'Order Cancelled';
@@ -194,11 +194,11 @@ export const NotificationProvider = ({ children }) => {
               toastType = 'info';
               title = 'Out for Delivery';
             }
-            
-            const displayId = String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW-#') 
-              ? newOrder.id 
+
+            const displayId = String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW#') || String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW-#')
+              ? newOrder.id
               : `#${newOrder.id.slice(-6)}`;
-            
+
             addNotification(
               toastType,
               title,
@@ -241,7 +241,7 @@ export const NotificationProvider = ({ children }) => {
       const stored = await AsyncStorage.getItem('@UserProductsCache');
       if (stored) {
         const localProducts = JSON.parse(stored);
-        
+
         // Detect new products
         const newOnes = backendProducts.filter(bp => {
           const bpId = String(bp._id || bp.id);
@@ -251,9 +251,9 @@ export const NotificationProvider = ({ children }) => {
         if (newOnes.length > 0) {
           console.log(`[Product Polling] Detected ${newOnes.length} new products`);
           addNotification(
-            'success', 
-            'New Arrivals!', 
-            `${newOnes[0].name} and others are now available. Check them out!`, 
+            'success',
+            'New Arrivals!',
+            `${newOnes[0].name} and others are now available. Check them out!`,
             'AllProducts'
           );
         }
@@ -269,7 +269,7 @@ export const NotificationProvider = ({ children }) => {
 
             if (oldStatus !== newStatus) {
               console.log(`[Product Polling] Status change for ${bp.name}: ${oldStatus} -> ${newStatus}`);
-              
+
               let title = 'Product Update 📦';
               let msg = `"${bp.name}" status is now ${newStatus.replace('_', ' ')}.`;
               let type = 'info';
@@ -290,7 +290,7 @@ export const NotificationProvider = ({ children }) => {
             // 2. Detect other admin-side modifications (name, description, category)
             const hasNameChange = lp.name && bp.name && lp.name !== bp.name;
             const hasDescChange = lp.description && bp.description && lp.description !== bp.description;
-            
+
             // Extract flat string keys if category is populated as an object
             const lpCatStr = typeof lp.category === 'object' && lp.category ? String(lp.category._id || lp.category.name || '') : String(lp.category || '');
             const bpCatStr = typeof bp.category === 'object' && bp.category ? String(bp.category._id || bp.category.name || '') : String(bp.category || '');
@@ -298,10 +298,10 @@ export const NotificationProvider = ({ children }) => {
 
             if (hasNameChange || hasDescChange || hasCategoryChange) {
               console.log(`[Product Polling] Admin modifications detected for ${bp.name}`);
-              
+
               let updateType = 'Product Updated 📦';
               let updateMsg = `The product details for "${bp.name}" have been updated by the admin.`;
-              
+
               if (hasNameChange) {
                 updateType = 'Product Renamed 🏷️';
                 updateMsg = `"${lp.name}" has been renamed to "${bp.name}".`;
@@ -352,8 +352,8 @@ export const NotificationProvider = ({ children }) => {
   };
 
   return (
-    <NotificationContext.Provider value={{ 
-      notifications, addNotification, markAsRead, removeNotification, clearAll, 
+    <NotificationContext.Provider value={{
+      notifications, addNotification, markAsRead, removeNotification, clearAll,
       checkOrderUpdates, checkProductUpdates,
       toast, getIcon, getBgColor, toastOpacity, toastY, showToast
     }}>

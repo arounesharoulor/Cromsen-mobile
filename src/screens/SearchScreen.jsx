@@ -191,8 +191,11 @@ export default function SearchScreen({ navigation }) {
                   addToCart({
                     id: item._id || item.id,
                     name: item.name,
-                    price: finalPrice,
-                    image: getImageUrl(item.image || item.thumbnail || item.img || (item.images && item.images[0]))
+                    price: typeof finalPrice === 'number' ? finalPrice : (parseFloat(finalPrice) || 0),
+                    priceSource: 'search',
+                    image: getImageUrl(item.image || item.thumbnail || item.img || (item.images && item.images[0])),
+                    installationRatePerSqFt: parseFloat(item.installationRatePerSqFt || item.installationRatePerSqft || item.installationPricePerSqft || item.installationPerSqFt || item.installationRate || 0) || 0,
+                    baseInstallationPrice: parseFloat(item.installationPrice || item.installationFee || item.installationCost || 0) || 0,
                   }, 1);
                   addNotification('cart', 'Added to Cart', `${item.name} added successfully!`, 'Cart');
                 }}

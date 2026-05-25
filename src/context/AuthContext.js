@@ -49,7 +49,13 @@ export const AuthProvider = ({ children }) => {
           setUser(updated);
           await AsyncStorage.setItem('@AuthData', JSON.stringify(updated));
         }
-      } catch (e) {}
+      } catch (e) {
+        if (e.message && e.message.toLowerCase().includes('user not found')) {
+          console.warn('[AUTH] User not found on backend. Logging out locally.');
+          logout();
+          return;
+        }
+      }
 
       // 2. Sync Addresses
       try {

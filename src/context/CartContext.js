@@ -6,7 +6,7 @@ import { userService, authService } from '../services/api';
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const currentUserId = user?._id || user?.id;
   const [cartItems, setCartItems] = useState([]);
 
@@ -35,10 +35,23 @@ export const CartProvider = ({ children }) => {
             }
           } catch(err) {
              console.warn('Failed to fetch backend cart', err);
+             if (err.message && err.message.toLowerCase().includes('user not found')) {
+                 if (logout) logout();
+             }
           }
         }
 
-        setCartItems(localCart);
+        // Normalize cart items to ensure numeric prices and quantities
+        const normalize = (it) => {
+          if (!it) return it;
+          const safePrice = (typeof it.price === 'number') ? it.price : (parseFloat(it.price) || 0);
+          const safeQty = Number(it.quantity) ? Number(it.quantity) : (it.quantity ? parseInt(it.quantity, 10) || 1 : 1);
+          const safeBaseInst = (typeof it.baseInstallationPrice === 'number') ? it.baseInstallationPrice : (parseFloat(it.baseInstallationPrice) || 0);
+          const safeInst = (typeof it.installationPrice === 'number') ? it.installationPrice : (parseFloat(it.installationPrice) || 0);
+          return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst };
+        };
+
+        setCartItems(localCart.map(normalize));
       } catch (e) {
         console.error('Error loading cart', e);
       }
@@ -60,6 +73,9 @@ export const CartProvider = ({ children }) => {
              });
           } catch(err) {
              console.warn('Failed to sync cart to backend', err);
+             if (err.message && err.message.toLowerCase().includes('user not found')) {
+                 if (logout) logout();
+             }
           }
         }
       } catch (e) {
@@ -69,19 +85,28 @@ export const CartProvider = ({ children }) => {
     saveCart();
   }, [cartItems, currentUserId]);
 
+  const normalize = (it) => {
+    if (!it) return it;
+    const safePrice = (typeof it.price === 'number') ? it.price : (parseFloat(it.price) || 0);
+    const safeQty = Number(it.quantity) ? Number(it.quantity) : (it.quantity ? parseInt(it.quantity, 10) || 1 : 1);
+    const safeBaseInst = (typeof it.baseInstallationPrice === 'number') ? it.baseInstallationPrice : (parseFloat(it.baseInstallationPrice) || 0);
+    const safeInst = (typeof it.installationPrice === 'number') ? it.installationPrice : (parseFloat(it.installationPrice) || 0);
+    const safeRate = (typeof it.installationRatePerSqFt === 'number') ? it.installationRatePerSqFt : (parseFloat(it.installationRatePerSqFt || it.installationRatePerSqft || it.installationPricePerSqft || it.installationPerSqFt || it.installationRate || it.installationRatePerSquareFoot) || 0);
+    return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst, installationRatePerSqFt: safeRate };
+  };
+
   const addToCart = (product, quantity = 1) => {
     setCartItems(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
         return prev.map(item =>
-          item.id === product.id ? { ...item, ...product, quantity: item.quantity + quantity } : item
+          item.id === product.id ? normalize({ ...item, ...product, quantity: item.quantity + quantity }) : item
         );
       }
 
-      return [...prev, { ...product, quantity }];
+      return [...prev, normalize({ ...product, quantity })];
     });
   };
-
   const removeFromCart = (id) => {
     setCartItems(prev => prev.filter(item => item.id !== id));
   };
