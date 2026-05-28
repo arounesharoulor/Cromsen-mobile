@@ -294,12 +294,7 @@ export default function RegisterScreen({ navigation }) {
             </Text>
           </View>
 
-      {/* Recaptcha needed for Expo Go Fallback */}
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification={false}
-      />
+          // Recaptcha modal removed; expo-firebase-recaptcha not used.
 
       {/* Step Progress Indicator */}
       <View style={styles.stepIndicatorRow}>

@@ -37,7 +37,7 @@ export const DARK_THEME = {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const systemScheme = useColorScheme();
+  // const systemScheme = useColorScheme(); // disabled to force light theme
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export const ThemeProvider = ({ children }) => {
       if (stored !== null) {
         setIsDarkMode(stored === 'true');
       } else {
-        setIsDarkMode(systemScheme === 'dark');
+        setIsDarkMode(false); // default to light theme
       }
     } catch (e) {}
   };
