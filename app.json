@@ -56,7 +56,7 @@
           }
         }
       ],
-            "expo-modules-autolinking", "expo-asset"
+      "expo-asset"
     ],
     "newArchEnabled": true
   }
