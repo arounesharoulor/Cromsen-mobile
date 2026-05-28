@@ -12,7 +12,7 @@
       "developmentClient": false,
       "android": {
         "buildType": "apk",
-        "image": "latest"          // ← Important for SDK 54
+        "image": "latest"          
       }
     },
     "production": {

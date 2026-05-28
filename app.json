@@ -39,7 +39,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
+        "projectId": "2232435b-63d7-4f7f-b05d-34e161dafff2"
       }
     },
     "plugins": [
@@ -56,7 +56,7 @@
           }
         }
       ],
-      "expo-asset"
+            "expo-modules-autolinking", "expo-asset"
     ],
     "newArchEnabled": true
   }
