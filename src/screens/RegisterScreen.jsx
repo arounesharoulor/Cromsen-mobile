@@ -15,7 +15,7 @@ import { LogoIcon } from '../components/CustomIcons';
 import Constants from 'expo-constants';
 import { initializeApp, getApp, getApps } from 'firebase/app'; // Web Auth (Expo Go)
 import { getAuth, PhoneAuthProvider, signInWithCredential, signInWithPhoneNumber } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+
 
 // Web Config for Expo Go Fallback
 const firebaseConfig = {
