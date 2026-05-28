@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -108,6 +109,25 @@ function AppContent() {
     fetch('https://cromsen-backend.onrender.com/api/users').catch(err => {
       console.log('[Wakeup] Background warm-up ping logged:', err.message);
     });
+
+    // Install a global JS error handler to prevent uncaught red-screen crashes
+    try {
+      if (typeof ErrorUtils !== 'undefined' && ErrorUtils.setGlobalHandler) {
+        const prevHandler = ErrorUtils.getGlobalHandler && ErrorUtils.getGlobalHandler();
+        ErrorUtils.setGlobalHandler((error, isFatal) => {
+          console.error('[GlobalError]', error, isFatal);
+          try {
+            Alert.alert('Unexpected error', 'An unexpected error occurred. Please restart the app.');
+          } catch (e) {}
+          if (typeof prevHandler === 'function') {
+            // Don't rethrow - keep app alive; but still call previous handler for logs
+            try { prevHandler(error, isFatal); } catch (e) {}
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to set global error handler', e);
+    }
   }, []);
 
   return (

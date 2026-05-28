@@ -4,7 +4,7 @@ import {
   Dimensions, ActivityIndicator, Modal, Platform, StatusBar, FlatList,
   TextInput, Animated, RefreshControl
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 
 import { THEME_COLORS, FONTS } from '../styling';
 import { ShoppingCart, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, ArrowLeft, Plus, Minus } from 'lucide-react-native';
@@ -39,7 +39,10 @@ export default function ProductDetailScreen({ navigation, route }) {
   const [selSize, setSelSize] = useState(0);
   const [selLength, setSelLength] = useState(0);
   const [selFitting, setSelFitting] = useState(0);
+  // New state to keep the calculated price separate so UI updates instantly when backend changes
+  const [displayPrice, setDisplayPrice] = useState(0);
   const [selVariant, setSelVariant] = useState(0);
+  const [selectedGroupedVariants, setSelectedGroupedVariants] = useState({});
   const [customFitting, setCustomFitting] = useState('');
   const [wishlisted, setWishlisted] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
@@ -57,7 +60,20 @@ export default function ProductDetailScreen({ navigation, route }) {
   const { user } = useAuth();
   const { isDarkMode, theme } = useTheme();
 
-  useEffect(() => { if (productId) load(); }, [productId]);
+  useEffect(() => {
+    if (productId) load();
+  }, [productId]);
+
+  // Periodic refresh to keep UI in sync with backend changes
+  // Poll every 30 seconds while this screen is focused
+  const isFocused = useIsFocused();
+  useEffect(() => {
+    if (!isFocused) return;
+    const interval = setInterval(() => {
+      if (productId) load();
+    }, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [isFocused, productId]);
 
   // Load on mount and when product changes
   useEffect(() => {
@@ -160,11 +176,64 @@ export default function ProductDetailScreen({ navigation, route }) {
       const d = await productService.getProductById(productId);
       const mainProd = d.data || d;
       setProduct(mainProd);
-      
-      // Fetch similar products based on category
+
+      // --- Price calculation based on fresh backend data ---
+      // Determine user role
+      const role = user?.role?.toLowerCase();
+      // Base price selection
+      let base = mainProd.price || 0;
+      if (role === 'dealer' && typeof mainProd.dealerPrice === 'number') {
+        base = mainProd.dealerPrice;
+      } else if (role === 'retailer' && typeof mainProd.retailPrice === 'number') {
+        base = mainProd.retailPrice;
+      } else if (typeof mainProd.retailPrice === 'number') {
+        base = mainProd.retailPrice;
+      }
+      // Helper to safely parse numbers
+      const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+
+      // Compute dynamic price (variant/length/size) similar to existing logic
+      let calcPrice = base;
+      const lengths = mainProd.lengths || mainProd.lengthOptions || mainProd.length || [];
+      const fittings = mainProd.fittings || mainProd.fittingOptions || mainProd.fiting || mainProd.fitting || [];
+      const sizes = mainProd.sizes || mainProd.size || [];
+      const variants = mainProd.variants || mainProd.variations || mainProd.varients || mainProd.variant || [];
+
+      if (variants.length > 0) {
+        const curVar = variants[selVariant];
+        if (curVar && typeof curVar === 'object') {
+          calcPrice = parseNum(role === 'dealer' ? curVar.dealerPrice : curVar.retailPrice) || parseNum(curVar.price) || calcPrice;
+        }
+      } else if (lengths.length > 0) {
+        const curLen = lengths[selLength];
+        if (curLen && typeof curLen === 'object') {
+          calcPrice = parseNum(role === 'dealer' ? curLen.dealerPrice : curLen.retailPrice) || parseNum(curLen.price) || calcPrice;
+        }
+      } else if (sizes.length > 0) {
+        const curSize = sizes[selSize];
+        if (curSize && typeof curSize === 'object') {
+          const sizePrice = parseNum(curSize.price) || parseNum(curSize.retailPrice) || parseNum(curSize.userPrice);
+          if (role === 'dealer') {
+            calcPrice = parseNum(curSize.dealerPrice) || (typeof mainProd.dealerPrice === 'number' && typeof mainProd.price === 'number' && mainProd.price > 0 ? (sizePrice * (mainProd.dealerPrice / mainProd.price)) : sizePrice);
+          } else {
+            calcPrice = sizePrice;
+          }
+        }
+      }
+
+      // Add fitting surcharge
+      if (fittings.length > 0) {
+        const curFit = fittings[selFitting];
+        if (curFit && typeof curFit === 'object' && curFit.price) {
+          calcPrice += parseNum(curFit.price);
+        }
+      }
+
+      setDisplayPrice(calcPrice);
+
+      // Fetch similar products based on category (unchanged)
       let catId = null;
       let catName = null;
-      
       if (Array.isArray(mainProd.category)) {
         catId = mainProd.category[0]?._id || mainProd.category[0];
         catName = mainProd.category[0]?.name || mainProd.category[0];
@@ -175,19 +244,15 @@ export default function ProductDetailScreen({ navigation, route }) {
         catId = mainProd.category || mainProd.categoryId;
         catName = mainProd.category;
       }
-      
       let simList = [];
       if (catId) {
         const sim = await productService.getProducts({ category: catId, limit: 6 });
         simList = Array.isArray(sim) ? sim : sim.data || sim.products || [];
       }
-      
       if (simList.length === 0 && catName && typeof catName === 'string') {
         const sim = await productService.getProducts({ keyword: catName, limit: 6 });
         simList = Array.isArray(sim) ? sim : sim.data || sim.products || [];
       }
-
-      // Filter out current product
       setSimilarProducts(simList.filter(p => (p._id || p.id) !== productId));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -240,24 +305,53 @@ export default function ProductDetailScreen({ navigation, route }) {
 
   const userRole = user?.role?.toLowerCase();
   
-  let basePrice = product.price || 9999;
-  if (userRole === 'dealer' && typeof product.dealerPrice === 'number') {
-    basePrice = product.dealerPrice;
-  } else if (userRole === 'retailer' && typeof product.retailPrice === 'number') {
-    basePrice = product.retailPrice;
-  } else if (typeof product.retailPrice === 'number') {
-    basePrice = product.retailPrice;
-  }
-
-  let price = basePrice;
+  // Base price derived from backend (already calculated in load())
+  const basePrice = product ? (product.price || 0) : 0; // fallback for safety
+  // Use the pre‑computed displayPrice for rendering. If not yet set, fall back to basePrice.
+  let price = displayPrice || basePrice;
   
-  // 1. Dynamic Size/Length/Fitting Price Calculation
-  const lengths = product.lengths || product.lengthOptions || product.length || [];
-  const fittings = product.fittings || product.fittingOptions || product.fiting || product.fitting || [];
-  const sizes = product.sizes || product.size || [];
-  const variants = product.variants || product.variations || product.varients || product.variant || [];
+  // 1. Dynamic Size/Length/Fitting Price Calculation (kept for future extensions)
+  const lengths = product?.lengths || product?.lengthOptions || product?.length || [];
+  const fittings = product?.fittings || product?.fittingOptions || product?.fiting || product?.fitting || [];
+  const sizes = product?.sizes || product?.size || [];
+  const variants = product?.variants || product?.variations || product?.varients || product?.variant || [];
 
-  if (variants.length > 0) {
+  const groupedVariants = (!variants || variants.length === 0) ? {} : variants.reduce((acc, v) => {
+    let name = v.name || 'Option';
+    if (typeof v === 'string') {
+      if (!acc['Variant']) acc['Variant'] = [];
+      acc['Variant'].push(v);
+    } else {
+      if (!acc[name]) acc[name] = [];
+      if (v.options && Array.isArray(v.options)) {
+        acc[name].push(...v.options);
+      } else if (v.value) {
+        acc[name].push(v.value);
+      }
+    }
+    return acc;
+  }, {});
+
+  const selectedOptions = Object.entries(groupedVariants).map(([groupName, options]) => {
+    const selectedIdx = selectedGroupedVariants[groupName] || 0;
+    return options[selectedIdx];
+  }).filter(Boolean);
+
+  if (product?.variantPrices && product.variantPrices.length > 0) {
+    const matchedVariant = product.variantPrices.find(vp => {
+      if (!vp.combination) return false;
+      return selectedOptions.every(opt => vp.combination.includes(opt));
+    });
+
+    if (matchedVariant) {
+      const vPrice = userRole === 'dealer' ? matchedVariant.dealerPrice : matchedVariant.retailPrice;
+      if (typeof vPrice === 'number' && vPrice > 0) {
+        price = vPrice;
+      } else if (typeof matchedVariant.price === 'number' && matchedVariant.price > 0) {
+        price = matchedVariant.price;
+      }
+    }
+  } else if (variants.length > 0) {
     const currentVariant = variants[selVariant];
     if (typeof currentVariant === 'object') {
        price = (userRole === 'dealer' ? currentVariant.dealerPrice : currentVariant.retailPrice) || currentVariant.price || price;
@@ -462,38 +556,46 @@ export default function ProductDetailScreen({ navigation, route }) {
           )}
 
           {/* Square Feet Input */}
-          <View style={s.optionSection}>
-            <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Square Feet (sq.ft):</Text>
-            <TextInput
-              style={[s.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
-              placeholder="Enter square feet manually"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="numeric"
-              value={sqFt}
-              onChangeText={setSqFt}
-            />
-          </View>
+          {product.isCustomSizeEnabled && (
+            <View style={s.optionSection}>
+              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Square Feet (sq.ft):</Text>
+              <TextInput
+                style={[s.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+                placeholder="Enter square feet manually"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={sqFt}
+                onChangeText={setSqFt}
+              />
+            </View>
+          )}
 
 
           {/* Variant Selection */}
-          {variants.length > 0 && (
-            <View style={s.optionSection}>
-              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Variant: <Text style={{ color: theme.text }}>{typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]}</Text></Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.optionsRow}>
-                {variants.map((v, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={[s.optionChip, selVariant === i && s.optionChipActive]}
-                    onPress={() => setSelVariant(i)}
-                  >
-                    <Text style={[s.optionChipTxt, selVariant === i && { color: '#FFF' }]}>
-                      {typeof v === 'object' ? v.name : v}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
+          {Object.entries(groupedVariants).map(([groupName, options], gIdx) => {
+            if (options.length === 0) return null;
+            const selectedIdx = selectedGroupedVariants[groupName] || 0;
+            return (
+              <View key={gIdx} style={s.optionSection}>
+                <Text style={[s.colorLabel, { color: theme.textSecondary }]}>
+                  {groupName}: <Text style={{ color: theme.text }}>{options[selectedIdx]}</Text>
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.optionsRow}>
+                  {options.map((opt, oIdx) => (
+                    <TouchableOpacity
+                      key={oIdx}
+                      style={[s.optionChip, selectedIdx === oIdx && s.optionChipActive]}
+                      onPress={() => setSelectedGroupedVariants(prev => ({ ...prev, [groupName]: oIdx }))}
+                    >
+                      <Text style={[s.optionChipTxt, selectedIdx === oIdx && { color: '#FFF' }]}>
+                        {opt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            );
+          })}
 
           {/* Existing Size chart (Conditional) */}
           {lengths.length === 0 && ((product.sizes && product.sizes.length > 0) || (product.size && product.size.length > 0)) ? (
@@ -567,17 +669,22 @@ export default function ProductDetailScreen({ navigation, route }) {
                 style={s.addCartBtn}
                 onPress={() => {
                   setShowQtySelector(true);
-                  // Optionally add to cart immediately with qty 1
                   const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
                   const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
-                  const variantLabel = variants.length > 0 ? (typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]) : '';
                   const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
                   const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
                   
                   const finalSqFt = sqFt || '1';
                   
                   let variantStr = '';
-                  if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
+                  Object.entries(groupedVariants).forEach(([groupName, options]) => {
+                    if (options.length > 0) {
+                      const selectedIdx = selectedGroupedVariants[groupName] || 0;
+                      if (options[selectedIdx]) {
+                        variantStr += `${groupName}: ${options[selectedIdx]}, `;
+                      }
+                    }
+                  });
                   if (lenLabel) variantStr += `Length: ${lenLabel}, `;
                   if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
                   if (customFitting.trim()) variantStr += `Custom Fit: ${customFitting.trim()}, `;
@@ -593,11 +700,10 @@ export default function ProductDetailScreen({ navigation, route }) {
                     priceSource: 'productDetail',
                     variant: variantStr,
                     image: imgs[activeImg],
-                    // installation handled in Checkout screen
                     sqFt: finalSqFt,
                     installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
                     baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
-                  }, 1);
+                  }, parseInt(qtyInput) || 1);
                 }}
               >
                 <CartIcon size={20} color={THEME_COLORS.primary} />
@@ -608,14 +714,20 @@ export default function ProductDetailScreen({ navigation, route }) {
             <TouchableOpacity style={s.buyNowBtn} onPress={() => {
               const lenLabel = lengths.length > 0 ? (typeof lengths[selLength] === 'object' ? lengths[selLength].name : lengths[selLength]) : '';
               const fitLabel = fittings.length > 0 ? (typeof fittings[selFitting] === 'object' ? fittings[selFitting].name : fittings[selFitting]) : '';
-              const variantLabel = variants.length > 0 ? (typeof variants[selVariant] === 'object' ? variants[selVariant].name : variants[selVariant]) : '';
               const sizeLabel = sizes.length > 0 ? (typeof sizes[selSize] === 'object' ? sizes[selSize].name : sizes[selSize]) : '';
               const colorLabel = (product.colors || product.color || COLOR_LABELS)[selColor]?.name || (product.colors || product.color || COLOR_LABELS)[selColor] || '';
               
               const finalSqFt = sqFt || '1';
               
               let variantStr = '';
-              if (variantLabel) variantStr += `Variant: ${variantLabel}, `;
+              Object.entries(groupedVariants).forEach(([groupName, options]) => {
+                if (options.length > 0) {
+                  const selectedIdx = selectedGroupedVariants[groupName] || 0;
+                  if (options[selectedIdx]) {
+                    variantStr += `${groupName}: ${options[selectedIdx]}, `;
+                  }
+                }
+              });
               if (lenLabel) variantStr += `Length: ${lenLabel}, `;
               if (fitLabel) variantStr += `Fitting: ${fitLabel}, `;
               if (customFitting.trim()) variantStr += `Custom Fit: ${customFitting.trim()}, `;

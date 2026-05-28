@@ -510,8 +510,8 @@ export default function CheckoutScreen({ navigation, route }) {
   };
 
   const resolveBaseInstallationPrice = (item) => {
-    if (typeof item.baseInstallationPrice === 'number') return item.baseInstallationPrice;
-    const val = _parseNumber(item.baseInstallationPrice || item.installationPrice || item.installation_price || item.base_installation_price);
+    if (typeof item.baseInstallationPrice === 'number' && item.baseInstallationPrice > 0) return item.baseInstallationPrice;
+    const val = _parseNumber(item.baseInstallationPrice || item.installationPrice || item.installation_price || item.base_installation_price || item.installationFee || item.installationCost);
     return val || 0;
   };
 
@@ -524,9 +524,15 @@ export default function CheckoutScreen({ navigation, route }) {
     }
     const base = resolveBaseInstallationPrice(item);
     if (base > 0) return base;
-    const instPriceNum = _parseNumber(item.installationPrice);
+    const instPriceNum = _parseNumber(item.installationPrice || item.installationFee || item.installationCost);
     if (instPriceNum > 0) return instPriceNum;
-    return 500;
+    return 0;
+  };
+
+  const hasInstallationOption = (item) => {
+    const rate = resolveInstallationRate(item);
+    const base = resolveBaseInstallationPrice(item);
+    return rate > 0 || base > 0;
   };
 
 
@@ -759,7 +765,8 @@ export default function CheckoutScreen({ navigation, route }) {
   }, 0);
   
   const totalInstallation = cartItems.reduce((acc, item, idx) => {
-    const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+    const hasOption = hasInstallationOption(item);
+    const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
     if (isInstalled) {
       const instPriceSingle = getItemInstallationPrice(item);
       return acc + (instPriceSingle * (item.quantity || 1));
@@ -884,14 +891,19 @@ export default function CheckoutScreen({ navigation, route }) {
               email: user?.email || '',
               guestEmail: user?.email || '', // Added for backend compatibility
               items: cartItems.map((item, idx) => {
-                const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
-                const instPrice = getItemInstallationPrice(item);
+                const hasOption = hasInstallationOption(item);
+                const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
+                const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
 
                 let variantStr = item.variant || 'Standard';
-                if (variantStr.includes('Installation:')) {
-                  variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+                if (hasOption) {
+                  if (variantStr.includes('Installation:')) {
+                    variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+                  } else {
+                    variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+                  }
                 } else {
-                  variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+                  variantStr = variantStr.replace(/,?\s*Installation:\s*(By Company|Self)/gi, '');
                 }
                 return {
                   ...item,
@@ -1063,14 +1075,19 @@ export default function CheckoutScreen({ navigation, route }) {
           userId: user?._id || user?.id,
           email: user?.email || '',
           items: cartItems.map((item, idx) => {
-            const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
-            const instPrice = getItemInstallationPrice(item);
+            const hasOption = hasInstallationOption(item);
+            const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
+            const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
 
             let variantStr = item.variant || 'Standard';
-            if (variantStr.includes('Installation:')) {
-              variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+            if (hasOption) {
+              if (variantStr.includes('Installation:')) {
+                variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
+              } else {
+                variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+              }
             } else {
-              variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
+              variantStr = variantStr.replace(/,?\s*Installation:\s*(By Company|Self)/gi, '');
             }
             return {
               ...item,
@@ -1239,9 +1256,10 @@ export default function CheckoutScreen({ navigation, route }) {
             <Text style={s.itemCountTxt}>{cartItems.length} items</Text>
           </View>
           {cartItems.map((item, idx) => {
-            const isInstalled = instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false);
+            const hasOption = hasInstallationOption(item);
+            const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
             const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
-            const instPrice = getItemInstallationPrice(item);
+            const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
 
             return (
               <View key={idx} style={s.itemSummaryRow}>
@@ -1251,23 +1269,25 @@ export default function CheckoutScreen({ navigation, route }) {
                   <Text style={[s.itemPrice, { fontSize: 10, marginBottom: 2 }]} numberOfLines={1}>{item.variant || 'Standard'}</Text>
                   
                   {/* Installation Option Toggles (larger for better visibility) */}
-                  <View style={s.installRow}>
-                    <TouchableOpacity
-                      style={[s.installBtn, !isInstalled ? s.installBtnActive : null]}
-                      onPress={() => setInstSelections(prev => ({ ...prev, [idx]: false }))}
-                    >
-                      <Text style={[s.installBtnTxt, !isInstalled ? s.installBtnTxtActive : null]}>Self Install</Text>
-                    </TouchableOpacity>
+                  {hasOption && (
+                    <View style={s.installRow}>
+                      <TouchableOpacity
+                        style={[s.installBtn, !isInstalled ? s.installBtnActive : null]}
+                        onPress={() => setInstSelections(prev => ({ ...prev, [idx]: false }))}
+                      >
+                        <Text style={[s.installBtnTxt, !isInstalled ? s.installBtnTxtActive : null]}>Self Install</Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[s.installBtn, isInstalled ? s.installBtnCompanyActive : null]}
-                      onPress={() => setInstSelections(prev => ({ ...prev, [idx]: true }))}
-                    >
-                      <Text style={[s.installBtnTxt, isInstalled ? s.installBtnCompanyTxtActive : null]}>By Company (+₹{instPrice})</Text>
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={[s.installBtn, isInstalled ? s.installBtnCompanyActive : null]}
+                        onPress={() => setInstSelections(prev => ({ ...prev, [idx]: true }))}
+                      >
+                        <Text style={[s.installBtnTxt, isInstalled ? s.installBtnCompanyTxtActive : null]}>By Company (+₹{instPrice})</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
-                  {__DEV__ ? (
+                  {__DEV__ && hasOption ? (
                     <Text style={{ fontSize: 11, color: '#999', marginTop: 6 }}>
                       {`rate:${String(item.installationRatePerSqFt)} base:${String(item.baseInstallationPrice)} rawKeys:${Object.keys(item).filter(k=>k.toLowerCase().includes('install')).join(',')}`}
                     </Text>
