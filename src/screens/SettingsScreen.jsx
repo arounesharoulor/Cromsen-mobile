@@ -226,7 +226,7 @@ export default function SettingsScreen({ navigation }) {
 
       // 1. Update Profile (Name, Email, Phone, Password)
       try {
-        await userService.updateProfile(currentUserId, updateData);
+        await userService.updateProfile(currentUserId, updateData, user?.token);
       } catch (err) {
         console.warn('[SYNC] Profile sync to backend failed, saving changes locally:', err);
       }
@@ -248,9 +248,10 @@ export default function SettingsScreen({ navigation }) {
           console.warn('Address sync failed:', e);
         }
 
+        const addressKey = currentUserId ? `@UserAddresses_${currentUserId}` : '@UserAddresses_guest';
         // Save address PERMANENTLY to local storage immediately!
         try {
-          const addressKey = currentUserId ? `@UserAddresses_${currentUserId}` : '@UserAddresses_guest';
+          
           const storedStr = await AsyncStorage.getItem(addressKey);
           let addrs = [];
           if (storedStr) {
@@ -281,7 +282,21 @@ export default function SettingsScreen({ navigation }) {
         } catch (storageErr) {
           console.warn('Failed to save address locally in settings:', storageErr);
         }
-      }
+
+        // Refresh addresses from backend to guarantee persistence after logout/login
+        try {
+          
+          const refreshed = await userService.getAddresses(currentUserId);
+          if (Array.isArray(refreshed) && refreshed.length > 0) {
+            await AsyncStorage.setItem(addressKey, JSON.stringify(refreshed));
+            // Update origAddr to the freshly saved address if possible
+            const refreshedAddr = refreshed.find(a => a.id === (origAddr?.id || a.id)) || refreshed[0];
+            setOrigAddr(refreshedAddr);
+          }
+        } catch (syncErr) {
+          console.warn('Failed to refresh addresses after save:', syncErr);
+        }
+      } // CLOSE IF BLOCK
 
       // 3. Update local auth context
       // If password was changed, update storedPassword

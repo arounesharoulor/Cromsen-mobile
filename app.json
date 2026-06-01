@@ -35,7 +35,9 @@
       }
     },
     "updates": {
-      "enabled": false
+      "enabled": false,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "eas": {

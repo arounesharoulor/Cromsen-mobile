@@ -61,7 +61,7 @@ export default function LoginScreen({ navigation }) {
       // 1. Look up user by email from GET /users list
       let matchedUser = null;
       try {
-        const response = await fetch('https://cromsen-backend.onrender.com/api/users');
+        const response = await fetch('https://api.cromsennest.com/api/users');
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);

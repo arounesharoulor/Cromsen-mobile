@@ -704,7 +704,7 @@ export default function CheckoutScreen({ navigation, route }) {
         setShowWebView(false);
         const { finalOrder, rzpOrderData } = pendingOrderDetails;
         const paymentData = result;
-        const API_URL = 'https://cromsen-backend.onrender.com/api';
+        const API_URL = 'https://api.cromsennest.com/api';
         
         // STEP 5: VERIFY PAYMENT & SAVE ORDER TO ADMIN (Done in one call now)
         try {
@@ -805,7 +805,7 @@ export default function CheckoutScreen({ navigation, route }) {
         // Fetch all orders to find the highest numerical sequence ID (e.g., from CIM-#1004 to CIM-#1005)
         let nextOrderNum = 1001; 
         try {
-          const allOrdersResp = await fetch('https://cromsen-backend.onrender.com/api/orders');
+          const allOrdersResp = await fetch('https://api.cromsennest.com/api/orders');
           if (allOrdersResp.ok) {
             const allOrdersData = await allOrdersResp.json();
             const allOrders = Array.isArray(allOrdersData) ? allOrdersData : (allOrdersData.orders || allOrdersData.data || []);
@@ -846,7 +846,7 @@ export default function CheckoutScreen({ navigation, route }) {
         let paymentStatus = 'Pending';
         
         if (paymentMethod === 'RAZORPAY') {
-          const API_URL = 'https://cromsen-backend.onrender.com/api';
+          const API_URL = 'https://api.cromsennest.com/api';
 
           try {
             const finalAmount = Math.round(grandTotal);

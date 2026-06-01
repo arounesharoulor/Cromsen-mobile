@@ -137,21 +137,14 @@ export default function RegisterScreen({ navigation }) {
     console.log(`[OTP] Attempting to send Email OTP to ${email}`);
 
     try {
-      // In a real app, you would call a backend service to send an email OTP
-      // For now, we simulate success and log to terminal
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      setSentOtp(code);
+      // Call the backend service to send an email OTP
+      await authService.sendEmailOtp(email, 'registration');
       setLoading(false);
-
-      console.log('=============================================');
-      console.log(`🚀 [SIMULATED EMAIL SENT TO ${email}]`);
-      console.log(`🔑 DEV OTP CODE: ${code}`);
-      console.log(`(Real Email integration required for production)`);
-      console.log('=============================================');
+      console.log('✅ OTP email dispatched by backend');
     } catch (err) {
       setLoading(false);
       console.warn('[OTP] Error:', err.message);
-      Alert.alert('Error', 'Failed to send verification email.');
+      Alert.alert('Error', err.message || 'Failed to send verification email.');
     }
   };
 
@@ -159,6 +152,27 @@ export default function RegisterScreen({ navigation }) {
     if (timer > 0) return;
     generateAndSendOtp(form.email);
   };
+
+  // Auto-fetch OTP from clipboard when modal is open (dev convenience)
+  useEffect(() => {
+    if (!showOtpModal) return;
+    const interval = setInterval(async () => {
+      const clip = await Clipboard.getString();
+      if (/^\d{6}$/.test(clip) && clip !== otpInput) {
+        setOtpInput(clip);
+        // Optionally auto-verify
+        // handleVerifyOtp(); // Uncomment to auto-verify immediately
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showOtpModal, otpInput]);
+
+  // Auto-verify OTP when full code entered
+  useEffect(() => {
+    if (showOtpModal && otpInput.length === 6 && !otpVerifying) {
+      handleVerifyOtp();
+    }
+  }, [otpInput, showOtpModal]);
 
   const handleSendOtp = async () => {
     if (!validateStep1()) return;
@@ -168,7 +182,7 @@ export default function RegisterScreen({ navigation }) {
 
       // 1. Verify if email already exists before sending OTP
       try {
-        const response = await fetch('https://cromsen-backend.onrender.com/api/users');
+        const response = await fetch('https://api.cromsennest.com/api/users');
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
@@ -209,14 +223,14 @@ export default function RegisterScreen({ navigation }) {
     setOtpVerifying(true);
     
     try {
-      if (confirmation) {
-        // Unified verification (Works for both Native and Web)
-        await confirmation.confirm(otpInput);
-      } else if (otpInput !== sentOtp) {
-        // Simulated terminal fallback verification
-        setOtpError('Invalid verification code.');
-        setOtpVerifying(false);
-        return;
+      const verifyResp = await fetch('https://api.cromsennest.com/api/users/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), otp: otpInput })
+      });
+      const result = await verifyResp.json();
+      if (!verifyResp.ok) {
+        throw new Error(result.message || 'OTP verification failed');
       }
       
       // Success! Move to Step 2
@@ -224,7 +238,7 @@ export default function RegisterScreen({ navigation }) {
       clearInterval(timerRef.current);
       setStep(2);
     } catch (err) {
-      setOtpError('Invalid verification code. Please try again.');
+      setOtpError(err.message || 'Invalid verification code. Please try again.');
     } finally {
       setOtpVerifying(false);
     }
@@ -294,7 +308,7 @@ export default function RegisterScreen({ navigation }) {
             </Text>
           </View>
 
-          // Recaptcha modal removed; expo-firebase-recaptcha not used.
+          {/* Recaptcha modal removed; expo-firebase-recaptcha not used. */}
 
       {/* Step Progress Indicator */}
       <View style={styles.stepIndicatorRow}>

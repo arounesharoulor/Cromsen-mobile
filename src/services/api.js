@@ -1,9 +1,32 @@
-const BASE_URL = 'https://cromsen-backend.onrender.com/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+const BASE_URL = 'https://api.cromsennest.com/api';
+
+// Helper: read the JWT stored after login without importing React-Native context
+const getStoredToken = async () => {
+  try {
+    const raw = await AsyncStorage.getItem('@AuthData');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data?.token || null;
+  } catch (e) { 
+    console.warn("Failed to get stored token", e);
+    return null; 
+  }
+};
+
+const authHeaders = async (extra = {}) => {
+  const token = await getStoredToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra
+  };
+};
 
 const handleResponse = async (response) => {
   const contentType = response.headers.get('content-type');
   let data;
-  
+
   if (contentType && contentType.includes('application/json')) {
     data = await response.json();
   } else {
@@ -31,7 +54,7 @@ export const getImageUrl = (imagePath) => {
   // If it's an object, try common URL properties
   if (imagePath && typeof imagePath === 'object') {
     const url = imagePath.url || imagePath.imageURL || imagePath.secure_url ||
-                imagePath.uri || imagePath.src || imagePath.path || '';
+      imagePath.uri || imagePath.src || imagePath.path || '';
     return getImageUrl(url);
   }
 
@@ -46,7 +69,7 @@ export const getImageUrl = (imagePath) => {
   // Replace localhost with backend for dev-uploaded images
   if (path.startsWith('http://') || path.startsWith('https://')) {
     if (path.includes('localhost') || path.includes('127.0.0.1')) {
-      return path.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, 'https://cromsen-backend.onrender.com');
+      return path.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, 'https://api.cromsennest.com');
     }
     return path;
   }
@@ -55,7 +78,7 @@ export const getImageUrl = (imagePath) => {
   if (path.startsWith('data:image')) return path;
 
   // Relative path — prepend backend base URL
-  const baseUrl = 'https://cromsen-backend.onrender.com';
+  const baseUrl = 'https://api.cromsennest.com';
   const cleanPath = path.replace(/\\/g, '/');
   return `${baseUrl}/${cleanPath.replace(/^\/+/, '')}`;
 };
@@ -86,37 +109,40 @@ export const authService = {
     });
     return handleResponse(response);
   },
-  sendOtp: async (phone, otp) => {
+  // Send an email OTP using backend nodemailer integration
+  sendEmailOtp: async (email, otp) => {
     const endpoints = [
       `${BASE_URL}/users/send-otp`,
-      `${BASE_URL}/users/otp`,
-      `${BASE_URL}/users/generate-otp`,
-      `${BASE_URL}/otp/send`,
-      `${BASE_URL}/auth/send-otp`,
-      `${BASE_URL}/send-otp`
+      `${BASE_URL}/users/email-otp`,
+      `${BASE_URL}/auth/email-otp`,
+      `${BASE_URL}/email/send-otp`,
+      `${BASE_URL}/send-email-otp`
     ];
-    
     let lastError;
     for (const url of endpoints) {
       try {
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, otp, mobile: phone }), // Try both 'phone' and 'mobile' keys
+          body: JSON.stringify({ email, otp })
         });
         
         if (response.ok) {
-          console.log(`[OTP] Send success via ${url}`);
+          console.log(`[Email OTP] Sent via ${url}`);
           return await handleResponse(response);
+        } else if (response.status !== 404) {
+          // If it's a 400 or 500, it hit the endpoint but failed (e.g. email exists)
+          return await handleResponse(response); // This will throw the proper error
         }
       } catch (e) {
         lastError = e;
       }
     }
-    throw lastError || new Error('OTP endpoint not found on backend');
+    throw lastError || new Error('Email OTP endpoint not found on backend. Make sure the backend server is running and updated.');
   },
   getProfile: async (userId) => {
-    const response = await fetch(`${BASE_URL}/users/${userId}/profile`);
+    const headers = await authHeaders();
+    const response = await fetch(`${BASE_URL}/users/${userId}/profile`, { headers });
     return handleResponse(response);
   },
 };
@@ -208,7 +234,7 @@ export const productService = {
       `${BASE_URL}/reviews?productId=${productId}`,
       `${BASE_URL}/reviews/${productId}`,
       `${BASE_URL}/reviews`, // Fallback plural global
-      
+
       // Singular versions
       `${BASE_URL}/review?product=${productId}`,
       `${BASE_URL}/review?productId=${productId}`,
@@ -227,22 +253,22 @@ export const productService = {
           const resData = await handleResponse(response);
           const rawList = Array.isArray(resData) ? resData : (resData.data || resData.reviews || []);
           console.log(`[REVIEWS] GET ${url} returned ${rawList.length} raw reviews`);
-          
+
           if (
-            url === `${BASE_URL}/reviews` || 
+            url === `${BASE_URL}/reviews` ||
             url === `${BASE_URL}/product-reviews` ||
-            url === `${BASE_URL}/review` || 
+            url === `${BASE_URL}/review` ||
             url === `${BASE_URL}/product-review`
           ) {
             console.log(`[REVIEWS] Filtering global reviews for productId: ${productId} / name: ${productName}`);
             const filtered = rawList.filter(r => {
               const rProdId = r.productId || r.product || (r.product?._id || r.product?.id || '');
               const idMatch = rProdId && String(rProdId) === String(productId);
-              
+
               const rName = r.productName || r.product?.name || r.name || '';
-              const exactNameMatch = rName && productName && 
+              const exactNameMatch = rName && productName &&
                 String(rName).toLowerCase().trim() === String(productName).toLowerCase().trim();
-                
+
               const substringMatch = rName && productName && (
                 String(rName).toLowerCase().includes(String(productName).toLowerCase().trim()) ||
                 String(productName).toLowerCase().includes(String(rName).toLowerCase().trim())
@@ -251,13 +277,13 @@ export const productService = {
               const rKeywords = String(rName).toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
               const pKeywords = String(productName).toLowerCase().split(/[\s\-_,\.\/]+/).filter(w => w.length > 2);
               const keywordOverlap = rKeywords.some(w => pKeywords.includes(w)) || pKeywords.some(w => rKeywords.includes(w));
-              
+
               return idMatch || exactNameMatch || substringMatch || keywordOverlap;
             });
             console.log(`[REVIEWS] Found ${filtered.length} matching reviews after global filter`);
             return filtered;
           }
-          
+
           return rawList;
         } else {
           console.log(`[REVIEWS] GET ${url} failed with status: ${response.status}`);
@@ -266,7 +292,7 @@ export const productService = {
         console.warn(`[REVIEWS] Fetch error for ${url}:`, e);
       }
     }
-    return []; 
+    return [];
   },
 };
 
@@ -285,15 +311,21 @@ export const homepageService = {
 };
 export const userService = {
   // Addresses: stored inside the user doc — fetch all users, find by ID, PATCH to update
-  updateProfile: async (userId, userData) => {
+  updateProfile: async (userId, userData, token) => {
     // Based on userroute.js: router.put('/:id/profile', userController.updateUserProfile);
     const url = `${BASE_URL}/users/${userId}/profile`;
-    
+
     try {
       console.log(`[SYNC] Updating Profile: PUT ${url}`);
+      
+      const headers = await authHeaders();
+      if (token && !headers.Authorization) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(userData),
       });
 
@@ -325,12 +357,12 @@ export const userService = {
   getAddresses: async (userId) => {
     if (!userId) return [];
     try {
-      // router.get('/:id/profile', userController.getUserProfile);
-      const response = await fetch(`${BASE_URL}/users/${userId}/profile`);
+      const headers = await authHeaders();
+      const response = await fetch(`${BASE_URL}/users/${userId}/profile`, { headers });
       if (response.ok) {
         const data = await response.json();
         const user = data.user || data.data || data;
-        
+
         return (user?.addresses || []).map(a => ({
           id: a._id || String(Date.now()),
           name: a.name || '',
@@ -350,7 +382,7 @@ export const userService = {
         const listData = await listResp.json();
         const users = Array.isArray(listData) ? listData : listData.users || [];
         const user = users.find(u => u._id === userId || u.id === userId);
-        
+
         return (user?.addresses || []).map(a => ({
           id: a._id || String(Date.now()),
           name: a.name || '',
@@ -363,7 +395,7 @@ export const userService = {
           full: `${a.street || a.address || ''}, ${a.city}, ${a.state} - ${a.zip}`,
         }));
       }
-      
+
       return [];
     } catch (e) {
       console.warn('Addresses fetch failed:', e);
@@ -386,7 +418,8 @@ export const userService = {
     try {
       // 1. Get current user data to merge addresses
       console.log(`[SYNC] Fetching current user for address merge: GET ${BASE_URL}/users/${userId}/profile`);
-      const getResp = await fetch(`${BASE_URL}/users/${userId}/profile`);
+      const headers = await authHeaders();
+      const getResp = await fetch(`${BASE_URL}/users/${userId}/profile`, { headers });
       let user;
       if (getResp.ok) {
         const data = await getResp.json();
@@ -418,12 +451,12 @@ export const userService = {
 
       if (!matched) {
         // Fallback: search by similar address details (street, city, zip) to avoid duplicates
-        const existingIdx = currentAddresses.findIndex(addr => 
+        const existingIdx = currentAddresses.findIndex(addr =>
           (addr.street || '').toLowerCase() === (backendAddr.street || '').toLowerCase() &&
           (addr.city || '').toLowerCase() === (backendAddr.city || '').toLowerCase() &&
           (addr.zip || '') === (backendAddr.zip || '')
         );
-        
+
         if (existingIdx !== -1) {
           updatedAddresses = [...currentAddresses];
           updatedAddresses[existingIdx] = { ...updatedAddresses[existingIdx], ...backendAddr };
@@ -431,16 +464,16 @@ export const userService = {
           updatedAddresses = [...currentAddresses, backendAddr];
         }
       }
-      
+
       // 2. Push updated addresses to backend
       const updateUrl = `${BASE_URL}/users/${userId}/profile`;
       console.log(`[SYNC] Syncing Addresses: PUT ${updateUrl}`);
       const updateBody = { addresses: updatedAddresses };
       if (password) updateBody.currentPassword = password;
-      
+
       const updateResp = await fetch(updateUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify(updateBody),
       });
 
@@ -503,11 +536,11 @@ export const userService = {
       if (!response.ok) return [];
       const data = await response.json();
       const allOrders = Array.isArray(data) ? data : data.orders || [];
-      
+
       if (!userEmail && !userId) return [];
-      
+
       const email = userEmail?.toLowerCase();
-      
+
       return allOrders.filter(o => {
         const oEmail = (o.guestEmail || o.email || '').toLowerCase();
         const oUserId = String(o.userId || o.user || '');
@@ -540,7 +573,7 @@ export const userService = {
       `${BASE_URL}/payment/verify-payment`,
       `${BASE_URL}/payments/verify-payment`
     ];
-    
+
     let lastError;
     for (const url of endpoints) {
       try {
@@ -567,7 +600,7 @@ export const userService = {
   // createOrder: Specifically save the order details to the admin database
   createOrder: async (orderData) => {
     if (!orderData) throw new Error('Order data is required');
-    
+
     // Attempt multiple order creation endpoints
     const endpoints = [
       `${BASE_URL}/orders`,
@@ -592,7 +625,7 @@ export const userService = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(orderData),
         });
-        
+
         if (response.ok) {
           console.log(`Order Saved SUCCESS: ${url}`);
           return await handleResponse(response);

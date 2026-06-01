@@ -7,7 +7,7 @@ class PaymentService {
   async processPayment(orderData, userData) {
     return new Promise((resolve, reject) => {
       // 1. Fetch correct Key from backend
-      fetch('https://cromsen-backend.onrender.com/api/payment/get-key')
+      fetch('https://api.cromsennest.com/api/payment/get-key')
         .then(res => res.json())
         .then(keyData => {
           const activeKey = keyData.key || RAZORPAY_KEY_ID;
@@ -67,7 +67,7 @@ class PaymentService {
    */
   async verifyOnBackend(paymentData, orderDetails) {
     try {
-      const response = await fetch('https://cromsen-backend.onrender.com/api/payment/verify-payment', {
+      const response = await fetch('https://api.cromsennest.com/api/payment/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

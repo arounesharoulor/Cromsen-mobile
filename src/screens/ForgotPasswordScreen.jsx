@@ -153,7 +153,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       // 1. Verify if phone number exists in users database
       let userObj = null;
       try {
-        const response = await fetch('https://cromsen-backend.onrender.com/api/users');
+        const response = await fetch('https://api.cromsennest.com/api/users');
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);

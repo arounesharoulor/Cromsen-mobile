@@ -10,12 +10,18 @@
     },
     "preview": {
       "developmentClient": false,
+      "env": {
+        "EXPO_NO_UPDATES": "true"
+      },
       "android": {
         "buildType": "apk",
         "image": "latest"          
       }
     },
     "production": {
+      "env": {
+        "EXPO_NO_UPDATES": "true"
+      },
       "android": {
         "buildType": "apk",
         "image": "latest"
