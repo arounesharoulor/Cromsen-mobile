@@ -53,51 +53,27 @@ export default function LoginScreen({ navigation }) {
 
   const handleLoginPress = async () => {
     if (!validateForm()) return;
-    
+
     try {
       setLoading(true);
       const cleanEmail = email.trim().toLowerCase();
-      
-      // 1. Look up user by email from GET /users list
-      let matchedUser = null;
-      try {
-        const response = await fetch('https://api.cromsennest.com/api/users');
-        if (response.ok) {
-          const listData = await response.json();
-          const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
-          matchedUser = users.find(u => {
-            const dbEmail = (u.email || '').trim().toLowerCase();
-            const dbRole = (u.role || '').toLowerCase();
-            return dbEmail === cleanEmail && dbRole === selectedRole.toLowerCase();
-          });
-        }
-      } catch (err) {
-        console.warn('Failed to retrieve user, checking backend failed:', err);
-      }
 
-      if (!matchedUser) {
-        Alert.alert(
-          'Account Not Found',
-          `No registered ${selectedRole === 'dealer' ? 'Dealer' : 'Retailer'} account was found with this email address. Please register first.`
-        );
-        setLoading(false);
-        return;
-      }
-      
+      // Direct login via backend
       const response = await authService.login(cleanEmail, password);
-      
       const userData = response.user || response.data || response;
-      await authLogin({ ...matchedUser, ...userData }, password);
-      
+
+      // Store auth context (merged with any additional data if needed)
+      await authLogin(userData, password);
+
       Alert.alert('Success', 'Logged in successfully!', [
-        { text: 'OK', onPress: () => navigation.replace('Main') }
+        { text: 'OK', onPress: () => navigation.replace('Main') },
       ]);
     } catch (err) {
       const isNetworkErr = err.message?.toLowerCase().includes('network') || err.message?.toLowerCase().includes('fetch');
-      const errorMsg = isNetworkErr 
-        ? 'Unable to connect to the server. The database server may be warming up (Render free tier) or your device is offline. Please wait 30 seconds and try again.'
-        : (err.message || 'Incorrect password or account mismatch. Please try again.');
-      Alert.alert('Connection Alert', errorMsg);
+      const errorMsg = isNetworkErr
+        ? 'Unable to connect to the server. Please wait 30 seconds and try again.'
+        : (err.response?.data?.message || err.message || 'Login failed. Please check your credentials.');
+      Alert.alert('Login Error', errorMsg);
     } finally {
       setLoading(false);
     }
