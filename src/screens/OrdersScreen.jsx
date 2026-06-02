@@ -632,7 +632,7 @@ export default function OrdersScreen({ navigation }) {
                               </View>
                             )}
                           </View>
-                          <Text style={styles.cardId}>{item.id}</Text>
+                          <Text style={styles.cardId}>{item.orderId || item.id}</Text>
                         </View>
 
                         <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6', paddingVertical: 2, paddingHorizontal: 8 }]}>

@@ -14,7 +14,7 @@ const getStoredToken = async () => {
   }
 };
 
-const authHeaders = async (extra = {}) => {
+export const authHeaders = async (extra = {}) => {
   const token = await getStoredToken();
   return {
     'Content-Type': 'application/json',
