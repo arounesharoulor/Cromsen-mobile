@@ -12,7 +12,7 @@
       "backgroundColor": "#ffffff",
       "resizeMode": "contain"
     },
-    "runtimeVersion": "1.0.0",
+
     "ios": {
       "icon": "./assets/icons/CromsenAppicon.png",
       "supportsTablet": true,

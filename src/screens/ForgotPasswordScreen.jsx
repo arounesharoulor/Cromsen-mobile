@@ -8,7 +8,7 @@ import { ArrowLeft, Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react-na
 import { useTheme } from '../context/ThemeContext';
 import { AppButton, AppInput } from '../components';
 import { LogoIcon } from '../components/CustomIcons';
-import { userService } from '../services/api';
+import { userService, BASE_URL } from '../services/api';
 import { THEME_COLORS } from '../theme';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -75,7 +75,7 @@ export default function ForgotPasswordScreen({ navigation }) {
     if (timer > 0) return;
     try {
       const cleanEmail = email.toLowerCase().trim();
-      const response = await fetch('https://api.cromsennest.com/api/users/forgot-password/send-otp', {
+      const response = await fetch(`${BASE_URL}/users/forgot-password/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
@@ -101,7 +101,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       const cleanEmail = email.toLowerCase().trim();
 
       // Call the forgot password send OTP endpoint directly
-      const response = await fetch('https://api.cromsennest.com/api/users/forgot-password/send-otp', {
+      const response = await fetch(`${BASE_URL}/users/forgot-password/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
@@ -151,7 +151,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       setLoading(true);
       const cleanEmail = email.toLowerCase().trim();
 
-      const response = await fetch('https://api.cromsennest.com/api/users/forgot-password/reset', {
+      const response = await fetch(`${BASE_URL}/users/forgot-password/reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Phone, Lock, Eye, EyeOff, ArrowLeft, ChevronDown, Mail, ShieldCheck } from 'lucide-react-native';
 import { THEME_COLORS } from '../theme';
 import { AppButton, AppInput } from '../components';
-import { authService } from '../services/api';
+import { authService, BASE_URL } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -182,7 +182,7 @@ export default function RegisterScreen({ navigation }) {
 
       // 1. Verify if email already exists before sending OTP
       try {
-        const response = await fetch('https://api.cromsennest.com/api/users');
+        const response = await fetch(`${BASE_URL}/users`);
         if (response.ok) {
           const listData = await response.json();
           const users = Array.isArray(listData) ? listData : (listData.users || listData.data || []);
@@ -223,7 +223,7 @@ export default function RegisterScreen({ navigation }) {
     setOtpVerifying(true);
     
     try {
-      const verifyResp = await fetch('https://api.cromsennest.com/api/users/verify-otp', {
+      const verifyResp = await fetch(`${BASE_URL}/users/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email.trim().toLowerCase(), otp: otpInput })

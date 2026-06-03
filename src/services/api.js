@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const BASE_URL = 'https://api.cromsennest.com/api';
+import Constants from 'expo-constants';
+export const BASE_URL = Constants.manifest?.extra?.backendUrl || process.env.REACT_NATIVE_BACKEND_URL || 'https://api.cromsennest.com/api';
 
 // Helper: read the JWT stored after login without importing React-Native context
 const getStoredToken = async () => {
@@ -110,35 +111,15 @@ export const authService = {
     return handleResponse(response);
   },
   // Send an email OTP using backend nodemailer integration
-  sendEmailOtp: async (email, otp) => {
-    const endpoints = [
-      `${BASE_URL}/users/send-otp`,
-      `${BASE_URL}/users/email-otp`,
-      `${BASE_URL}/auth/email-otp`,
-      `${BASE_URL}/email/send-otp`,
-      `${BASE_URL}/send-email-otp`
-    ];
-    let lastError;
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, otp })
-        });
-        
-        if (response.ok) {
-          console.log(`[Email OTP] Sent via ${url}`);
-          return await handleResponse(response);
-        } else if (response.status !== 404) {
-          // If it's a 400 or 500, it hit the endpoint but failed (e.g. email exists)
-          return await handleResponse(response); // This will throw the proper error
-        }
-      } catch (e) {
-        lastError = e;
-      }
-    }
-    throw lastError || new Error('Email OTP endpoint not found on backend. Make sure the backend server is running and updated.');
+  // Simplified OTP request – backend generates OTP itself
+  sendEmailOtp: async (email) => {
+    const url = `${BASE_URL}/users/send-otp`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(response);
   },
   getProfile: async (userId) => {
     const headers = await authHeaders();
