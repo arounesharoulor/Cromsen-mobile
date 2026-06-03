@@ -15,6 +15,14 @@ export const NotificationProvider = ({ children }) => {
   const [toast, setToast] = useState(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastY = useRef(new Animated.Value(-50)).current;
+  const orderUpdateListeners = useRef(new Set());
+
+  const subscribeToOrderUpdates = useCallback((callback) => {
+    orderUpdateListeners.current.add(callback);
+    return () => {
+      orderUpdateListeners.current.delete(callback);
+    };
+  }, []);
 
   // Load notifications from history when active user ID changes
   useEffect(() => {
@@ -160,7 +168,7 @@ export const NotificationProvider = ({ children }) => {
       if (rawOrders.length === 0) return;
 
       const backendOrders = rawOrders.map(o => ({
-        id: String(o._id || o.id),
+        id: String(o.orderId || o.id || o._id),
         status: String(o.status || 'ORDER CONFIRMED').toUpperCase()
       }));
 
@@ -168,7 +176,7 @@ export const NotificationProvider = ({ children }) => {
       const stored = await AsyncStorage.getItem(ordersKey);
       if (stored) {
         const localOrders = JSON.parse(stored).map(o => ({
-          id: String(o._id || o.id),
+          id: String(o.orderId || o.id || o._id),
           status: String(o.status || 'ORDER CONFIRMED').toUpperCase()
         }));
 
@@ -205,6 +213,11 @@ export const NotificationProvider = ({ children }) => {
               `Status for Order ${displayId} has been updated to ${newStatus}.`,
               'Orders'
             );
+
+            // Notify listeners to trigger UI refresh
+            orderUpdateListeners.current.forEach(cb => {
+              try { cb(); } catch (e) { console.warn('Listener call failed:', e); }
+            });
           }
         });
       }
@@ -215,9 +228,14 @@ export const NotificationProvider = ({ children }) => {
           const localFullOrders = JSON.parse(stored);
           if (Array.isArray(localFullOrders)) {
             localFullOrders.forEach(lo => {
-              const loId = String(lo.id || lo._id);
-              const exists = mergedOrders.some(bo => String(bo.id || bo._id) === loId);
-              if (!exists) {
+              const loId = String(lo.orderId || lo.id || lo._id);
+              const existsById = mergedOrders.some(bo => String(bo.orderId || bo.id || bo._id) === loId);
+              
+              // Deduplicate ghost local orders that have a different generated ID but same paymentId
+              const isOnlinePayment = lo.paymentId && lo.paymentId !== 'COD' && lo.paymentId !== 'Pending';
+              const existsByPaymentId = isOnlinePayment && mergedOrders.some(bo => bo.paymentId === lo.paymentId);
+              
+              if (!existsById && !existsByPaymentId) {
                 mergedOrders.push(lo);
               }
             });
@@ -354,7 +372,7 @@ export const NotificationProvider = ({ children }) => {
   return (
     <NotificationContext.Provider value={{
       notifications, addNotification, markAsRead, removeNotification, clearAll,
-      checkOrderUpdates, checkProductUpdates,
+      checkOrderUpdates, checkProductUpdates, subscribeToOrderUpdates,
       toast, getIcon, getBgColor, toastOpacity, toastY, showToast
     }}>
       {children}

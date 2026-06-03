@@ -73,6 +73,7 @@ export default function OrderDetailScreen({ navigation, route }) {
               allowsEditing: true,
               aspect: [4, 3],
               quality: 0.8,
+              base64: true,
             });
             if (!result.canceled) {
               setMedia([...media, result.assets[0]]);
@@ -92,6 +93,7 @@ export default function OrderDetailScreen({ navigation, route }) {
               allowsEditing: true,
               aspect: [4, 3],
               quality: 0.8,
+              base64: true,
             });
             if (!result.canceled) {
               setMedia([...media, result.assets[0]]);
@@ -122,26 +124,70 @@ export default function OrderDetailScreen({ navigation, route }) {
     try {
       setSubmittingRequest(true);
       
+      const newStatus = requestType === 'Return' ? 'Refund Tracking' : 'Replacement Requested';
+      const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
+
       const requestPayload = {
         orderId: currentOrder.id || currentOrder._id,
         productId: selectedItem?.productId || selectedItem?.product?._id || selectedItem?.id,
         productName: selectedItem?.name,
         type: requestType,
         reason: returnReason === 'Other' ? `Other: ${comment}` : returnReason.trim(),
-        media: media.map(m => m.uri),
+        media: base64Media,
         timestamp: new Date().toISOString(),
         customerName: user?.name || 'Customer',
         customerEmail: user?.email || '',
-        status: 'PENDING'
+        status: 'PENDING',
+        orderStatus: newStatus
       };
 
       console.log(`[${requestType}] Detail: Saved request with customer details:`, { name: requestPayload.customerName, email: requestPayload.customerEmail });
 
-      // Store locally for now
+      // 1. Store request locally
       const storedKey = `@ReturnRequests_${user?._id || user?.id}`;
       const stored = await AsyncStorage.getItem(storedKey);
       const requests = stored ? JSON.parse(stored) : [];
       await AsyncStorage.setItem(storedKey, JSON.stringify([requestPayload, ...requests]));
+
+      // 2. Update order status on backend
+      try {
+        const orderId = currentOrder._id || currentOrder.id;
+        await userService.updateOrderStatus(orderId, newStatus);
+        console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+      } catch (statusErr) {
+        console.warn(`[${requestType}] Could not update order status on backend:`, statusErr.message);
+      }
+
+      // 3. Send return/replace request details to backend
+      try {
+        await userService.submitReturnRequest(requestPayload);
+        console.log(`[${requestType}] Request sent to backend successfully.`);
+      } catch (reqErr) {
+        console.warn(`[${requestType}] Could not send request to backend:`, reqErr.message);
+      }
+
+      // 4. Update local AsyncStorage order list
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        const userOrdersKey = `@UserOrders_${currentUserId}`;
+        const storedOrders = await AsyncStorage.getItem(userOrdersKey);
+        if (storedOrders) {
+          try {
+            const parsedOrders = JSON.parse(storedOrders);
+            const updated = parsedOrders.map(o =>
+              (o.id === requestPayload.orderId || o._id === requestPayload.orderId)
+                ? { ...o, status: newStatus }
+                : o
+            );
+            await AsyncStorage.setItem(userOrdersKey, JSON.stringify(updated));
+          } catch (storageErr) {
+            console.warn('Failed to update local AsyncStorage orders:', storageErr);
+          }
+        }
+      }
+
+      // 5. Update local state
+      setCurrentOrder(prev => ({ ...prev, status: newStatus }));
 
       addNotification('success', `${requestType} Request Received`, `We have received your ${requestType.toLowerCase()} request for ${selectedItem?.name}. Our team will review it.`, 'Orders');
       
@@ -189,15 +235,19 @@ export default function OrderDetailScreen({ navigation, route }) {
     try {
       setSubmittingReview(true);
       
+      const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
+
       const reviewPayload = {
         name: user?.name || 'Anonymous Buyer',
+        userName: user?.name || 'Anonymous Buyer', // Backend expects userName
         email: user?.email || '',
         rating: rating,
         comment: comment.trim(),
         title: `${rating} Star Review`,
         review: comment.trim(),
-        images: media.map(m => m.uri),
-        media: media.map(m => m.uri),
+        images: base64Media,
+        media: base64Media,
+        localMedia: media.map(m => m.uri), // Pass raw URIs for FormData
         date: new Date().toISOString()
       };
 
@@ -515,7 +565,7 @@ export default function OrderDetailScreen({ navigation, route }) {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginLeft: 64, marginTop: 12 }}>
                   {canReview && (
                     <TouchableOpacity 
-                      style={styles.writeReviewBtn} 
+                      style={[styles.actionBtn, { backgroundColor: THEME_COLORS.secondary, minWidth: 80 }]} 
                       onPress={() => {
                         setReviewProductId(itemProdId);
                         setReviewProductName(sanitizeData(item.name, 'Product'));
@@ -525,14 +575,14 @@ export default function OrderDetailScreen({ navigation, route }) {
                         setShowReviewModal(true);
                       }}
                     >
-                      <Text style={styles.writeReviewTxt}>★ Review</Text>
+                      <Text style={[styles.actionBtnTxt, { color: '#FFF' }]}>★ Review</Text>
                     </TouchableOpacity>
                   )}
 
                   {isReturnReplaceEligible() && (
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <>
                       <TouchableOpacity 
-                        style={[styles.actionBtn, { flex: 1, backgroundColor: '#FFF2F2', borderColor: '#FFD5D5', borderWidth: 1 }]} 
+                        style={[styles.actionBtn, { backgroundColor: '#FFF2F2', borderColor: '#FFD5D5', borderWidth: 1, minWidth: 80 }]} 
                         onPress={() => {
                           setSelectedItem(item);
                           setRequestType('Return');
@@ -545,7 +595,7 @@ export default function OrderDetailScreen({ navigation, route }) {
                       </TouchableOpacity>
 
                       <TouchableOpacity 
-                        style={[styles.actionBtn, { flex: 1, backgroundColor: '#F2F8FF', borderColor: '#D5E6FF', borderWidth: 1 }]} 
+                        style={[styles.actionBtn, { backgroundColor: '#F2F8FF', borderColor: '#D5E6FF', borderWidth: 1, minWidth: 80 }]} 
                         onPress={() => {
                           setSelectedItem(item);
                           setRequestType('Replace');
@@ -556,7 +606,7 @@ export default function OrderDetailScreen({ navigation, route }) {
                       >
                         <Text style={[styles.actionBtnTxt, { color: THEME_COLORS.secondary }]}>Replace</Text>
                       </TouchableOpacity>
-                    </View>
+                    </>
                   )}
                 </View>
               </View>
@@ -568,7 +618,7 @@ export default function OrderDetailScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>₹{subtotal.toFixed(2)}</Text>
+            <Text style={styles.summaryValue}>₹{(Number(subtotal) || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Delivery</Text>
@@ -580,7 +630,7 @@ export default function OrderDetailScreen({ navigation, route }) {
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Order Total</Text>
-            <Text style={styles.totalValue}>₹{currentOrder.total.toFixed(2)}</Text>
+            <Text style={styles.totalValue}>₹{(Number(currentOrder.total) || 0).toFixed(2)}</Text>
           </View>
         </View>
 
@@ -949,6 +999,35 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_COLORS.primary,
     justifyContent: 'center', 
     alignItems: 'center' 
+  },
+  // Button used for writing a review on each order item
+  writeReviewBtn: {
+    flex: 1,
+    backgroundColor: THEME_COLORS.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  writeReviewTxt: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  // Generic action button style for Return/Replace/Review
+  actionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 36,
+  },
+  actionBtnTxt: {
+    fontSize: 13,
+    fontWeight: '700'
   },
   reviewSubmitBtnTxt: { 
     color: '#FFF', 

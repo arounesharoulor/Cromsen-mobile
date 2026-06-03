@@ -66,8 +66,21 @@ export default function NotificationsScreen({ navigation }) {
 
   const handlePress = (item) => {
     markAsRead(item.id);
-    if (item.screen) {
-      navigation.navigate(item.screen, item.params || {});
+    if (!item.screen) return;
+
+    try {
+      // 'Orders' is a root stack screen — navigate directly by name
+      if (item.screen === 'Orders') {
+        navigation.navigate('Orders', item.params || {});
+      } else if (item.screen === 'Main') {
+        navigation.navigate('Main', item.params || {});
+      } else {
+        navigation.navigate(item.screen, item.params || {});
+      }
+    } catch (e) {
+      console.warn('[Notification] Navigation error:', e);
+      // Fallback: go to Orders screen
+      try { navigation.navigate('Orders'); } catch (_) {}
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity, Image, Dimensions, ScrollView, Alert, StatusBar, Modal, TextInput, ActivityIndicator
 } from 'react-native';
@@ -71,11 +71,22 @@ import { useFocusEffect } from '@react-navigation/native';
 
 export default function OrdersScreen({ navigation }) {
   const { user } = useAuth();
-  const { addNotification, checkOrderUpdates } = useNotifications();
+  const { addNotification, checkOrderUpdates, subscribeToOrderUpdates } = useNotifications();
   const { isDarkMode, theme } = useTheme();
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Auto-refresh when order status changes on backend
+  useEffect(() => {
+    if (subscribeToOrderUpdates) {
+      const unsubscribe = subscribeToOrderUpdates(() => {
+        console.log('[OrdersScreen] Order status update detected. Auto-refreshing...');
+        loadOrders();
+      });
+      return unsubscribe;
+    }
+  }, [subscribeToOrderUpdates]);
 
   // Review Modal States
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -112,6 +123,7 @@ export default function OrdersScreen({ navigation }) {
               allowsEditing: true,
               aspect: [4, 3],
               quality: 0.8,
+              base64: true,
             });
             if (!result.canceled) {
               setMedia([...media, result.assets[0]]);
@@ -131,6 +143,7 @@ export default function OrdersScreen({ navigation }) {
               allowsEditing: true,
               aspect: [4, 3],
               quality: 0.8,
+              base64: true,
             });
             if (!result.canceled) {
               setMedia([...media, result.assets[0]]);
@@ -160,23 +173,72 @@ export default function OrdersScreen({ navigation }) {
 
     try {
       setSubmittingRequest(true);
+
+      const newStatus = requestType === 'Return' ? 'Refund Tracking' : 'Replacement Requested';
+      const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
+
       const requestPayload = {
         orderId: selectedOrder.id || selectedOrder._id,
         productId: selectedItem?.productId || selectedItem?.product?._id || selectedItem?.id,
         productName: selectedItem?.name || selectedOrder.mainProduct,
         type: requestType,
         reason: returnReason === 'Other' ? `Other: ${comment}` : returnReason.trim(),
-        media: media.map(m => m.uri),
+        media: base64Media,
         timestamp: new Date().toISOString(),
         customerName: user?.name || 'Customer',
         customerEmail: user?.email || '',
-        status: 'PENDING'
+        status: 'PENDING',
+        // Include new order status so admin dashboard can reflect it
+        orderStatus: newStatus,
       };
 
+      // 1. Save locally to AsyncStorage
       const storedKey = `@ReturnRequests_${user?._id || user?.id}`;
       const stored = await AsyncStorage.getItem(storedKey);
       const requests = stored ? JSON.parse(stored) : [];
       await AsyncStorage.setItem(storedKey, JSON.stringify([requestPayload, ...requests]));
+
+      // 2. Update order status on backend so admin sees "RETURN REQUESTED" / "REPLACEMENT REQUESTED"
+      try {
+        const orderId = selectedOrder.id || selectedOrder._id;
+        await userService.updateOrderStatus(orderId, newStatus);
+        console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+      } catch (statusErr) {
+        console.warn(`[${requestType}] Could not update order status on backend:`, statusErr.message);
+      }
+
+      // 3. Send return/replace request details to backend
+      try {
+        await userService.submitReturnRequest(requestPayload);
+        console.log(`[${requestType}] Request sent to backend successfully.`);
+      } catch (reqErr) {
+        console.warn(`[${requestType}] Could not send request to backend:`, reqErr.message);
+      }
+
+      // 4. Update local AsyncStorage order list
+      const currentUserId = user?._id || user?.id;
+      const userOrdersKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
+      const storedOrders = await AsyncStorage.getItem(userOrdersKey);
+      if (storedOrders) {
+        try {
+          const parsedOrders = JSON.parse(storedOrders);
+          const updated = parsedOrders.map(o =>
+            (o.id === requestPayload.orderId || o._id === requestPayload.orderId)
+              ? { ...o, status: newStatus }
+              : o
+          );
+          await AsyncStorage.setItem(userOrdersKey, JSON.stringify(updated));
+        } catch (storageErr) {
+          console.warn('Failed to update local AsyncStorage orders:', storageErr);
+        }
+      }
+
+      // 5. Update local state safely using already-normalized prevOrders list
+      setOrders(prevOrders => prevOrders.map(o =>
+        (o.id === requestPayload.orderId || o._id === requestPayload.orderId)
+          ? { ...o, status: newStatus }
+          : o
+      ));
 
       console.log(`[${requestType}] Saved request with customer details:`, { name: requestPayload.customerName, email: requestPayload.customerEmail });
 
@@ -225,15 +287,19 @@ export default function OrdersScreen({ navigation }) {
     try {
       setSubmittingReview(true);
       
+      const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
+
       const reviewPayload = {
         name: user?.name || 'Anonymous Buyer',
+        userName: user?.name || 'Anonymous Buyer', // Backend expects userName
         email: user?.email || '',
         rating: rating,
         comment: comment.trim(),
         title: `${rating} Star Review`,
         review: comment.trim(),
-        images: media.map(m => m.uri),
-        media: media.map(m => m.uri),
+        images: base64Media,
+        media: base64Media,
+        localMedia: media.map(m => m.uri), // Pass raw URIs for FormData
         date: new Date().toISOString()
       };
 
@@ -374,7 +440,11 @@ export default function OrdersScreen({ navigation }) {
         localOrdersList.forEach(lo => {
           const loDisplayId = normalize(lo).id;
           const loId = String(lo._id || lo.id);
-          if (!seenIds.has(loId) && !seenIds.has(loDisplayId)) {
+          
+          const isOnlinePayment = lo.paymentId && lo.paymentId !== 'COD' && lo.paymentId !== 'Pending';
+          const existsByPaymentId = isOnlinePayment && mergedList.some(bo => bo.paymentId === lo.paymentId);
+          
+          if (!seenIds.has(loId) && !seenIds.has(loDisplayId) && !existsByPaymentId) {
             mergedList.push(normalize(lo));
             seenIds.add(loId);
             seenIds.add(loDisplayId);
@@ -661,7 +731,7 @@ export default function OrdersScreen({ navigation }) {
                             <Text style={[styles.itemsCount, { fontSize: 11 }]}>{String(item.itemsCount)} items</Text>
                           )}
                         </View>
-                        <Text style={[styles.cardPrice, { fontSize: 14 }]}>₹{item.total.toFixed(2)}</Text>
+                        <Text style={[styles.cardPrice, { fontSize: 14 }]}>₹{(Number(item.total) || 0).toFixed(2)}</Text>
                       </View>
 
                       <View style={[styles.cardActions, { flexWrap: 'wrap' }]}>
@@ -678,55 +748,7 @@ export default function OrdersScreen({ navigation }) {
                           </TouchableOpacity>
                         )}
                         
-                        <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 10 }}>
-                          <TouchableOpacity 
-                            style={[styles.actionBtn, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30' }]} 
-                            onPress={() => {
-                              const firstItem = item.items?.[0] || item;
-                              const prodId = firstItem.productId || firstItem.product?._id || firstItem.product?.id || firstItem._id || firstItem.id || item.id;
-                              const prodName = firstItem.name || item.mainProduct || 'Product';
-                              setReviewProductId(prodId);
-                              setReviewProductName(sanitizeData(prodName, 'Product'));
-                              setRating(5);
-                              setComment('');
-                              setShowReviewModal(true);
-                            }}
-                          >
-                            <Text style={[styles.actionBtnTxt, { color: theme.primary }]}>★ Review</Text>
-                          </TouchableOpacity>
 
-                          {isReturnReplaceEligible(item) && (
-                            <>
-                              <TouchableOpacity 
-                                style={[styles.actionBtn, { backgroundColor: '#FFF2F2', borderColor: '#FFD5D5' }]} 
-                                onPress={() => {
-                                  setSelectedOrder(item);
-                                  setSelectedItem(item.items?.[0] || item);
-                                  setRequestType('Return');
-                                  setMedia([]);
-                                  setReturnReason('');
-                                  setShowReturnModal(true);
-                                }}
-                              >
-                                <Text style={[styles.actionBtnTxt, { color: '#EB5757' }]}>Return</Text>
-                              </TouchableOpacity>
-
-                              <TouchableOpacity 
-                                style={[styles.actionBtn, { backgroundColor: '#F2F8FF', borderColor: '#D5E6FF' }]} 
-                                onPress={() => {
-                                  setSelectedOrder(item);
-                                  setSelectedItem(item.items?.[0] || item);
-                                  setRequestType('Replace');
-                                  setMedia([]);
-                                  setReturnReason('');
-                                  setShowReturnModal(true);
-                                }}
-                              >
-                                <Text style={[styles.actionBtnTxt, { color: THEME_COLORS.secondary }]}>Replace</Text>
-                              </TouchableOpacity>
-                            </>
-                          )}
-                        </View>
                       </View>
                     </View>
                   );
@@ -1113,6 +1135,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     marginBottom: 8,
+  },
+  actionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 36,
+  },
+  actionBtnTxt: {
+    fontSize: 13,
+    fontWeight: '700'
   },
   mediaPreview: {
     width: 60,

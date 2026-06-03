@@ -722,8 +722,8 @@ export default function CheckoutScreen({ navigation, route }) {
 
         // STEP 6: FINALIZE LOCAL STATE
         let officialOrderId = finalOrder.id;
-        if (paymentData && paymentData.displayOrderId) {
-           officialOrderId = paymentData.displayOrderId;
+        if (paymentData) {
+           officialOrderId = paymentData.displayOrderId || paymentData.orderId || paymentData.id || finalOrder.id;
         }
 
         const finalOrderWithPayment = {
@@ -731,6 +731,7 @@ export default function CheckoutScreen({ navigation, route }) {
           id: officialOrderId,
           orderId: officialOrderId,
           paymentStatus: 'Paid',
+          paymentMethod: 'RAZORPAY',
           paymentId: result.razorpay_payment_id,
           razorpay_order_id: result.razorpay_order_id,
         };
@@ -853,6 +854,7 @@ export default function CheckoutScreen({ navigation, route }) {
             const finalOrder = {
               id: orderId,
               orderId: orderId, // Pass the full formatted ID (e.g. CIM-#1011) to the admin dashboard
+              clientOrderId: orderId,
               date: date,
               status: 'Processing',
               paymentStatus: 'Pending',
@@ -908,13 +910,10 @@ export default function CheckoutScreen({ navigation, route }) {
               },
             };
 
-            // STEP 3: SAVE PENDING ORDER TO ADMIN
-            try {
-              await userService.createOrder(finalOrder);
-              console.log('Order synced to Admin Table');
-            } catch (syncErr) {
-              console.warn('Admin Sync Warning:', syncErr);
-            }
+            // NOTE: Do NOT save a pending admin order here for online (Razorpay) payments.
+            // Saving before verification can cause the backend to mark the payment as COD.
+            // The backend's verify-payment endpoint will create/update the order after successful payment.
+            console.log('Razorpay flow: skipping pre-payment admin save; will finalize after verification.');
 
             // STEP 4: CHOOSE METHOD (Native SDK vs Secure Browser)
             // Using the @codearcade/expo-razorpay wrapper which works in Expo
@@ -947,10 +946,8 @@ export default function CheckoutScreen({ navigation, route }) {
                 }, finalOrder);
                 
                 let officialOrderId = finalOrder.id;
-                if (verifyRes && verifyRes.displayOrderId) {
-                  officialOrderId = verifyRes.displayOrderId;
-                  // Explicitly call createOrder here if the backend expects the finalized/verified order
-                  await userService.createOrder({ ...finalOrder, id: officialOrderId, orderId: officialOrderId });
+                if (verifyRes) {
+                  officialOrderId = verifyRes.displayOrderId || verifyRes.orderId || verifyRes.id || finalOrder.id;
                 }
 
                 // STEP 6: FINALIZE LOCAL STATE
@@ -959,6 +956,7 @@ export default function CheckoutScreen({ navigation, route }) {
                   id: officialOrderId,
                   orderId: officialOrderId,
                   paymentStatus: 'Paid',
+                  paymentMethod: 'RAZORPAY',
                   paymentId: paymentData.razorpay_payment_id,
                   razorpay_order_id: paymentData.razorpay_order_id,
                 };

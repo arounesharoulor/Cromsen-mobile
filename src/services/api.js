@@ -170,25 +170,53 @@ export const productService = {
     return productService._normalizeProduct(data);
   },
   addReview: async (productId, reviewData) => {
-    // Try multiple endpoint patterns for reviews
+    const hasMedia = reviewData.localMedia && reviewData.localMedia.length > 0;
+    
     const endpoints = [
       { url: `${BASE_URL}/products/${productId}/reviews`, method: 'POST' },
-      { url: `${BASE_URL}/reviews`, method: 'POST', body: { ...reviewData, productId } },
-      { url: `${BASE_URL}/product-reviews`, method: 'POST', body: { ...reviewData, productId } },
+      { url: `${BASE_URL}/reviews`, method: 'POST' },
+      { url: `${BASE_URL}/product-reviews`, method: 'POST' },
       { url: `${BASE_URL}/products/reviews/${productId}`, method: 'POST' },
-      { url: `${BASE_URL}/products/${productId}`, method: 'PUT', body: { ...reviewData } },
-      { url: `${BASE_URL}/products/${productId}`, method: 'PATCH', body: { reviews: [reviewData] } }
     ];
 
     let lastError;
     for (const ep of endpoints) {
       try {
         console.log(`Trying Review Sync: ${ep.method} ${ep.url}`);
-        const response = await fetch(ep.url, {
-          method: ep.method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ep.body || reviewData),
-        });
+        let options;
+        if (hasMedia) {
+          const formData = new FormData();
+          formData.append('productId', productId);
+          formData.append('rating', String(reviewData.rating || 5));
+          formData.append('comment', reviewData.comment || '');
+          formData.append('userName', reviewData.userName || reviewData.name || 'Anonymous');
+          formData.append('title', reviewData.title || '');
+          
+          reviewData.localMedia.forEach((uri, index) => {
+            formData.append('images', {
+              uri: uri,
+              type: 'image/jpeg',
+              name: `review_${index}.jpg`
+            });
+          });
+
+          const headers = await authHeaders();
+          delete headers['Content-Type']; // Let fetch set boundary
+
+          options = {
+            method: ep.method,
+            headers: headers,
+            body: formData,
+          };
+        } else {
+          options = {
+            method: ep.method,
+            headers: await authHeaders(),
+            body: JSON.stringify({ ...reviewData, productId }),
+          };
+        }
+
+        const response = await fetch(ep.url, options);
         if (response.ok) {
           console.log(`Review Sync SUCCESS: ${ep.url}`);
           return await handleResponse(response);
@@ -513,7 +541,9 @@ export const userService = {
   // Orders: the backend has no /orders/user/:id — filter from the full list by guestEmail
   getOrders: async (userId, userEmail) => {
     try {
-      const response = await fetch(`${BASE_URL}/orders`);
+      const response = await fetch(`${BASE_URL}/orders`, {
+        headers: await authHeaders()
+      });
       if (!response.ok) return [];
       const data = await response.json();
       const allOrders = Array.isArray(data) ? data : data.orders || [];
@@ -533,12 +563,12 @@ export const userService = {
     }
   },
 
-  updateOrderStatus: async (orderId, newStatus) => {
+  updateOrderStatus: async (orderId, newStatus, additionalData = {}) => {
     if (!orderId) throw new Error('Order ID is required');
     const response = await fetch(`${BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
+      headers: await authHeaders(),
+      body: JSON.stringify({ status: newStatus, ...additionalData }),
     });
     return handleResponse(response);
   },
@@ -561,7 +591,7 @@ export const userService = {
         console.log(`Verifying Payment & Syncing Order: POST ${url}`);
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify(payload),
         });
         if (response.ok) {
@@ -589,7 +619,6 @@ export const userService = {
       `${BASE_URL}/orders/place`,
       `${BASE_URL}/order`,
       `${BASE_URL}/payment/save-order`,
-      `${BASE_URL}/payment/cod-order`,
       `${BASE_URL}/payment/order`,
       `${BASE_URL}/payment/checkout`,
       `${BASE_URL}/users/orders`,
@@ -603,7 +632,7 @@ export const userService = {
         console.log(`Saving Order to Admin: POST ${url}`);
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify(orderData),
         });
 
@@ -619,5 +648,40 @@ export const userService = {
       }
     }
     throw lastError || new Error('Failed to save order to admin database');
+  },
+  // submitReturnRequest: Send return/replace request to admin backend
+  submitReturnRequest: async (requestData) => {
+    if (!requestData) throw new Error('Request data is required');
+
+    const endpoints = [
+      `${BASE_URL}/orders/${encodeURIComponent(requestData.orderId)}/return`,
+      `${BASE_URL}/orders/return`,
+      `${BASE_URL}/orders/return-request`,
+      `${BASE_URL}/returns`,
+    ];
+
+    let lastError;
+    for (const url of endpoints) {
+      try {
+        console.log(`Submitting Return/Replace Request: POST ${url}`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: await authHeaders(),
+          body: JSON.stringify(requestData),
+        });
+        if (response.ok) {
+          console.log(`Return/Replace Request SUCCESS: ${url}`);
+          return await handleResponse(response);
+        }
+        const errText = await response.text();
+        console.log(`Return/Replace Failed (${response.status}): ${url} - ${errText}`);
+        lastError = new Error(`Backend Error ${response.status}: ${errText}`);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    // Don't throw — fall back gracefully if backend doesn't have this endpoint yet
+    console.warn('Return request could not reach backend:', lastError?.message);
+    return null;
   },
 };
