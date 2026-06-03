@@ -421,7 +421,14 @@ export default function OrdersScreen({ navigation }) {
       }
 
       if (backendOrders.length > 0) {
-        const normalized = backendOrders.map(normalize);
+        // Filter backend orders to only include current user's orders
+        const currentUserBackendOrders = backendOrders.filter(o => {
+          const oUserId = o.userId || o.user || null;
+          const oEmail = o.email || o.guestEmail || o.userEmail || null;
+          return (oUserId && String(oUserId) === String(currentUserId)) || (oEmail && oEmail === userEmail);
+        });
+        
+        const normalized = currentUserBackendOrders.map(normalize);
         
         // Merge backend and local list, ensuring no duplicate _ids or display IDs
         const mergedList = [];
@@ -436,18 +443,21 @@ export default function OrdersScreen({ navigation }) {
           }
         });
 
-        // Add local orders if they don't exist in backend
+        // Add local orders if they don't exist in backend (ensure current user only)
         localOrdersList.forEach(lo => {
-          const loDisplayId = normalize(lo).id;
-          const loId = String(lo._id || lo.id);
-          
-          const isOnlinePayment = lo.paymentId && lo.paymentId !== 'COD' && lo.paymentId !== 'Pending';
-          const existsByPaymentId = isOnlinePayment && mergedList.some(bo => bo.paymentId === lo.paymentId);
-          
-          if (!seenIds.has(loId) && !seenIds.has(loDisplayId) && !existsByPaymentId) {
-            mergedList.push(normalize(lo));
-            seenIds.add(loId);
-            seenIds.add(loDisplayId);
+          // Double-check current user ownership before adding
+          if (lo.userId === currentUserId || lo.userEmail === userEmail) {
+            const loDisplayId = normalize(lo).id;
+            const loId = String(lo._id || lo.id);
+            
+            const isOnlinePayment = lo.paymentId && lo.paymentId !== 'COD' && lo.paymentId !== 'Pending';
+            const existsByPaymentId = isOnlinePayment && mergedList.some(bo => bo.paymentId === lo.paymentId);
+            
+            if (!seenIds.has(loId) && !seenIds.has(loDisplayId) && !existsByPaymentId) {
+              mergedList.push(normalize(lo));
+              seenIds.add(loId);
+              seenIds.add(loDisplayId);
+            }
           }
         });
 
