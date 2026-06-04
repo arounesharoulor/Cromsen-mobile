@@ -50,9 +50,13 @@ export default function ProductDetailScreen({ navigation, route }) {
   const [showQtySelector, setShowQtySelector] = useState(false);
   const [qtyInput, setQtyInput] = useState('1');
   const [sqFt, setSqFt] = useState('');
+  const [sqFtWidth, setSqFtWidth] = useState('');
+  const [sqFtHeight, setSqFtHeight] = useState('');
+  const [sqFtAvailable, setSqFtAvailable] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [highlightsOpen, setHighlightsOpen] = useState(true);
   const [reviewsOpen, setReviewsOpen] = useState(true);
+const [sqFtOpen, setSqFtOpen] = useState(false);
   const [localReviews, setLocalReviews] = useState([]);
   const [similarProducts, setSimilarProducts] = useState([]);
   const { addToCart } = useCart();
@@ -256,6 +260,42 @@ export default function ProductDetailScreen({ navigation, route }) {
       setSimilarProducts(simList.filter(p => (p._id || p.id) !== productId));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  };
+
+  const calculateSquareFeet = (width, height) => {
+    if (!width || !height) return null;
+    const w = parseFloat(width);
+    const h = parseFloat(height);
+    if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) return null;
+    return w * h;
+  };
+
+  const handleSqFtWidthChange = (val) => {
+    setSqFtWidth(val);
+    const calculated = calculateSquareFeet(val, sqFtHeight);
+    if (calculated !== null) {
+      const maxSqFt = product?.maxSquareFeet || product?.maxSqFt || product?.squareFeetLimit || null;
+      if (maxSqFt && calculated > maxSqFt) {
+        setSqFtAvailable(false);
+      } else {
+        setSqFtAvailable(true);
+        setSqFt(calculated.toString());
+      }
+    }
+  };
+
+  const handleSqFtHeightChange = (val) => {
+    setSqFtHeight(val);
+    const calculated = calculateSquareFeet(sqFtWidth, val);
+    if (calculated !== null) {
+      const maxSqFt = product?.maxSquareFeet || product?.maxSqFt || product?.squareFeetLimit || null;
+      if (maxSqFt && calculated > maxSqFt) {
+        setSqFtAvailable(false);
+      } else {
+        setSqFtAvailable(true);
+        setSqFt(calculated.toString());
+      }
+    }
   };
 
   const handleNumpad = (val) => {
@@ -555,22 +595,6 @@ export default function ProductDetailScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Square Feet Input */}
-          {product.isCustomSizeEnabled && (
-            <View style={s.optionSection}>
-              <Text style={[s.colorLabel, { color: theme.textSecondary }]}>Square Feet (sq.ft):</Text>
-              <TextInput
-                style={[s.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
-                placeholder="Enter square feet manually"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
-                value={sqFt}
-                onChangeText={setSqFt}
-              />
-            </View>
-          )}
-
-
           {/* Variant Selection */}
           {Object.entries(groupedVariants).map(([groupName, options], gIdx) => {
             if (options.length === 0) return null;
@@ -756,6 +780,95 @@ export default function ProductDetailScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
+          {/* SQUARE FEET CALCULATION (Conditional) */}
+          {product.isCustomSizeEnabled && (
+            <View>
+              <TouchableOpacity style={s.collapseHeader} onPress={() => setSqFtOpen(!sqFtOpen)}>
+                <Text style={s.collapseTitle}>Square Feet (sq.ft)</Text>
+                {sqFtOpen ? <ChevronUp size={18} color={theme.text} /> : <ChevronDown size={18} color={theme.text} />}
+              </TouchableOpacity>
+              {sqFtOpen && (
+                <View style={[s.sqFtCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Text style={[s.sqFtTitle, { color: theme.text }]}>Square Feet (sq.ft)</Text>
+                  <Text style={[s.sqFtSubtitle, { color: theme.textSecondary }]}>Enter your custom size</Text>
+
+                  <View style={s.sqFtInputRow}>
+                    <View style={s.sqFtInputGroup}>
+                      <Text style={[s.sqFtInputLabel, { color: theme.textSecondary }]}>Width (FT)</Text>
+                      <View style={s.sqFtInputWrapper}>
+                        <TouchableOpacity style={s.sqFtStepBtnInside} onPress={() => {
+                          const newVal = Math.max(0, parseFloat(sqFtWidth) - 1);
+                          handleSqFtWidthChange(newVal.toString());
+                        }}>
+                          <Minus size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                        <TextInput
+                          style={[s.sqFtInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text, textAlign: 'center', paddingLeft: 30, paddingRight: 30 }]}
+                          placeholder="0"
+                          placeholderTextColor={theme.textSecondary}
+                          value={sqFtWidth}
+                          onChangeText={handleSqFtWidthChange}
+                          keyboardType="decimal-pad"
+                        />
+                        <TouchableOpacity style={s.sqFtStepBtnInsideRight} onPress={() => {
+                          const newVal = (parseFloat(sqFtWidth) || 0) + 1;
+                          handleSqFtWidthChange(newVal.toString());
+                        }}>
+                          <Plus size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={s.sqFtInputGroup}>
+                      <Text style={[s.sqFtInputLabel, { color: theme.textSecondary }]}>Height (FT)</Text>
+                      <View style={s.sqFtInputWrapper}>
+                        <TouchableOpacity style={s.sqFtStepBtnInside} onPress={() => {
+                          const newVal = Math.max(0, parseFloat(sqFtHeight) - 1);
+                          handleSqFtHeightChange(newVal.toString());
+                        }}>
+                          <Minus size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                        <TextInput
+                          style={[s.sqFtInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text, textAlign: 'center', paddingLeft: 30, paddingRight: 30 }]}
+                          placeholder="0"
+                          placeholderTextColor={theme.textSecondary}
+                          value={sqFtHeight}
+                          onChangeText={handleSqFtHeightChange}
+                          keyboardType="decimal-pad"
+                        />
+                        <TouchableOpacity style={s.sqFtStepBtnInsideRight} onPress={() => {
+                          const newVal = (parseFloat(sqFtHeight) || 0) + 1;
+                          handleSqFtHeightChange(newVal.toString());
+                        }}>
+                          <Plus size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  {sqFtWidth && sqFtHeight && (
+                    <View style={[s.sqFtResult, { backgroundColor: sqFtAvailable ? '#E0F2FE' : '#FEE2E2' }]}>
+                      {sqFtAvailable ? (
+                        <>
+                          <Text style={[s.sqFtResultLabel, { color: '#0369A1' }]}>Calculated Size</Text>
+                          <Text style={[s.sqFtResultValue, { color: theme.primary }]}>{calculateSquareFeet(sqFtWidth, sqFtHeight)?.toFixed(2)} sq.ft</Text>
+                          {product?.maxSquareFeet && (
+                            <Text style={[s.sqFtLimit, { color: '#0369A1' }]}>Max: {product.maxSquareFeet} sq.ft</Text>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Text style={[s.sqFtResultLabel, { color: '#DC2626' }]}>Size Exceeded</Text>
+                          <Text style={[s.sqFtResultValue, { color: '#DC2626' }]}>Not Available</Text>
+                          <Text style={[s.sqFtLimit, { color: '#DC2626' }]}>Max limit: {product?.maxSquareFeet} sq.ft</Text>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
           {/* KEY HIGHLIGHTS (collapsible) */}
           <TouchableOpacity style={s.collapseHeader} onPress={() => setHighlightsOpen(!highlightsOpen)}>
             <Text style={s.collapseTitle}>Key Highlights</Text>
@@ -802,11 +915,19 @@ export default function ProductDetailScreen({ navigation, route }) {
                       <View style={s.reviewStarBadge}>
                         <Text style={s.reviewStarBadgeTxt}>★ {r.rating || 5}/5</Text>
                       </View>
+                      <Text style={s.reviewUserName}>{r.userName}</Text>
                       <Text style={s.reviewTime}>
                         {r.time ? new Date(r.time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
                       </Text>
                     </View>
-                    <Text style={s.reviewTxt}>{r.comment || r.text || r.review || ''}</Text>
+                    {r.images && r.images.length > 0 && (
+                      <View style={s.reviewImages}>
+                        {r.images.map((img, idx) => (
+                          <Image key={idx} source={{ uri: img }} style={s.reviewImg} />
+                        ))}
+                      </View>
+                    )}
+                    <Text style={s.reviewComment}>{r.comment || r.text || r.review || ''}</Text>
                     <View style={s.reviewActions}>
                       {(r.userImage || r.image || r.avatar) ? (
                         <Image source={{ uri: getImageUrl(r.userImage || r.image || r.avatar) }} style={s.reviewAvatar} />
@@ -1188,4 +1309,66 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   applyTxt: { fontWeight: '900', color: '#FFF', fontSize: 14 },
+
+  // Square Feet Calculation Styles
+  sqFtCard: {
+    backgroundColor: '#FFF', borderRadius: 14, padding: 16,
+    marginBottom: 16, borderWidth: 1, borderColor: THEME_COLORS.border,
+  },
+  sqFtTitle: {
+    fontSize: 16, fontWeight: '800', color: THEME_COLORS.text, marginBottom: 4,
+  },
+  sqFtSubtitle: {
+    fontSize: 12, color: THEME_COLORS.textSecondary, marginBottom: 16, fontWeight: '500',
+  },
+  sqFtInputRow: {
+    flexDirection: 'row', gap: 12, marginBottom: 12,
+  },
+  sqFtInputGroup: {
+    flex: 1,
+  },
+  sqFtInputLabel: {
+    fontSize: 11, fontWeight: '700', color: THEME_COLORS.textSecondary, marginBottom: 6, textTransform: 'uppercase',
+  },
+  sqFtInputWrapper: {
+    position: 'relative',
+    height: 44,
+    justifyContent: 'center',
+  },
+  sqFtInput: {
+    height: 44, borderRadius: 10, borderWidth: 1, borderColor: THEME_COLORS.border,
+    paddingHorizontal: 36, fontSize: 16, fontWeight: '600', textAlign: 'center',
+  },
+  sqFtStepBtnInside: {
+    position: 'absolute',
+    left: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    width: 30,
+  },
+  sqFtStepBtnInsideRight: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    width: 30,
+  },
+  sqFtResult: {
+    backgroundColor: '#E0F2FE', borderRadius: 10, padding: 12, alignItems: 'center',
+  },
+  sqFtResultLabel: {
+    fontSize: 12, fontWeight: '600', color: '#0369A1', marginBottom: 4,
+  },
+  sqFtResultValue: {
+    fontSize: 20, fontWeight: '900', color: THEME_COLORS.primary, marginBottom: 4,
+  },
+  sqFtLimit: {
+    fontSize: 11, fontWeight: '600', color: '#0369A1',
+  },
 });

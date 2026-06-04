@@ -33,13 +33,13 @@ export default function HelpScreen({ navigation }) {
   const handleContact = (type) => {
     switch(type) {
       case 'WHATSAPP':
-        Linking.openURL('whatsapp://send?text=Hi Cromsen Support!&phone=+911234567890');
+        Linking.openURL('whatsapp://send?text=Hi Cromsen Support!&phone=+919944430314');
         break;
       case 'EMAIL':
-        Linking.openURL('mailto:support@cromsen.com?subject=App Support Request');
+        Linking.openURL('mailto:cromsen@gmail.com?subject=App Support Request');
         break;
       case 'CALL':
-        Linking.openURL('tel:+911234567890');
+        Linking.openURL('tel:+919944430314');
         break;
     }
   };
@@ -111,16 +111,16 @@ export default function HelpScreen({ navigation }) {
         {/* Legal */}
         <View style={styles.legalSection}>
           <Text style={styles.sectionTitle}>Information</Text>
-          <TouchableOpacity style={styles.legalRow}>
+          <TouchableOpacity style={styles.legalRow} onPress={() => navigation.navigate('TermsConditions')}>
             <Text style={styles.legalText}>Terms & Conditions</Text>
             <ExternalLink size={16} color="#94A3B8" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.legalRow}>
+          <TouchableOpacity style={styles.legalRow} onPress={() => navigation.navigate('PrivacyPolicy')}>
             <Text style={styles.legalText}>Privacy Policy</Text>
             <ExternalLink size={16} color="#94A3B8" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.legalRow}>
-            <Text style={styles.legalText}>Warranty Information</Text>
+          <TouchableOpacity style={styles.legalRow} onPress={() => navigation.navigate('RefundReturnPolicy')}>
+            <Text style={styles.legalText}>Return & Refund Policy</Text>
             <ExternalLink size={16} color="#94A3B8" />
           </TouchableOpacity>
         </View>

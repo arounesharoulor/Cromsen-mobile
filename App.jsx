@@ -48,6 +48,9 @@ import HelpScreen from './src/screens/HelpScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import TabNavigator from './src/navigation/TabNavigator';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
+import TermsConditionsScreen from './src/screens/TermsConditionsScreen';
+import RefundReturnPolicyScreen from './src/screens/RefundReturnPolicyScreen';
 
 // Providers
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -87,6 +90,9 @@ function Navigation() {
           <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'fade' }} />
           <Stack.Screen name="AllProducts" component={AllProductsScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="RefundReturnPolicy" component={RefundReturnPolicyScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         <>
