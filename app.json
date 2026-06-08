@@ -16,6 +16,7 @@
       "icon": "./assets/icons/CromsenAppicon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.cromsen.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
