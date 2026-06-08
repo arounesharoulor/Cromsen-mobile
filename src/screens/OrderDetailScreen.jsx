@@ -143,11 +143,15 @@ export default function OrderDetailScreen({ navigation, route }) {
 
       console.log(`[${requestType}] Detail: Saved request with customer details:`, { name: requestPayload.customerName, email: requestPayload.customerEmail });
 
-      // 1. Store request locally
+      // 1. Store request locally (WITHOUT massive base64 media to avoid SQLITE_FULL)
+      const localPayload = {
+        ...requestPayload,
+        media: media.map(m => m.uri) // Store only local URIs, not base64 strings
+      };
       const storedKey = `@ReturnRequests_${user?._id || user?.id}`;
       const stored = await AsyncStorage.getItem(storedKey);
       const requests = stored ? JSON.parse(stored) : [];
-      await AsyncStorage.setItem(storedKey, JSON.stringify([requestPayload, ...requests]));
+      await AsyncStorage.setItem(storedKey, JSON.stringify([localPayload, ...requests]));
 
       // 2. Update order status on backend
       try {
@@ -267,15 +271,21 @@ export default function OrderDetailScreen({ navigation, route }) {
 
       // 1. ALWAYS save to local storage first, so the user sees it immediately even if backend is offline/fails
       try {
+        // Remove massive base64 media to avoid SQLITE_FULL
+        const localRev = {
+          ...newRev,
+          images: media.map(m => m.uri),
+          media: media.map(m => m.uri)
+        };
         const stored = await AsyncStorage.getItem(`@LocalReviews_${reviewProductId}`);
         const locals = stored ? JSON.parse(stored) : [];
-        const updated = [newRev, ...locals];
+        const updated = [localRev, ...locals];
         await AsyncStorage.setItem(`@LocalReviews_${reviewProductId}`, JSON.stringify(updated));
         
         // Also save to global review store so ProductDetailScreen can always find it
         const globalStored = await AsyncStorage.getItem('@GlobalLocalReviews');
         const globalList = globalStored ? JSON.parse(globalStored) : [];
-        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([newRev, ...globalList]));
+        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([localRev, ...globalList]));
         
         console.log(`[REVIEW] Saved review locally first for productId: ${reviewProductId}`);
       } catch (err) {
@@ -634,7 +644,7 @@ export default function OrderDetailScreen({ navigation, route }) {
           </View>
         </View>
 
-        {currentOrder.status !== 'CANCELLED' && currentOrder.status !== 'DELIVERED' && currentOrder.status !== 'Refund Tracking' && (
+        {['ORDER CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED'].includes(String(currentOrder.status).toUpperCase()) && (
           <TouchableOpacity style={styles.cancelBigBtn} onPress={handleCancelOrder} disabled={loading}>
             <Text style={styles.cancelBigBtnText}>{loading ? 'Cancelling...' : 'Cancel Order'}</Text>
           </TouchableOpacity>

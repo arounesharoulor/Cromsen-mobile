@@ -192,11 +192,15 @@ export default function OrdersScreen({ navigation }) {
         orderStatus: newStatus,
       };
 
-      // 1. Save locally to AsyncStorage
+      // 1. Save locally to AsyncStorage (WITHOUT massive base64 media to avoid SQLITE_FULL)
+      const localPayload = {
+        ...requestPayload,
+        media: media.map(m => m.uri) // Store only local URIs, not base64 strings
+      };
       const storedKey = `@ReturnRequests_${user?._id || user?.id}`;
       const stored = await AsyncStorage.getItem(storedKey);
       const requests = stored ? JSON.parse(stored) : [];
-      await AsyncStorage.setItem(storedKey, JSON.stringify([requestPayload, ...requests]));
+      await AsyncStorage.setItem(storedKey, JSON.stringify([localPayload, ...requests]));
 
       // 2. Update order status on backend so admin sees "RETURN REQUESTED" / "REPLACEMENT REQUESTED"
       try {
@@ -319,15 +323,21 @@ export default function OrdersScreen({ navigation }) {
 
       // 1. ALWAYS save to local storage first, so the user sees it immediately
       try {
+        // Remove massive base64 media to avoid SQLITE_FULL
+        const localRev = {
+          ...newRev,
+          images: media.map(m => m.uri),
+          media: media.map(m => m.uri)
+        };
         const stored = await AsyncStorage.getItem(`@LocalReviews_${reviewProductId}`);
         const locals = stored ? JSON.parse(stored) : [];
-        const updated = [newRev, ...locals];
+        const updated = [localRev, ...locals];
         await AsyncStorage.setItem(`@LocalReviews_${reviewProductId}`, JSON.stringify(updated));
         
         // Also save to global review store so ProductDetailScreen can always find it
         const globalStored = await AsyncStorage.getItem('@GlobalLocalReviews');
         const globalList = globalStored ? JSON.parse(globalStored) : [];
-        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([newRev, ...globalList]));
+        await AsyncStorage.setItem('@GlobalLocalReviews', JSON.stringify([localRev, ...globalList]));
         
         console.log(`[REVIEW] Saved review locally first in OrdersScreen for productId: ${reviewProductId}`);
       } catch (err) {
@@ -540,9 +550,15 @@ export default function OrdersScreen({ navigation }) {
     let filtered = orders.filter(o => {
       const s = String(o.status).toUpperCase();
       if (tabLabel === 'Active') {
-        return s !== 'DELIVERED' && s !== 'CANCELLED' && !s.includes('COMPLETED') && !s.includes('RETURNED') && !s.includes('REFUNDED');
+        return s !== 'DELIVERED' && s !== 'CANCELLED' && 
+               !s.includes('COMPLETED') && !s.includes('RETURNED') && 
+               !s.includes('REFUNDED') && !s.includes('DELIVERED');
       } else if (tabLabel === 'Delivered') {
-        return s === 'DELIVERED' || s.includes('COMPLETED');
+        return s === 'DELIVERED' || 
+               s.includes('COMPLETED') || 
+               s.includes('RETURNED') || 
+               s.includes('REFUNDED') || 
+               s.includes('DELIVERED');
       } else if (tabLabel === 'Cancelled') {
         return s === 'CANCELLED';
       }
@@ -550,18 +566,28 @@ export default function OrdersScreen({ navigation }) {
     });
 
     // Sort by timestamp (newest first)
-    return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.date || 0);
+      const dateB = new Date(b.createdAt || b.date || 0);
+      return dateB - dateA;
+    });
   };
 
   const TABS = [
     { label: 'All', count: orders.length },
     { label: 'Active', count: orders.filter(o => {
       const s = String(o.status).toUpperCase();
-      return s !== 'DELIVERED' && s !== 'CANCELLED' && !s.includes('COMPLETED');
+      return s !== 'DELIVERED' && s !== 'CANCELLED' && 
+             !s.includes('COMPLETED') && !s.includes('RETURNED') && 
+             !s.includes('REFUNDED') && !s.includes('DELIVERED');
     }).length },
     { label: 'Delivered', count: orders.filter(o => {
       const s = String(o.status).toUpperCase();
-      return s === 'DELIVERED' || s.includes('COMPLETED') || s.includes('DELIVERED');
+      return s === 'DELIVERED' || 
+             s.includes('COMPLETED') || 
+             s.includes('RETURNED') || 
+             s.includes('REFUNDED') || 
+             s.includes('DELIVERED');
     }).length },
     { label: 'Cancelled', count: orders.filter(o => String(o.status).toUpperCase() === 'CANCELLED').length },
   ];
@@ -752,7 +778,7 @@ export default function OrdersScreen({ navigation }) {
                           <Text style={styles.detailsBtnText}>View Details</Text>
                         </TouchableOpacity>
 
-                        {item.status !== 'CANCELLED' && item.status !== 'DELIVERED' && item.status !== 'Refund Tracking' && (
+                        {['ORDER CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED'].includes(String(item.status).toUpperCase()) && (
                           <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
                             <Text style={styles.cancelBtnText}>Cancel</Text>
                           </TouchableOpacity>

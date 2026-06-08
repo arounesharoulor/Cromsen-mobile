@@ -105,6 +105,8 @@ function Navigation() {
   );
 }
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 function AppContent() {
   const { isDarkMode } = useTheme();
   const { toast, getIcon, getBgColor, toastOpacity, toastY } = useNotifications();
@@ -115,6 +117,25 @@ function AppContent() {
     fetch('https://cromsen-backend.onrender.com/api/users').catch(err => {
       console.log('[Wakeup] Background warm-up ping logged:', err.message);
     });
+
+    // Clean up bloated base64 return requests & local reviews in AsyncStorage to fix SQLITE_FULL
+    const cleanBloatedStorage = async () => {
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const keysToRemove = allKeys.filter(key => 
+          key.startsWith('@ReturnRequests_') || 
+          key.startsWith('@LocalReviews_') || 
+          key === '@GlobalLocalReviews'
+        );
+        if (keysToRemove.length > 0) {
+          console.log('[Cleanup] Removing bloated AsyncStorage keys:', keysToRemove);
+          await AsyncStorage.multiRemove(keysToRemove);
+        }
+      } catch (err) {
+        console.warn('[Cleanup] Error cleaning bloated storage:', err);
+      }
+    };
+    cleanBloatedStorage();
 
     // Install a global JS error handler to prevent uncaught red-screen crashes
     try {

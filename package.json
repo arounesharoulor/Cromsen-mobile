@@ -53,9 +53,11 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@react-native-community/cli": "^20.0.0",
+    "@react-native/metro-config": "^0.85.3",
     "expo": "~54.0.0",
-    "expo-cli": "^6.3.10",
     "expo-build-properties": "~1.0.10",
+    "expo-cli": "^6.3.10",
     "expo-dev-client": "~6.0.21",
     "react-native-svg-transformer": "^1.5.3"
   },
