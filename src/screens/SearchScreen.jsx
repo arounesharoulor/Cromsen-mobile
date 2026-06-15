@@ -13,8 +13,8 @@ import { useCart } from '../context/CartContext';
 import { useNotifications } from '../context/NotificationContext';
 import { BackIcon } from '../components/CustomIcons';
 import { useAuth } from '../context/AuthContext';
+import { categoryService } from '../services/api';
 
-const TRENDING = ['Blinds', 'Honeycomb', 'Curtains', 'PVC Mesh', 'Wallpaper', 'Acoustic Panel'];
 
 export default function SearchScreen({ navigation }) {
   const { addToCart } = useCart();
@@ -26,11 +26,32 @@ export default function SearchScreen({ navigation }) {
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [trendingKeywords, setTrendingKeywords] = useState(['Blinds', 'Honeycomb', 'Curtains', 'PVC Mesh', 'Wallpaper', 'Acoustic Panel']);
   const inputRef = useRef(null);
 
   useEffect(() => {
     loadRecent();
+    loadTrending();
   }, []);
+
+  const loadTrending = async () => {
+    try {
+      const cats = await categoryService.getCategories();
+      const list = Array.isArray(cats) ? cats : cats.data || [];
+      if (list.length > 0) {
+        // Extract category names
+        const keywords = list.map(c => c.name || c.label).filter(Boolean);
+        
+        // Deduplicate and take top 6
+        const unique = [...new Set(keywords)].slice(0, 6);
+        if (unique.length > 0) {
+          setTrendingKeywords(unique);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load dynamic categories', e);
+    }
+  };
 
   const loadRecent = async () => {
     try {
@@ -150,7 +171,7 @@ export default function SearchScreen({ navigation }) {
                   </View>
                 </View>
                 <View style={styles.chips}>
-                  {TRENDING.map((t, i) => (
+                  {trendingKeywords.map((t, i) => (
                     <TouchableOpacity key={i} style={[styles.chip, styles.trendChip]} onPress={() => handleSuggestion(t)}>
                       <Text style={[styles.chipTxt, { color: THEME_COLORS.textSecondary }]}>{t}</Text>
                     </TouchableOpacity>

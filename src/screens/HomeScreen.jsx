@@ -148,11 +148,26 @@ export default function HomeScreen({ navigation, route }) {
       setCategories(Array.isArray(cats) ? cats : cats.data || []);
       
       const list = prods.products || prods.data || (Array.isArray(prods) ? prods : []);
-      setProducts(list);
+      // Deduplicate by _id/id to prevent duplicate key warnings
+      const seen = new Set();
+      const uniqueList = list.filter(p => {
+        const pid = p._id || p.id;
+        if (!pid || seen.has(String(pid))) return false;
+        seen.add(String(pid));
+        return true;
+      });
+      setProducts(uniqueList);
 
       const trendingList = trendingProds.products || trendingProds.data || (Array.isArray(trendingProds) ? trendingProds : []);
-      // Fallback: if no products in Trending Now category, use a slice of general products
-      setTrendingProducts(trendingList.length > 0 ? trendingList : list.slice(3, 7));
+      // Deduplicate trending as well
+      const seenTrending = new Set();
+      const uniqueTrending = (trendingList.length > 0 ? trendingList : uniqueList.slice(3, 7)).filter(p => {
+        const pid = p._id || p.id;
+        if (!pid || seenTrending.has(String(pid))) return false;
+        seenTrending.add(String(pid));
+        return true;
+      });
+      setTrendingProducts(uniqueTrending);
     } finally {
       setLoading(false);
     }
@@ -305,7 +320,7 @@ export default function HomeScreen({ navigation, route }) {
               >
                 {products.slice(0, 5).map((p, index) => (
                   <ProductCard
-                    key={p._id || p.id ? `${p._id || p.id}-${index}` : index}
+                    key={`bs-${p._id || p.id || index}`}
                     product={p}
                     style={{ marginRight: 14 }}
                     onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
@@ -346,7 +361,7 @@ export default function HomeScreen({ navigation, route }) {
             >
               {displayCategories.map((cat, index) => (
                 <TouchableOpacity
-                  key={cat.id ? `${cat.id}-${index}` : index}
+                  key={`cat-${cat.id || index}`}
                   style={styles.catItem}
                   onPress={() => {
                     if (cat.id === 'all') {
@@ -404,7 +419,7 @@ export default function HomeScreen({ navigation, route }) {
                     : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
                   return (
                     <TouchableOpacity
-                      key={p._id || p.id ? `${p._id || p.id}-${index}` : index}
+                      key={`tr-${p._id || p.id || index}`}
                       style={[styles.bsCard, { width: width * 0.75, height: 200, paddingVertical: 0, overflow: 'hidden' }]}
                       onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                     >

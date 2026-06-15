@@ -31,7 +31,15 @@ export const NotificationProvider = ({ children }) => {
         const notifKey = currentUserId ? `@UserNotifications_${currentUserId}` : '@UserNotifications_guest';
         const stored = await AsyncStorage.getItem(notifKey);
         if (stored) {
-          setNotifications(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          // Deduplicate by id in case old notifications had duplicate Date.now() keys
+          const seen = new Set();
+          const unique = parsed.filter(n => {
+            if (seen.has(n.id)) return false;
+            seen.add(n.id);
+            return true;
+          });
+          setNotifications(unique);
         } else {
           setNotifications([]);
         }
@@ -95,7 +103,7 @@ export const NotificationProvider = ({ children }) => {
     }
 
     const newNotif = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type,
       title,
       message,

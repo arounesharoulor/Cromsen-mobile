@@ -162,12 +162,62 @@ export const productService = {
     return productService._normalizeProduct(prod);
   },
   searchProducts: async (query) => {
-    const response = await fetch(`${BASE_URL}/products/search?q=${query}`);
-    const data = await handleResponse(response);
-    if (Array.isArray(data)) return data.map(productService._normalizeProduct);
-    const list = data.products || data.data || [];
-    if (Array.isArray(list)) return { ...data, products: list.map(productService._normalizeProduct) };
-    return productService._normalizeProduct(data);
+    let list = [];
+    try {
+      // Try search endpoint, also fallback to standard products endpoint with query params
+      const response = await fetch(`${BASE_URL}/products/search?q=${query}&keyword=${query}`);
+      let data;
+      if (response.ok) {
+        data = await response.json();
+      } else {
+        const fallbackResp = await fetch(`${BASE_URL}/products?search=${query}&keyword=${query}`);
+        data = await fallbackResp.json();
+      }
+
+      let rawList = Array.isArray(data) ? data : data.products || data.data || [];
+      if (!Array.isArray(rawList)) rawList = [data];
+
+      // If backend search returns empty, fetch ALL products and rely entirely on local filtering
+      if (rawList.length === 0) {
+        const allResp = await fetch(`${BASE_URL}/products`);
+        if (allResp.ok) {
+          const allData = await allResp.json();
+          rawList = Array.isArray(allData) ? allData : allData.products || allData.data || [];
+        }
+      }
+
+      list = rawList.map(productService._normalizeProduct);
+    } catch (e) {
+      // If fetching fails, return empty
+      return [];
+    }
+
+    // Force local filtering to ensure only matching products are returned
+    if (!query) return list;
+    const lowerQ = query.toLowerCase().trim();
+    const filteredList = list.filter(p => {
+      if (!p) return false;
+      const nameMatch = p.name && String(p.name).toLowerCase().includes(lowerQ);
+      const descMatch = p.description && String(p.description).toLowerCase().includes(lowerQ);
+      let catMatch = false;
+      if (p.category) {
+        if (typeof p.category === 'string') {
+          catMatch = String(p.category).toLowerCase().includes(lowerQ);
+        } else if (Array.isArray(p.category)) {
+          catMatch = p.category.some(c => 
+            c && (typeof c === 'string' 
+              ? String(c).toLowerCase().includes(lowerQ) 
+              : c.name && String(c.name).toLowerCase().includes(lowerQ)
+            )
+          );
+        } else if (p.category.name) {
+          catMatch = String(p.category.name).toLowerCase().includes(lowerQ);
+        }
+      }
+      return nameMatch || descMatch || catMatch;
+    });
+
+    return filteredList;
   },
   addReview: async (productId, reviewData) => {
     const hasMedia = reviewData.localMedia && reviewData.localMedia.length > 0;
