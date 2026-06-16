@@ -38,12 +38,11 @@
     "updates": {
       "enabled": false,
       "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/2232435b-63d7-4f7f-b05d-34e161dafff2"
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "eas": {
-        "projectId": "2232435b-63d7-4f7f-b05d-34e161dafff2"
+        "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
       }
     },
     "plugins": [
