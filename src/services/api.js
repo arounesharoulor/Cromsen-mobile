@@ -162,59 +162,102 @@ export const productService = {
     return productService._normalizeProduct(prod);
   },
   searchProducts: async (query) => {
-    let list = [];
+    let rawList = [];
+    
+    // Attempt 1: search endpoint
     try {
-      // Try search endpoint, also fallback to standard products endpoint with query params
-      const response = await fetch(`${BASE_URL}/products/search?q=${query}&keyword=${query}`);
-      let data;
+      const response = await fetch(`${BASE_URL}/products/search?q=${encodeURIComponent(query)}&keyword=${encodeURIComponent(query)}`);
       if (response.ok) {
-        data = await response.json();
-      } else {
-        const fallbackResp = await fetch(`${BASE_URL}/products?search=${query}&keyword=${query}`);
-        data = await fallbackResp.json();
-      }
-
-      let rawList = Array.isArray(data) ? data : data.products || data.data || [];
-      if (!Array.isArray(rawList)) rawList = [data];
-
-      // If backend search returns empty, fetch ALL products and rely entirely on local filtering
-      if (rawList.length === 0) {
-        const allResp = await fetch(`${BASE_URL}/products`);
-        if (allResp.ok) {
-          const allData = await allResp.json();
-          rawList = Array.isArray(allData) ? allData : allData.products || allData.data || [];
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          rawList = Array.isArray(data) ? data : data.products || data.data || [];
         }
       }
-
-      list = rawList.map(productService._normalizeProduct);
     } catch (e) {
-      // If fetching fails, return empty
-      return [];
+      console.warn("Search endpoint failed, trying fallback...", e);
     }
 
-    // Force local filtering to ensure only matching products are returned
+    // Attempt 2: fallback search query on products endpoint
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      try {
+        const response = await fetch(`${BASE_URL}/products?search=${encodeURIComponent(query)}&keyword=${encodeURIComponent(query)}`);
+        if (response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            rawList = Array.isArray(data) ? data : data.products || data.data || [];
+          }
+        }
+      } catch (e) {
+        console.warn("Fallback search endpoint failed, trying full fetch...", e);
+      }
+    }
+
+    // Attempt 3: Fetch all products and filter locally
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      try {
+        const response = await fetch(`${BASE_URL}/products?limit=1000`);
+        if (response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            rawList = Array.isArray(data) ? data : data.products || data.data || [];
+          }
+        }
+      } catch (e) {
+        console.error("Full fetch failed", e);
+      }
+    }
+
+    // Process and filter results locally
+    if (!Array.isArray(rawList)) {
+      rawList = typeof rawList === 'object' && rawList ? [rawList] : [];
+    }
+    
+    const list = rawList.map(productService._normalizeProduct);
     if (!query) return list;
-    const lowerQ = query.toLowerCase().trim();
+
+    const keywords = query.toLowerCase().trim().split(/\s+/);
+    
+    // Helper to match if any word in the text starts with the keyword
+    const startsWithKeyword = (text, kw) => {
+      if (!text) return false;
+      const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escapedKw}`, 'i').test(String(text));
+    };
+
     const filteredList = list.filter(p => {
       if (!p) return false;
-      const nameMatch = p.name && String(p.name).toLowerCase().includes(lowerQ);
-      const descMatch = p.description && String(p.description).toLowerCase().includes(lowerQ);
-      let catMatch = false;
-      if (p.category) {
-        if (typeof p.category === 'string') {
-          catMatch = String(p.category).toLowerCase().includes(lowerQ);
-        } else if (Array.isArray(p.category)) {
-          catMatch = p.category.some(c => 
-            c && (typeof c === 'string' 
-              ? String(c).toLowerCase().includes(lowerQ) 
-              : c.name && String(c.name).toLowerCase().includes(lowerQ)
-            )
-          );
-        } else if (p.category.name) {
-          catMatch = String(p.category.name).toLowerCase().includes(lowerQ);
+      
+      return keywords.every(kw => {
+        const nameMatch = startsWithKeyword(p.name, kw);
+        const descMatch = startsWithKeyword(p.description, kw);
+        let catMatch = false;
+        if (p.category) {
+          if (typeof p.category === 'string') {
+            catMatch = startsWithKeyword(p.category, kw);
+          } else if (Array.isArray(p.category)) {
+            catMatch = p.category.some(c => 
+              c && (typeof c === 'string' 
+                ? startsWithKeyword(c, kw) 
+                : startsWithKeyword(c.name, kw)
+              )
+            );
+          } else if (p.category.name) {
+            catMatch = startsWithKeyword(p.category.name, kw);
+          }
         }
-      }
-      return nameMatch || descMatch || catMatch;
+        return nameMatch || descMatch || catMatch;
+      });
+    });
+
+    // Sort to prioritize products that start exactly with the search query
+    const exactQuery = query.toLowerCase().trim();
+    filteredList.sort((a, b) => {
+      const aStarts = a.name && String(a.name).toLowerCase().startsWith(exactQuery) ? 1 : 0;
+      const bStarts = b.name && String(b.name).toLowerCase().startsWith(exactQuery) ? 1 : 0;
+      return bStarts - aStarts;
     });
 
     return filteredList;

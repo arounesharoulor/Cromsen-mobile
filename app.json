@@ -38,7 +38,8 @@
     "updates": {
       "enabled": false,
       "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
     },
     "extra": {
       "eas": {

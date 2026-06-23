@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity,
-  TextInput, Keyboard, StatusBar, Platform,
+  TextInput, Keyboard, StatusBar, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, ArrowLeft, Clock, TrendingUp } from 'lucide-react-native';
@@ -27,12 +27,25 @@ export default function SearchScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [trendingKeywords, setTrendingKeywords] = useState(['Blinds', 'Honeycomb', 'Curtains', 'PVC Mesh', 'Wallpaper', 'Acoustic Panel']);
+  const [allProducts, setAllProducts] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
 
   useEffect(() => {
     loadRecent();
     loadTrending();
+    loadAllProducts();
   }, []);
+
+  const loadAllProducts = async () => {
+    try {
+      const res = await productService.getProducts({ limit: 1000 });
+      const list = Array.isArray(res) ? res : res.data || res.products || [];
+      if (Array.isArray(list)) setAllProducts(list);
+    } catch(e) {
+      console.warn('Failed to load products for suggestions', e);
+    }
+  };
 
   const loadTrending = async () => {
     try {
@@ -96,9 +109,76 @@ export default function SearchScreen({ navigation }) {
 
   const clearSearch = () => {
     setQuery('');
+    setSuggestions([]);
     setResults([]);
     setSearched(false);
     inputRef.current?.focus();
+  };
+
+  const handleQueryChange = (text) => {
+    setQuery(text);
+    setSearched(false);
+    if (text.trim().length > 0) {
+      const keywords = text.toLowerCase().trim().split(/\s+/);
+      
+      const startsWithKeyword = (str, kw) => {
+        if (!str) return false;
+        const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escapedKw}`, 'i').test(String(str));
+      };
+
+      const matches = allProducts.filter(p => {
+        if (!p) return false;
+        
+        return keywords.every(kw => {
+          const nameMatch = startsWithKeyword(p.name, kw);
+          const descMatch = startsWithKeyword(p.description, kw);
+          let catMatch = false;
+          if (p.category) {
+            if (typeof p.category === 'string') {
+              catMatch = startsWithKeyword(p.category, kw);
+            } else if (Array.isArray(p.category)) {
+              catMatch = p.category.some(c => 
+                c && (typeof c === 'string' 
+                  ? startsWithKeyword(c, kw) 
+                  : startsWithKeyword(c.name, kw)
+                )
+              );
+            } else if (p.category.name) {
+              catMatch = startsWithKeyword(p.category.name, kw);
+            }
+          }
+          return nameMatch || descMatch || catMatch;
+        });
+      });
+
+      // Sort matches to prioritize products that start exactly with the search query
+      const exactQuery = text.toLowerCase().trim();
+      matches.sort((a, b) => {
+        const aStarts = a.name && String(a.name).toLowerCase().startsWith(exactQuery) ? 1 : 0;
+        const bStarts = b.name && String(b.name).toLowerCase().startsWith(exactQuery) ? 1 : 0;
+        return bStarts - aStarts;
+      });
+
+      // Deduplicate suggestions by ID or name
+      const seen = new Set();
+      const uniqueMatches = [];
+      for (const p of matches) {
+        const id = p._id || p.id;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          uniqueMatches.push({
+            id: id,
+            name: p.name,
+            image: p.image || p.thumbnail || p.img || (p.images && p.images[0])
+          });
+        }
+      }
+
+      setSuggestions(uniqueMatches.slice(0, 10));
+    } else {
+      setSuggestions([]);
+    }
   };
 
   return (
@@ -119,7 +199,7 @@ export default function SearchScreen({ navigation }) {
             autoFocus={true}
             placeholderTextColor="#94A3B8"
             value={query}
-            onChangeText={setQuery}
+            onChangeText={handleQueryChange}
             onSubmitEditing={() => handleSearch()}
             onFocus={() => {}} // Trigger re-render to apply focus style
             onBlur={() => {}}
@@ -140,7 +220,26 @@ export default function SearchScreen({ navigation }) {
           data={[]}
           ListHeaderComponent={
             <View>
-              {/* Recent Searches */}
+              {query.trim().length > 0 && !searched && suggestions.length > 0 ? (
+                <View style={styles.suggestionsContainer}>
+                  {suggestions.map((s) => (
+                    <TouchableOpacity 
+                      key={s.id} 
+                      style={styles.suggestionRow} 
+                      onPress={() => navigation.navigate('ProductDetail', { productId: s.id })}
+                    >
+                      <Image 
+                        source={{ uri: getImageUrl(s.image) }} 
+                        style={styles.suggestionImage} 
+                        resizeMode="cover"
+                      />
+                      <Text style={styles.suggestionTxt} numberOfLines={1}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <>
+                  {/* Recent Searches */}
               {recent.length > 0 && (
                 <View style={styles.section}>
                   <View style={styles.sectionRow}>
@@ -178,6 +277,8 @@ export default function SearchScreen({ navigation }) {
                   ))}
                 </View>
               </View>
+                </>
+              )}
             </View>
           }
           keyExtractor={(_, i) => String(i)}
@@ -280,4 +381,29 @@ const styles = StyleSheet.create({
   },
   grid: { paddingHorizontal: 16, paddingBottom: 110 },
   row: { justifyContent: 'space-between', marginBottom: 16 },
+
+  suggestionsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME_COLORS.border,
+  },
+  suggestionTxt: {
+    fontSize: 15,
+    color: THEME_COLORS.text,
+    fontWeight: '500',
+    flex: 1,
+  },
+  suggestionImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
 });

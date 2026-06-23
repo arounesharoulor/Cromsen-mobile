@@ -869,30 +869,7 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
             </View>
           )}
 
-          {/* KEY HIGHLIGHTS (collapsible) */}
-          <TouchableOpacity style={s.collapseHeader} onPress={() => setHighlightsOpen(!highlightsOpen)}>
-            <Text style={s.collapseTitle}>Key Highlights</Text>
-            {highlightsOpen ? <ChevronUp size={18} color={THEME_COLORS.text} /> : <ChevronDown size={18} color={THEME_COLORS.text} />}
-          </TouchableOpacity>
-          {highlightsOpen && (
-            <View style={s.highlightBox}>
-              <View style={s.hlHeaderRow}>
-                <Text style={s.hlHeader}>Dimensions</Text>
-                <Text style={s.hlHeader}>Height</Text>
-                <Text style={s.hlHeader}>Weight</Text>
-              </View>
-              {[
-                ['3.5kg', '3.5kg'], ['2.0kg', '2.5kg'],
-                ['3.0kg', '3.5kg'], ['2.0kg', '2.5kg'],
-              ].map((row, i) => (
-                <View key={i} style={s.hlRow}>
-                  <Text style={s.hlCell}>{i === 0 ? 'Dimensions' : ''}</Text>
-              <Text style={s.hlCell}>{row[0]}</Text>
-                  <Text style={s.hlCell}>{row[1]}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+
 
 
 
