@@ -15,7 +15,7 @@
       },
       "android": {
         "buildType": "apk",
-        "image": "latest"          
+        "image": "latest"
       }
     },
     "production": {
@@ -23,7 +23,7 @@
         "EXPO_NO_UPDATES": "true"
       },
       "android": {
-        "buildType": "apk",
+        "buildType": "app-bundle",
         "image": "latest"
       }
     }
