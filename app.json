@@ -23,7 +23,6 @@
     },
     "android": {
       "package": "com.cromsen.app",
-      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
