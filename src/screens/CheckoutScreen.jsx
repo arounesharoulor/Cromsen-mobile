@@ -991,7 +991,7 @@ export default function CheckoutScreen({ navigation, route }) {
                   <h3 style="text-align: center; font-family: sans-serif; color: #666;">Loading Secure Payment...</h3>
                   <script>
                     var options = {
-                      "key": "rzp_test_SNY1G9ELPHlY7P",
+                      "key": "rzp_live_TAtWLvrCKWdU8V",
                       "amount": "${Math.floor(finalAmount * 100)}",
                       "currency": "INR",
                       "name": "Cromsen",
