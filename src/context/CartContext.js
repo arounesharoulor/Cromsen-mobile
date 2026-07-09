@@ -48,7 +48,11 @@ export const CartProvider = ({ children }) => {
           const safeQty = Number(it.quantity) ? Number(it.quantity) : (it.quantity ? parseInt(it.quantity, 10) || 1 : 1);
           const safeBaseInst = (typeof it.baseInstallationPrice === 'number') ? it.baseInstallationPrice : (parseFloat(it.baseInstallationPrice) || 0);
           const safeInst = (typeof it.installationPrice === 'number') ? it.installationPrice : (parseFloat(it.installationPrice) || 0);
-          return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst };
+          const safeCgst = (typeof it.cgst === 'number') ? it.cgst : (parseFloat(it.cgst) || 0);
+          const safeSgst = (typeof it.sgst === 'number') ? it.sgst : (parseFloat(it.sgst) || 0);
+          const safeShipping = (typeof it.shippingFee === 'number') ? it.shippingFee : (parseFloat(it.shippingFee || it.shippingPrice) || 0);
+          const safePackaging = (typeof it.packagingFee === 'number') ? it.packagingFee : (parseFloat(it.packagingFee || it.packagingPrice) || 0);
+          return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst, cgst: safeCgst, sgst: safeSgst, shippingFee: safeShipping, packagingFee: safePackaging };
         };
 
         setCartItems(localCart.map(normalize));
@@ -92,7 +96,11 @@ export const CartProvider = ({ children }) => {
     const safeBaseInst = (typeof it.baseInstallationPrice === 'number') ? it.baseInstallationPrice : (parseFloat(it.baseInstallationPrice) || 0);
     const safeInst = (typeof it.installationPrice === 'number') ? it.installationPrice : (parseFloat(it.installationPrice) || 0);
     const safeRate = (typeof it.installationRatePerSqFt === 'number') ? it.installationRatePerSqFt : (parseFloat(it.installationRatePerSqFt || it.installationRatePerSqft || it.installationPricePerSqft || it.installationPerSqFt || it.installationRate || it.installationRatePerSquareFoot) || 0);
-    return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst, installationRatePerSqFt: safeRate };
+    const safeCgst = (typeof it.cgst === 'number') ? it.cgst : (parseFloat(it.cgst) || 0);
+    const safeSgst = (typeof it.sgst === 'number') ? it.sgst : (parseFloat(it.sgst) || 0);
+    const safeShipping = (typeof it.shippingFee === 'number') ? it.shippingFee : (parseFloat(it.shippingFee || it.shippingPrice) || 0);
+    const safePackaging = (typeof it.packagingFee === 'number') ? it.packagingFee : (parseFloat(it.packagingFee || it.packagingPrice) || 0);
+    return { ...it, price: safePrice, quantity: safeQty, baseInstallationPrice: safeBaseInst, installationPrice: safeInst, installationRatePerSqFt: safeRate, cgst: safeCgst, sgst: safeSgst, shippingFee: safeShipping, packagingFee: safePackaging };
   };
 
   const addToCart = (product, quantity = 1) => {

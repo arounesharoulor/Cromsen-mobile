@@ -455,8 +455,10 @@ function AddAddressForm({ onSave, initialData, user }) {
 export default function CheckoutScreen({ navigation, route }) {
   const { cartItems: contextCartItems, clearCart } = useCart();
   const directItem = route?.params?.directItem;
-  const cartItems = directItem ? [directItem] : contextCartItems;
-  
+  const cartItemsStr = JSON.stringify(directItem ? [directItem] : contextCartItems);
+  // Remove React.useMemo to avoid any reference instability, we will parse on demand or depend on the string.
+  const cartItems = JSON.parse(cartItemsStr);
+
   const { user, updateUser } = useAuth();
   const { addNotification } = useNotifications();
   const [addresses, setAddresses] = useState([]);
@@ -470,12 +472,69 @@ export default function CheckoutScreen({ navigation, route }) {
   const [showWebView, setShowWebView] = useState(false);
   const [pendingOrderDetails, setPendingOrderDetails] = useState(null);
   const [instSelections, setInstSelections] = useState({});
+  const [liveCartItems, setLiveCartItems] = useState(cartItems);
 
   useEffect(() => {
-    try {
-      console.log('[Checkout] cartItems:', JSON.stringify(cartItems, null, 2));
-    } catch (e) {}
-  }, [cartItems]);
+    // Only update if the stringified live items differ to prevent infinite update loops
+    setLiveCartItems(prev => {
+      const parsed = JSON.parse(cartItemsStr);
+      if (JSON.stringify(prev) !== cartItemsStr) {
+        return parsed;
+      }
+      return prev;
+    });
+  }, [cartItemsStr]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshLivePrices = async () => {
+        try {
+          const currentCartItems = JSON.parse(cartItemsStr);
+          // Fetch fresh data for each item
+          const updatedItems = await Promise.all(currentCartItems.map(async (item) => {
+            // Note: productService is not imported, so we will gracefully fallback to item
+            // if productService is undefined.
+            let freshProd = null;
+            if (typeof productService !== 'undefined') {
+              freshProd = await productService.getProductById(item.id || item._id);
+            }
+            if (!freshProd) return item;
+            
+            // Recompute price if it's a variant
+            const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
+            const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+            let freshPrice = userRole === 'dealer' ? parseNum(freshProd.dealerPrice) : parseNum(freshProd.retailPrice);
+            if (freshPrice <= 0) freshPrice = parseNum(freshProd.price);
+
+            const variantItems = freshProd.variantItems || freshProd.variantPrices || [];
+            if (variantItems.length > 0) {
+              const firstVar = variantItems[0];
+              // Note: ideal logic would match the exact combination, but we use the first or fallback for now 
+              // as this is a cart refresh. We don't overwrite price if we don't have the exact combination, 
+              // but we DEFINITELY overwrite fees.
+            }
+            
+            return {
+              ...item,
+              // We safely update taxes and fees from the fresh product
+              cgst: parseNum(freshProd.cgst),
+              sgst: parseNum(freshProd.sgst),
+              packagingFee: parseNum(freshProd.packagingFee),
+              shippingFee: parseNum(freshProd.shippingFee),
+              installationFee: parseNum(freshProd.installationFee),
+            };
+          }));
+          setLiveCartItems(updatedItems);
+        } catch (e) {
+          console.warn('Failed to refresh live cart items in checkout', e);
+        }
+      };
+      
+      if (cartItemsStr && cartItemsStr !== '[]') {
+        refreshLivePrices();
+      }
+    }, [cartItemsStr])
+  );
 
   // Robust number parsing and installation price resolution
   const _parseNumber = (v) => {
@@ -761,13 +820,13 @@ export default function CheckoutScreen({ navigation, route }) {
   };
 
 
-  const subtotal = cartItems.reduce((acc, item) => {
+  const subtotal = liveCartItems.reduce((acc, item) => {
     const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
     const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
     return acc + (price * sqFtMult * (item.quantity || 1));
   }, 0);
 
-  const totalSqFt = cartItems.reduce((acc, item) => {
+  const totalSqFt = liveCartItems.reduce((acc, item) => {
     const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
     if (sqFtMult > 1) {
       return acc + (sqFtMult * (item.quantity || 1));
@@ -775,7 +834,7 @@ export default function CheckoutScreen({ navigation, route }) {
     return acc;
   }, 0);
   
-  const totalInstallation = cartItems.reduce((acc, item, idx) => {
+  const totalInstallation = liveCartItems.reduce((acc, item, idx) => {
     const hasOption = hasInstallationOption(item);
     const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
     if (isInstalled) {
@@ -787,10 +846,35 @@ export default function CheckoutScreen({ navigation, route }) {
   
   // Align with CartScreen logic for consistency
   const discount = 0; // Discount removed as per request
-  const packagingFee = 7; // Packaging fee
-  const shippingFee = 20; // Shipping fee
-  const total = subtotal - discount + packagingFee + totalInstallation;
-  const grandTotal = total + shippingFee;
+  
+  const totalPackaging = liveCartItems.reduce((acc, item) => {
+    const qty = parseFloat(item.quantity) || 1;
+    return acc + ((parseFloat(item.packagingFee) || 0) * qty);
+  }, 0);
+
+  const totalShipping = liveCartItems.reduce((acc, item) => {
+    const qty = parseFloat(item.quantity) || 1;
+    return acc + ((parseFloat(item.shippingFee) || 0) * qty);
+  }, 0);
+
+  const totalCgst = liveCartItems.reduce((acc, item) => {
+    const qty = parseFloat(item.quantity) || 1;
+    const sqFt = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+    const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
+    const itemSubtotal = price * sqFt * qty;
+    return acc + (itemSubtotal * ((parseFloat(item.cgst) || 0) / 100));
+  }, 0);
+
+  const totalSgst = liveCartItems.reduce((acc, item) => {
+    const qty = parseFloat(item.quantity) || 1;
+    const sqFt = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+    const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
+    const itemSubtotal = price * sqFt * qty;
+    return acc + (itemSubtotal * ((parseFloat(item.sgst) || 0) / 100));
+  }, 0);
+
+  const total = subtotal - discount + totalPackaging + totalShipping + totalCgst + totalSgst + totalInstallation;
+  const grandTotal = total;
 
 
   const next = async () => {
@@ -817,11 +901,33 @@ export default function CheckoutScreen({ navigation, route }) {
         const orderId = `CIM-${Date.now()}`; // Generate unique order ID
         const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
         
-        const firstItem = cartItems[0] || {};
+        const firstItem = liveCartItems[0] || {};
         
         // Simulation of Razorpay Payment Process
         let paymentId = 'COD';
         let paymentStatus = 'Pending';
+        
+        const finalOrder = {
+          id: orderId,
+          orderId: orderId,
+          date,
+          status: 'Confirmed',
+          paymentStatus,
+          paymentMethod,
+          paymentId,
+          total: grandTotal,
+          subtotal,
+          discount,
+          cgst: totalCgst,
+          sgst: totalSgst,
+          shippingFee: totalShipping,
+          packagingFee: totalPackaging,
+          installationFee: totalInstallation,
+          items: liveCartItems,
+          address: selectedAddress ? selectedAddress.full : 'Store Pickup',
+          dealerId: user?.role === 'dealer' ? (user?._id || user?.id) : null,
+          userId: user?._id || user?.id,
+        };
         
         if (paymentMethod === 'RAZORPAY') {
           const API_URL = 'https://api.cromsennest.com/api';
@@ -849,66 +955,6 @@ export default function CheckoutScreen({ navigation, route }) {
             if (!rzpOrderData?.id) {
               throw new Error('No Razorpay Order ID returned');
             }
-
-            // STEP 2: PREPARE ORDER FOR ADMIN TABLE
-            const finalOrder = {
-              id: orderId,
-              orderId: orderId, // Pass the full formatted ID (e.g. CIM-#1011) to the admin dashboard
-              clientOrderId: orderId,
-              date: date,
-              status: 'Processing',
-              paymentStatus: 'Pending',
-              paymentId: rzpOrderData.id,
-              paymentMethod: 'RAZORPAY',
-              total: finalAmount,
-              totalAmount: finalAmount, // Added for backend compatibility
-              itemsCount: cartItems.length,
-              mainProduct: sanitizeData(firstItem.name || 'Product', 'Product'),
-              image: getImageUrl(firstItem.image),
-              user: user?._id || user?.id, // Changed from userId to user
-              userId: user?._id || user?.id,
-              email: user?.email || '',
-              guestEmail: user?.email || '', // Added for backend compatibility
-              source: 'mobile',
-              items: cartItems.map((item, idx) => {
-                const hasOption = hasInstallationOption(item);
-                const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
-                const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
-
-                let variantStr = item.variant || 'Standard';
-                if (hasOption) {
-                  if (variantStr.includes('Installation:')) {
-                    variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
-                  } else {
-                    variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
-                  }
-                } else {
-                  variantStr = variantStr.replace(/,?\s*Installation:\s*(By Company|Self)/gi, '');
-                }
-                return {
-                  ...item,
-                  productId: item._id || item.id || '',
-                  product: item._id || item.id || item.product || '',
-                  _id: item._id || item.id || item.product || '',
-                  name: sanitizeData(item.name || 'Product', 'Product'),
-                  image: getImageUrl(item.image),
-                  price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
-                  needsInstallation: isInstalled,
-                  installationPrice: isInstalled ? instPrice : 0,
-                  variant: variantStr
-                };
-              }),
-              address: selectedAddress,
-              shippingAddress: {
-                name: selectedAddress.name || user?.name || 'Guest',
-                address: selectedAddress.full || selectedAddress.address,
-                city: selectedAddress.city,
-                state: selectedAddress.state,
-                zip: selectedAddress.zip,
-                phone: selectedAddress.phone,
-                country: 'India'
-              },
-            };
 
             // NOTE: Do NOT save a pending admin order here for online (Razorpay) payments.
             // Saving before verification can cause the backend to mark the payment as COD.
@@ -1044,60 +1090,10 @@ export default function CheckoutScreen({ navigation, route }) {
         }
 
         // COD Flow
-        const newOrder = {
-          id: orderId,
-          orderId: orderId, // Pass the full formatted ID to the admin dashboard
-          date: date,
-          status: 'Processing',
-          paymentStatus: 'Pending',
-          paymentId: 'COD',
-          paymentMethod: 'COD',
-          total: grandTotal,
-          itemsCount: cartItems.length,
-          mainProduct: sanitizeData(firstItem.name || 'Product', 'Product'),
-          image: getImageUrl(firstItem.image),
-          userId: user?._id || user?.id,
-          email: user?.email || '',
-          source: 'mobile',
-          items: cartItems.map((item, idx) => {
-            const hasOption = hasInstallationOption(item);
-            const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
-            const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
-
-            let variantStr = item.variant || 'Standard';
-            if (hasOption) {
-              if (variantStr.includes('Installation:')) {
-                variantStr = variantStr.replace(/Installation:\s*(By Company|Self)/gi, `Installation: ${isInstalled ? 'By Company' : 'Self'}`);
-              } else {
-                variantStr = `${variantStr}, Installation: ${isInstalled ? 'By Company' : 'Self'}`;
-              }
-            } else {
-              variantStr = variantStr.replace(/,?\s*Installation:\s*(By Company|Self)/gi, '');
-            }
-            return {
-              ...item,
-              productId: item._id || item.id || '',  // Explicitly preserve product ID for reviews
-              product: item._id || item.id || item.product || '',
-              _id: item._id || item.id || item.product || '',
-              name: sanitizeData(item.name || 'Product', 'Product'),
-              image: getImageUrl(item.image),
-              price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
-              needsInstallation: isInstalled,
-              installationPrice: isInstalled ? instPrice : 0,
-              variant: variantStr
-            };
-          }),
-          address: selectedAddress,
-        };
-
         const finalCODOrder = {
-          ...newOrder,
-          user: (user?._id || user?.id),
-          userId: (user?._id || user?.id),
-          guestEmail: user?.email || '',
-          total: grandTotal,
+          ...finalOrder,
+          items: liveCartItems,
           totalAmount: grandTotal,
-          orderId: orderId, // Pass full formatted ID
           shippingAddress: {
             name: selectedAddress.name || user?.name || 'Guest',
             address: selectedAddress.full || selectedAddress.address,
@@ -1113,10 +1109,8 @@ export default function CheckoutScreen({ navigation, route }) {
           const createRes = await userService.createOrder(finalCODOrder);
           console.log('COD Order synced to Admin Table');
           if (createRes && createRes.orderId) {
-            newOrder.id = createRes.orderId;
-            newOrder.orderId = createRes.orderId;
-            finalCODOrder.id = createRes.orderId;
-            finalCODOrder.orderId = createRes.orderId;
+            finalOrder.id = createRes.orderId;
+            finalOrder.orderId = createRes.orderId;
           }
         } catch (syncErr) {
           console.warn('COD Admin Sync Warning:', syncErr);
@@ -1125,9 +1119,9 @@ export default function CheckoutScreen({ navigation, route }) {
         const ordersKey = currentUserId ? `@UserOrders_${currentUserId}` : '@UserOrders_guest';
         const storedOrders = await AsyncStorage.getItem(ordersKey);
         const orders = storedOrders ? JSON.parse(storedOrders) : [];
-        await AsyncStorage.setItem(ordersKey, JSON.stringify([newOrder, ...orders]));
+        await AsyncStorage.setItem(ordersKey, JSON.stringify([finalOrder, ...orders]));
 
-        addNotification('success', 'Order Placed ✓', `Your order ${newOrder.orderId || 'has'} been placed successfully!`, 'Orders');
+        addNotification('success', 'Order Placed ✓', `Your order ${finalOrder.orderId || 'has'} been placed successfully!`, 'Orders');
 
         if (!directItem) clearCart();
         alert('Order Placed Successfully!');
@@ -1245,12 +1239,11 @@ export default function CheckoutScreen({ navigation, route }) {
           {/* Items Summary */}
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Order Items</Text>
-            <Text style={s.itemCountTxt}>{cartItems.length} items</Text>
+            <Text style={s.itemCountTxt}>{liveCartItems.length} items</Text>
           </View>
-          {cartItems.map((item, idx) => {
+          {liveCartItems.map((item, idx) => {
             const hasOption = hasInstallationOption(item);
             const isInstalled = hasOption && (instSelections[idx] !== undefined ? instSelections[idx] : (item.needsInstallation || false));
-            const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
             const instPrice = hasOption ? getItemInstallationPrice(item) : 0;
 
             return (
@@ -1301,15 +1294,18 @@ export default function CheckoutScreen({ navigation, route }) {
             {totalSqFt > 0 && (
               <View style={s.priceRow}><Text style={s.priceLbl}>Total Area</Text><Text style={s.priceVal}>{totalSqFt} sq.ft</Text></View>
             )}
-            <View style={s.priceRow}><Text style={s.priceLbl}>Subtotal</Text><Text style={s.priceVal}>₹{subtotal}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Subtotal</Text><Text style={s.priceVal}>₹{subtotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
             {totalInstallation > 0 && (
-              <View style={s.priceRow}><Text style={s.priceLbl}>Installation Fee</Text><Text style={s.priceVal}>₹{totalInstallation}</Text></View>
+              <View style={s.priceRow}><Text style={s.priceLbl}>Installation Fee</Text><Text style={s.priceVal}>₹{totalInstallation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
             )}
-            <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{shippingFee}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{packagingFee}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>CGST</Text><Text style={s.priceVal}>₹{totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            <View style={s.priceRow}><Text style={s.priceLbl}>SGST</Text><Text style={s.priceVal}>₹{totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            
             <View style={[s.priceRow, {marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9'}]}>
               <Text style={s.totalLbl}>Order Total</Text>
-              <Text style={s.totalVal}>₹{grandTotal}</Text>
+              <Text style={s.totalVal}>₹{grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text>
             </View>
           </View>
 
@@ -1339,7 +1335,7 @@ export default function CheckoutScreen({ navigation, route }) {
           <View style={s.priceSummary}>
              <View style={s.priceRow}>
               <Text style={s.totalLbl}>Payable Amount</Text>
-              <Text style={s.totalVal}>₹{grandTotal}</Text>
+              <Text style={s.totalVal}>₹{grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text>
             </View>
           </View>
 

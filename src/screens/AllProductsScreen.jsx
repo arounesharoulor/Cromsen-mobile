@@ -35,10 +35,16 @@ export default function AllProductsScreen({ navigation, route }) {
   );
 
   const getRolePrice = React.useCallback((p) => {
-    if (userRole === 'dealer') {
-      return typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0;
+    let pPrice = userRole === 'dealer' ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0) : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+    
+    const variantItems = p.variantItems || p.variantPrices || [];
+    if (variantItems.length > 0) {
+      const firstVar = variantItems[0];
+      const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+      pPrice = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+      if (pPrice <= 0) pPrice = parseNum(firstVar.price);
     }
-    return typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0;
+    return pPrice;
   }, [userRole]);
 
   const applyFilter = React.useCallback(() => {

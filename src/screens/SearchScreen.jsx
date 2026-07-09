@@ -307,9 +307,18 @@ export default function SearchScreen({ navigation }) {
                 product={item}
                 onPress={() => navigation.navigate('ProductDetail', { productId: item._id || item.id })}
                 onAddToCart={() => {
-                  const finalPrice = userRole === 'dealer'
+                  const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+                  let finalPrice = userRole === 'dealer'
                     ? (typeof item.dealerPrice === 'number' ? item.dealerPrice : item.price || 0)
                     : (typeof item.retailPrice === 'number' ? item.retailPrice : item.price || 0);
+                    
+                  const variantItems = item.variantItems || item.variantPrices || [];
+                  if (variantItems.length > 0) {
+                    const firstVar = variantItems[0];
+                    finalPrice = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+                    if (finalPrice <= 0) finalPrice = parseNum(firstVar.price);
+                  }
+                  
                   addToCart({
                     id: item._id || item.id,
                     name: item.name,

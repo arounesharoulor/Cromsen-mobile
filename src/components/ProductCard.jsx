@@ -16,10 +16,39 @@ export default function ProductCard({ product, onPress, onAddToCart, style }) {
 
   const name = sanitizeData(product?.name, 'Product');
   
-  const userRole = user?.role?.toLowerCase();
-  const price = userRole === 'dealer'
-    ? (typeof product?.dealerPrice === 'number' ? product.dealerPrice : (parseFloat(product?.dealerPrice) || typeof product?.price === 'number' ? product.price : parseFloat(product?.price) || 0))
-    : (typeof product?.retailPrice === 'number' ? product.retailPrice : (typeof product?.price === 'number' ? product.price : parseFloat(product?.price) || 0));
+  const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
+  const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+
+  // Helper to determine the price to show on the card
+  const getCardPrice = () => {
+    let p = 0;
+    
+    const variantItems = product?.variantItems || product?.variantPrices || [];
+    if (variantItems.length > 0) {
+       const firstVar = variantItems[0];
+       p = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+       if (p <= 0) p = parseNum(firstVar.price);
+       if (p > 0) return p;
+    }
+    
+    // Check old style variants array
+    const variants = product?.variants || product?.variations || product?.varients || product?.variant || [];
+    if (variants.length > 0) {
+      const firstVar = variants[0];
+      if (typeof firstVar === 'object' && firstVar.value) {
+        p = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+        if (p <= 0) p = parseNum(firstVar.price);
+        if (p > 0) return p;
+      }
+    }
+    
+    // Fallback to standard base price if no variants
+    p = userRole === 'dealer' ? parseNum(product?.dealerPrice) : parseNum(product?.retailPrice);
+    if (p <= 0) p = parseNum(product?.price);
+    return p;
+  };
+  
+  const price = getCardPrice();
   
   const categoryObj = product?.category?.[0] || product?.categoryName || 'Item';
   const category = sanitizeData(categoryObj, 'Item');

@@ -61,6 +61,9 @@ export default function LoginScreen({ navigation }) {
       // Direct login via backend
       const response = await authService.login(cleanEmail, password);
       const userData = response.user || response.data || response;
+      
+      // Inject selectedRole to support frontend toggling of pricing
+      userData.role = selectedRole;
 
       // Store auth context (merged with any additional data if needed)
       await authLogin(userData, password);

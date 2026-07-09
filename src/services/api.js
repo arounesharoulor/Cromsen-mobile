@@ -145,7 +145,8 @@ export const productService = {
 
   getProducts: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    const response = await fetch(`${BASE_URL}/products?${query}`);
+    const headers = await authHeaders();
+    const response = await fetch(`${BASE_URL}/products?${query}`, { headers });
     const data = await handleResponse(response);
     // Normalize list shapes
     if (Array.isArray(data)) return data.map(productService._normalizeProduct);
@@ -155,7 +156,8 @@ export const productService = {
   },
   getProductById: async (id) => {
     // Add timestamp to bypass potential caching issues
-    const response = await fetch(`${BASE_URL}/products/${id}?t=${Date.now()}`);
+    const headers = await authHeaders();
+    const response = await fetch(`${BASE_URL}/products/${id}?t=${Date.now()}`, { headers });
     const data = await handleResponse(response);
     // If wrapped response with data/product
     const prod = data.data || data.product || data;
@@ -163,10 +165,11 @@ export const productService = {
   },
   searchProducts: async (query) => {
     let rawList = [];
+    const headers = await authHeaders();
     
     // Attempt 1: search endpoint
     try {
-      const response = await fetch(`${BASE_URL}/products/search?q=${encodeURIComponent(query)}&keyword=${encodeURIComponent(query)}`);
+      const response = await fetch(`${BASE_URL}/products/search?q=${encodeURIComponent(query)}&keyword=${encodeURIComponent(query)}`, { headers });
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
@@ -197,7 +200,7 @@ export const productService = {
     // Attempt 3: Fetch all products and filter locally
     if (!Array.isArray(rawList) || rawList.length === 0) {
       try {
-        const response = await fetch(`${BASE_URL}/products?limit=1000`);
+        const response = await fetch(`${BASE_URL}/products?limit=1000`, { headers });
         if (response.ok) {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {

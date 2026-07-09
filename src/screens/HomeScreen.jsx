@@ -261,7 +261,7 @@ export default function HomeScreen({ navigation, route }) {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={(e) => {
                 const index = Math.round(e.nativeEvent.contentOffset.x / (width - 40));
-                setActiveBanner(index);
+                setActiveBanner(prev => prev !== index ? index : prev);
               }}
             >
               {BANNER_DATA.map((item, index) => (
@@ -325,9 +325,17 @@ export default function HomeScreen({ navigation, route }) {
                     style={{ marginRight: 14 }}
                     onPress={() => navigation.navigate('ProductDetail', { productId: p._id || p.id })}
                     onAddToCart={() => {
-                      const finalPrice = user?.role?.toLowerCase() === 'dealer'
-                        ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
-                        : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+                      const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
+                      const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+                      let finalPrice = userRole === 'dealer' ? parseNum(p.dealerPrice) : parseNum(p.retailPrice);
+                      if (finalPrice <= 0) finalPrice = parseNum(p.price);
+
+                      const variantItems = p.variantItems || p.variantPrices || [];
+                      if (variantItems.length > 0) {
+                        const firstVar = variantItems[0];
+                        finalPrice = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+                        if (finalPrice <= 0) finalPrice = parseNum(firstVar.price);
+                      }
                       addToCart({
                         id: p._id || p.id,
                         name: p.name,
@@ -414,9 +422,17 @@ export default function HomeScreen({ navigation, route }) {
                 contentContainerStyle={styles.bsScroll}
               >
                 {trendingProducts.map((p, index) => {
-                  const pPrice = user?.role?.toLowerCase() === 'dealer'
-                    ? (typeof p.dealerPrice === 'number' ? p.dealerPrice : p.price || 0)
-                    : (typeof p.retailPrice === 'number' ? p.retailPrice : p.price || 0);
+                  const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
+                  const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+                  let pPrice = userRole === 'dealer' ? parseNum(p.dealerPrice) : parseNum(p.retailPrice);
+                  if (pPrice <= 0) pPrice = parseNum(p.price);
+                  
+                  const variantItems = p.variantItems || p.variantPrices || [];
+                  if (variantItems.length > 0) {
+                    const firstVar = variantItems[0];
+                    pPrice = userRole === 'dealer' ? (parseNum(firstVar.wholesalePrice) || parseNum(firstVar.dealerPrice)) : (parseNum(firstVar.retailPrice) || parseNum(firstVar.price));
+                    if (pPrice <= 0) pPrice = parseNum(firstVar.price);
+                  }
                   return (
                     <TouchableOpacity
                       key={`tr-${p._id || p.id || index}`}

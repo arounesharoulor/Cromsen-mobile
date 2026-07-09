@@ -3,7 +3,7 @@
     "name": "Cromsen",
     "slug": "cromsen-mobile",
     "scheme": "cromsen-mobile",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "./assets/icons/CromsenAppicon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.cromsen.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {

@@ -183,18 +183,19 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
 
       // --- Price calculation based on fresh backend data ---
       // Determine user role
-      const role = user?.role?.toLowerCase();
-      // Base price selection
-      let base = mainProd.price || 0;
-      if (role === 'dealer' && typeof mainProd.dealerPrice === 'number') {
-        base = mainProd.dealerPrice;
-      } else if (role === 'retailer' && typeof mainProd.retailPrice === 'number') {
-        base = mainProd.retailPrice;
-      } else if (typeof mainProd.retailPrice === 'number') {
-        base = mainProd.retailPrice;
-      }
+      const role = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
       // Helper to safely parse numbers
       const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+      
+      // Base price selection
+      let base = parseNum(mainProd.price);
+      if (role === 'dealer' && parseNum(mainProd.dealerPrice) > 0) {
+        base = parseNum(mainProd.dealerPrice);
+      } else if (role === 'retailer' && parseNum(mainProd.retailPrice) > 0) {
+        base = parseNum(mainProd.retailPrice);
+      } else if (parseNum(mainProd.retailPrice) > 0) {
+        base = parseNum(mainProd.retailPrice);
+      }
 
       // Compute dynamic price (variant/length/size) similar to existing logic
       let calcPrice = base;
@@ -203,10 +204,16 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
       const sizes = mainProd.sizes || mainProd.size || [];
       const variants = mainProd.variants || mainProd.variations || mainProd.varients || mainProd.variant || [];
 
-      if (variants.length > 0) {
+      const variantItems = mainProd.variantItems || mainProd.variantPrices || [];
+      if (variantItems.length > 0) {
+        const firstVar = variantItems[0];
+        const p1 = parseNum(role === 'dealer' ? (firstVar.wholesalePrice || firstVar.dealerPrice) : (firstVar.retailPrice || firstVar.price));
+        calcPrice = p1 > 0 ? p1 : (parseNum(firstVar.price) || calcPrice);
+      } else if (variants.length > 0 && typeof variants[0] !== 'string' && variants[0].value) {
         const curVar = variants[selVariant];
         if (curVar && typeof curVar === 'object') {
-          calcPrice = parseNum(role === 'dealer' ? curVar.dealerPrice : curVar.retailPrice) || parseNum(curVar.price) || calcPrice;
+          const p2 = parseNum(role === 'dealer' ? (curVar.wholesalePrice || curVar.dealerPrice) : (curVar.retailPrice || curVar.price));
+          calcPrice = p2 > 0 ? p2 : (parseNum(curVar.price) || calcPrice);
         }
       } else if (lengths.length > 0) {
         const curLen = lengths[selLength];
@@ -343,10 +350,22 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
     ? rawImgs.map(getImageUrl) 
     : ['https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800'];
 
-  const userRole = user?.role?.toLowerCase();
+  const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
   
   // Base price derived from backend (already calculated in load())
-  const basePrice = product ? (product.price || 0) : 0; // fallback for safety
+  const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+  
+  let basePrice = 0;
+  if (product) {
+    basePrice = parseNum(product.price);
+    if (userRole === 'dealer' && parseNum(product.dealerPrice) > 0) {
+      basePrice = parseNum(product.dealerPrice);
+    } else if (userRole === 'retailer' && parseNum(product.retailPrice) > 0) {
+      basePrice = parseNum(product.retailPrice);
+    } else if (parseNum(product.retailPrice) > 0) {
+      basePrice = parseNum(product.retailPrice);
+    }
+  }
   // Use the pre‑computed displayPrice for rendering. If not yet set, fall back to basePrice.
   let price = displayPrice || basePrice;
   
@@ -377,45 +396,68 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
     return options[selectedIdx];
   }).filter(Boolean);
 
-  if (product?.variantPrices && product.variantPrices.length > 0) {
-    const matchedVariant = product.variantPrices.find(vp => {
+  const variantItems = product?.variantItems || product?.variantPrices || [];
+  if (variantItems.length > 0) {
+    const matchedVariant = variantItems.find(vp => {
       if (!vp.combination) return false;
+      // Backend combination string is usually like "Darkbrown / Printed / Single Door"
+      // or "Red / 2.18MM"
+      // Let's check if every selected option is somewhere in the combination string
       return selectedOptions.every(opt => vp.combination.includes(opt));
     });
 
-    if (matchedVariant) {
-      const vPrice = userRole === 'dealer' ? matchedVariant.dealerPrice : matchedVariant.retailPrice;
-      if (typeof vPrice === 'number' && vPrice > 0) {
+    if (matchedVariant || variantItems.length > 0) {
+      const targetVar = matchedVariant || variantItems[0];
+      const dPrice = parseNum(targetVar.wholesalePrice) || parseNum(targetVar.dealerPrice);
+      const rPrice = parseNum(targetVar.retailPrice) || parseNum(targetVar.price);
+      const mPrice = parseNum(targetVar.price);
+      
+      const vPrice = userRole === 'dealer' ? dPrice : rPrice;
+      if (vPrice > 0) {
         price = vPrice;
-      } else if (typeof matchedVariant.price === 'number' && matchedVariant.price > 0) {
-        price = matchedVariant.price;
+      } else if (mPrice > 0) {
+        price = mPrice;
       }
     }
-  } else if (variants.length > 0) {
-    const currentVariant = variants[selVariant];
+  } else if (variants.length > 0 && typeof variants[0] !== 'string' && variants[0].value) {
+    let currentVariant = variants[selVariant];
+    if (selectedOptions.length > 0) {
+      const matched = variants.find(v => v.value && selectedOptions.includes(v.value));
+      if (matched) currentVariant = matched;
+    }
+
     if (typeof currentVariant === 'object') {
-       price = (userRole === 'dealer' ? currentVariant.dealerPrice : currentVariant.retailPrice) || currentVariant.price || price;
+       const dPrice = parseNum(currentVariant.wholesalePrice) || parseNum(currentVariant.dealerPrice);
+       const rPrice = parseNum(currentVariant.retailPrice);
+       const mPrice = parseNum(currentVariant.price);
+       const vPrice = userRole === 'dealer' ? dPrice : rPrice;
+       price = vPrice > 0 ? vPrice : (mPrice > 0 ? mPrice : price);
     }
   } else if (lengths.length > 0) {
     const currentLength = lengths[selLength];
     if (typeof currentLength === 'object') {
-      price = (userRole === 'dealer' ? currentLength.dealerPrice : currentLength.retailPrice) || currentLength.price || price;
+       const dPrice = parseNum(currentLength.dealerPrice);
+       const rPrice = parseNum(currentLength.retailPrice);
+       const mPrice = parseNum(currentLength.price);
+       const vPrice = userRole === 'dealer' ? dPrice : rPrice;
+       price = vPrice > 0 ? vPrice : (mPrice > 0 ? mPrice : price);
     }
   } else if (sizes.length > 0) {
     const currentSizeObj = sizes[selSize];
     if (currentSizeObj && typeof currentSizeObj === 'object') {
-      const sizePrice = currentSizeObj.price || currentSizeObj.retailPrice || currentSizeObj.userPrice;
+      const sizePrice = parseNum(currentSizeObj.price) || parseNum(currentSizeObj.retailPrice) || parseNum(currentSizeObj.userPrice);
       if (userRole === 'dealer') {
-        if (currentSizeObj.dealerPrice) {
-          price = currentSizeObj.dealerPrice;
-        } else if (typeof product.dealerPrice === 'number' && typeof product.price === 'number' && product.price > 0) {
-          const ratio = product.dealerPrice / product.price;
-          price = (parseFloat(sizePrice) || parseFloat(basePrice) || 0) * ratio;
+        const dPrice = parseNum(currentSizeObj.dealerPrice);
+        if (dPrice > 0) {
+          price = dPrice;
+        } else if (parseNum(product.dealerPrice) > 0 && parseNum(product.price) > 0) {
+          const ratio = parseNum(product.dealerPrice) / parseNum(product.price);
+          price = (sizePrice || parseNum(basePrice)) * ratio;
         } else {
-          price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+          price = sizePrice || parseNum(basePrice);
         }
       } else {
-        price = parseFloat(sizePrice) || parseFloat(basePrice) || 0;
+        price = sizePrice || parseNum(basePrice);
       }
     }
   }
@@ -646,7 +688,7 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
           {/* Product name & rating */}
           <View style={s.nameRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.catName, { color: theme.textSecondary }]}>Cabinet Hinges Series</Text>
+              <Text style={[s.catName, { color: theme.textSecondary }]}>{product.category?.name || 'Category'}</Text>
               <Text style={[s.productName, { color: theme.text }]}>
                 {sanitizeData(product.name, 'Product')}
               </Text>
@@ -658,6 +700,38 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
               </View>
             </View>
           </View>
+
+          {/* Dynamic Fees Display */}
+          {(parseFloat(product.cgst || 0) > 0 || parseFloat(product.sgst || 0) > 0 || parseFloat(product.packagingFee || product.packagingPrice || 0) > 0 || parseFloat(product.shippingFee || product.shippingPrice || 0) > 0) && (
+            <View style={{ padding: 12, backgroundColor: theme.surface || (isDarkMode ? '#1E293B' : '#F8FAFC'), borderRadius: 12, borderWidth: 1, borderColor: theme.border || '#E2E8F0', marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginBottom: 8 }}>Additional Charges & Taxes</Text>
+              
+              {parseFloat(product.cgst || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>CGST ({product.cgst}%)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(product.cgst)) / 100).toFixed(2)}</Text>
+                </View>
+              )}
+              {parseFloat(product.sgst || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>SGST ({product.sgst}%)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(product.sgst)) / 100).toFixed(2)}</Text>
+                </View>
+              )}
+              {parseFloat(product.packagingFee || product.packagingPrice || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>Packaging Fee</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(product.packagingFee || product.packagingPrice).toFixed(2)}</Text>
+                </View>
+              )}
+              {parseFloat(product.shippingFee || product.shippingPrice || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>Shipping Fee</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(product.shippingFee || product.shippingPrice).toFixed(2)}</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Add to Cart + Buy Now */}
           <View style={s.ctaRow}>
@@ -727,6 +801,10 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                     sqFt: finalSqFt,
                     installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
                     baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
+                    cgst: parseFloat(product.cgst || 0),
+                    sgst: parseFloat(product.sgst || 0),
+                    shippingFee: parseFloat(product.shippingFee || product.shippingPrice || 0),
+                    packagingFee: parseFloat(product.packagingFee || product.packagingPrice || 0),
                   }, parseInt(qtyInput) || 1);
                 }}
               >
@@ -772,7 +850,11 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                 image: imgs[activeImg],
                 quantity: parseInt(qtyInput) || 1,
                 // installation handled in Checkout screen
-                sqFt: finalSqFt
+                sqFt: finalSqFt,
+                cgst: parseFloat(product.cgst || 0),
+                sgst: parseFloat(product.sgst || 0),
+                shippingFee: parseFloat(product.shippingFee || product.shippingPrice || 0),
+                packagingFee: parseFloat(product.packagingFee || product.packagingPrice || 0)
               };
               navigation.navigate('Checkout', { directItem });
             }}>

@@ -21,8 +21,20 @@ export default function CartScreen({ navigation }) {
     ? items.reduce((s, i) => s + (Number(i?.installationPrice) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
   const discount = 0;
-  const packaging = 7;
-  const total = subtotal - discount + packaging + totalInstallation;
+  const totalPackaging = Array.isArray(items)
+    ? items.reduce((s, i) => s + (Number(i?.packagingFee) || 0) * (Number(i?.quantity) || 0), 0)
+    : 0;
+  const totalShipping = Array.isArray(items)
+    ? items.reduce((s, i) => s + (Number(i?.shippingFee) || 0) * (Number(i?.quantity) || 0), 0)
+    : 0;
+  const totalCgst = Array.isArray(items)
+    ? items.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.cgst) || 0) / 100), 0)
+    : 0;
+  const totalSgst = Array.isArray(items)
+    ? items.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.sgst) || 0) / 100), 0)
+    : 0;
+
+  const total = subtotal - discount + totalPackaging + totalShipping + totalCgst + totalSgst + totalInstallation;
 
   if (items.length === 0) {
     return (
@@ -81,11 +93,14 @@ export default function CartScreen({ navigation }) {
         <View style={styles.billCard}>
           <BillRow label={`Price (${items.length} item${items.length > 1 ? 's' : ''})`} value={`₹${subtotal.toLocaleString()}`} />
           {totalInstallation > 0 && (
-            <BillRow label="Installation Fee" value={`₹${totalInstallation.toLocaleString()}`} />
+            <BillRow label="Installation Fee" value={`₹${totalInstallation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
           )}
-          <BillRow label="Secured Packaging Fee" value={`₹${packaging}`} />
+          <BillRow label="Secured Packaging Fee" value={`₹${totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          <BillRow label="Shipping Fee" value={`₹${totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          <BillRow label="CGST" value={`₹${totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          <BillRow label="SGST" value={`₹${totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
           <View style={styles.totalDivider} />
-          <BillRow label="Total Amount" value={`₹${total.toLocaleString()}`} bold />
+          <BillRow label="Total Amount" value={`₹${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} bold />
         </View>
       </ScrollView>
 
