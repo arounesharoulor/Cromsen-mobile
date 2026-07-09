@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar,
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShoppingBag, ArrowRight, ArrowLeft } from 'lucide-react-native';
@@ -9,29 +9,111 @@ import { CartItem, AppButton, EmptyState } from '../components';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { BackIcon } from '../components/CustomIcons';
+import { useFocusEffect } from '@react-navigation/native';
+import { productService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function CartScreen({ navigation }) {
-  const { cartItems: items, removeFromCart: remove, updateQuantity: updateQty } = useCart();
+  const { cartItems: items, removeFromCart: remove, updateQuantity: updateQty, setCartItems } = useCart();
   const { isDarkMode, theme } = useTheme();
+  const { user } = useAuth();
+  
+  const [liveItems, setLiveItems] = useState(items);
+  const [refreshingPrices, setRefreshingPrices] = useState(false);
 
-  const subtotal = Array.isArray(items) 
-    ? items.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0), 0)
+  // Derive a string from items to safely trigger updates
+  const itemsStr = JSON.stringify(items);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const refreshLivePrices = async () => {
+        if (!items || items.length === 0) {
+          if (isActive) setLiveItems([]);
+          return;
+        }
+        
+        try {
+          if (isActive) setRefreshingPrices(true);
+          const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+          const userRole = (user?.role || user?.userType || user?.type || 'retailer').toLowerCase();
+
+          const updatedItems = await Promise.all(items.map(async (item) => {
+            let freshProd = null;
+            if (typeof productService !== 'undefined') {
+              freshProd = await productService.getProductById(item.id || item._id).catch(() => null);
+            }
+            if (!freshProd) return item; // Fallback to cached item if network fails
+
+            let freshPrice = userRole === 'dealer' ? parseNum(freshProd.dealerPrice) : parseNum(freshProd.retailPrice);
+            if (freshPrice <= 0) freshPrice = parseNum(freshProd.price);
+
+            const variantItems = freshProd.variantItems || freshProd.variantPrices || [];
+            let targetVar = null;
+            if (variantItems.length > 0) {
+              if (item.variant) {
+                const selectedOptions = item.variant.split(', ').map(s => s.split(': ')[1]).filter(Boolean);
+                targetVar = variantItems.find(vp => {
+                   if (!vp.combination) return false;
+                   return selectedOptions.every(opt => vp.combination.includes(opt));
+                });
+              }
+              if (!targetVar) targetVar = variantItems[0];
+            }
+
+            const feeCgst = targetVar && parseFloat(targetVar.cgst) > 0 ? targetVar.cgst : freshProd.cgst;
+            const feeSgst = targetVar && parseFloat(targetVar.sgst) > 0 ? targetVar.sgst : freshProd.sgst;
+            const feePkg = targetVar && parseFloat(targetVar.packagingFee || targetVar.packagingPrice) > 0 ? (targetVar.packagingFee || targetVar.packagingPrice) : (freshProd.packagingFee || freshProd.packagingPrice);
+            const feeShip = targetVar && parseFloat(targetVar.shippingFee || targetVar.shippingPrice) > 0 ? (targetVar.shippingFee || targetVar.shippingPrice) : (freshProd.shippingFee || freshProd.shippingPrice);
+            const feeInst = targetVar && parseFloat(targetVar.installationFee || targetVar.installationPrice) > 0 ? (targetVar.installationFee || targetVar.installationPrice) : (freshProd.installationFee || freshProd.installationPrice);
+
+            return {
+              ...item,
+              price: freshPrice > 0 ? freshPrice : item.price,
+              cgst: parseNum(feeCgst),
+              sgst: parseNum(feeSgst),
+              packagingFee: parseNum(feePkg),
+              shippingFee: parseNum(feeShip),
+              installationFee: parseNum(feeInst),
+            };
+          }));
+
+          if (isActive) {
+            // Check if prices actually changed to avoid unnecessary re-renders
+            if (JSON.stringify(updatedItems) !== JSON.stringify(liveItems)) {
+              setLiveItems(updatedItems);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to refresh cart prices', e);
+        } finally {
+          if (isActive) setRefreshingPrices(false);
+        }
+      };
+
+      refreshLivePrices();
+      return () => { isActive = false; };
+    }, [itemsStr, user])
+  );
+
+  const subtotal = Array.isArray(liveItems) 
+    ? liveItems.reduce((s, i) => s + (Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0), 0)
     : 0;
-  const totalInstallation = Array.isArray(items)
-    ? items.reduce((s, i) => s + (Number(i?.installationPrice) || 0) * (Number(i?.quantity) || 0), 0)
+  const totalInstallation = Array.isArray(liveItems)
+    ? liveItems.reduce((s, i) => s + (Number(i?.installationPrice) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
   const discount = 0;
-  const totalPackaging = Array.isArray(items)
-    ? items.reduce((s, i) => s + (Number(i?.packagingFee) || 0) * (Number(i?.quantity) || 0), 0)
+  const totalPackaging = Array.isArray(liveItems)
+    ? liveItems.reduce((s, i) => s + (Number(i?.packagingFee) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
-  const totalShipping = Array.isArray(items)
-    ? items.reduce((s, i) => s + (Number(i?.shippingFee) || 0) * (Number(i?.quantity) || 0), 0)
+  const totalShipping = Array.isArray(liveItems)
+    ? liveItems.reduce((s, i) => s + (Number(i?.shippingFee) || 0) * (Number(i?.quantity) || 0), 0)
     : 0;
-  const totalCgst = Array.isArray(items)
-    ? items.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.cgst) || 0) / 100), 0)
+  const totalCgst = Array.isArray(liveItems)
+    ? liveItems.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.cgst) || 0) / 100), 0)
     : 0;
-  const totalSgst = Array.isArray(items)
-    ? items.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.sgst) || 0) / 100), 0)
+  const totalSgst = Array.isArray(liveItems)
+    ? liveItems.reduce((s, i) => s + ((Number(i?.price) || 0) * (Number(i?.sqFt) || 1) * (Number(i?.quantity) || 0)) * ((Number(i?.sgst) || 0) / 100), 0)
     : 0;
 
   const total = subtotal - discount + totalPackaging + totalShipping + totalCgst + totalSgst + totalInstallation;
@@ -75,11 +157,14 @@ export default function CartScreen({ navigation }) {
         {/* Order summary label */}
         <View style={styles.summaryHeader}>
           <Text style={[styles.summaryLabel, { color: theme.text }]}>Order Summary</Text>
-          <Text style={[styles.itemCount, { color: theme.primary }]}>{items.length} ITEMS</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {refreshingPrices && <ActivityIndicator size="small" color={theme.primary} style={{ marginRight: 8 }} />}
+            <Text style={[styles.itemCount, { color: theme.primary }]}>{liveItems.length} ITEMS</Text>
+          </View>
         </View>
 
         {/* Cart Items */}
-        {items.map(item => (
+        {liveItems.map(item => (
           <CartItem
             key={item.id}
             item={item}
@@ -91,7 +176,7 @@ export default function CartScreen({ navigation }) {
 
         {/* Bill Details */}
         <View style={styles.billCard}>
-          <BillRow label={`Price (${items.length} item${items.length > 1 ? 's' : ''})`} value={`₹${subtotal.toLocaleString()}`} />
+          <BillRow label={`Price (${liveItems.length} item${liveItems.length > 1 ? 's' : ''})`} value={`₹${subtotal.toLocaleString()}`} />
           {totalInstallation > 0 && (
             <BillRow label="Installation Fee" value={`₹${totalInstallation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
           )}

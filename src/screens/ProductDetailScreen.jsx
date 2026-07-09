@@ -65,8 +65,18 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   const { isDarkMode, theme } = useTheme();
 
   useEffect(() => {
-    if (productId) load();
+    if (productId) load(true);
   }, [productId]);
+
+  // Refresh product details silently every time the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (productId) {
+        load(false); // silent refresh
+      }
+    }, [productId])
+  );
+
 
   // Periodic refresh to keep UI in sync with backend changes
   // Poll every 30 seconds while this screen is focused
@@ -74,7 +84,7 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   useEffect(() => {
     if (!isFocused) return;
     const interval = setInterval(() => {
-      if (productId) load();
+      if (productId) load(false);
     }, 30000); // 30s
     return () => clearInterval(interval);
   }, [isFocused, productId]);
@@ -174,9 +184,9 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   };
 
 
-  const load = async () => {
+  const load = async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const d = await productService.getProductById(productId);
       const mainProd = d.data || d;
       setProduct(mainProd);
@@ -397,6 +407,7 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   }).filter(Boolean);
 
   const variantItems = product?.variantItems || product?.variantPrices || [];
+  let activeTargetVar = null;
   if (variantItems.length > 0) {
     const matchedVariant = variantItems.find(vp => {
       if (!vp.combination) return false;
@@ -407,10 +418,11 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
     });
 
     if (matchedVariant || variantItems.length > 0) {
-      const targetVar = matchedVariant || variantItems[0];
-      const dPrice = parseNum(targetVar.wholesalePrice) || parseNum(targetVar.dealerPrice);
-      const rPrice = parseNum(targetVar.retailPrice) || parseNum(targetVar.price);
-      const mPrice = parseNum(targetVar.price);
+      activeTargetVar = matchedVariant || variantItems[0];
+      const dPrice = parseNum(activeTargetVar.wholesalePrice) || parseNum(activeTargetVar.dealerPrice);
+
+      const rPrice = parseNum(activeTargetVar.retailPrice) || parseNum(activeTargetVar.price);
+      const mPrice = parseNum(activeTargetVar.price);
       
       const vPrice = userRole === 'dealer' ? dPrice : rPrice;
       if (vPrice > 0) {
@@ -471,6 +483,12 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   }
 
   // Add Installation Fee if required
+  const activeFeeCgst = activeTargetVar && parseFloat(activeTargetVar.cgst) > 0 ? activeTargetVar.cgst : product?.cgst;
+  const activeFeeSgst = activeTargetVar && parseFloat(activeTargetVar.sgst) > 0 ? activeTargetVar.sgst : product?.sgst;
+  const activeFeePkg = activeTargetVar && parseFloat(activeTargetVar.packagingFee || activeTargetVar.packagingPrice) > 0 ? (activeTargetVar.packagingFee || activeTargetVar.packagingPrice) : (product?.packagingFee || product?.packagingPrice);
+  const activeFeeShip = activeTargetVar && parseFloat(activeTargetVar.shippingFee || activeTargetVar.shippingPrice) > 0 ? (activeTargetVar.shippingFee || activeTargetVar.shippingPrice) : (product?.shippingFee || product?.shippingPrice);
+  const activeFeeInst = activeTargetVar && parseFloat(activeTargetVar.installationFee || activeTargetVar.installationPrice) > 0 ? (activeTargetVar.installationFee || activeTargetVar.installationPrice) : (product?.installationFee || product?.installationPrice);
+  const activeInstRate = activeTargetVar && parseFloat(activeTargetVar.installationRatePerSqFt || activeTargetVar.installationRate) > 0 ? (activeTargetVar.installationRatePerSqFt || activeTargetVar.installationRate) : (product?.installationRatePerSqFt || product?.installationRate || 0);
 
 
   const rating = product.ratings || 4.7;
@@ -702,36 +720,49 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
           </View>
 
           {/* Dynamic Fees Display */}
-          {(parseFloat(product.cgst || 0) > 0 || parseFloat(product.sgst || 0) > 0 || parseFloat(product.packagingFee || product.packagingPrice || 0) > 0 || parseFloat(product.shippingFee || product.shippingPrice || 0) > 0) && (
+          {(parseFloat(activeFeeCgst || 0) > 0 || parseFloat(activeFeeSgst || 0) > 0 || parseFloat(activeFeePkg || 0) > 0 || parseFloat(activeFeeShip || 0) > 0 || parseFloat(activeFeeInst || 0) > 0 || parseFloat(activeInstRate || 0) > 0) && (
             <View style={{ padding: 12, backgroundColor: theme.surface || (isDarkMode ? '#1E293B' : '#F8FAFC'), borderRadius: 12, borderWidth: 1, borderColor: theme.border || '#E2E8F0', marginBottom: 16 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginBottom: 8 }}>Additional Charges & Taxes</Text>
               
-              {parseFloat(product.cgst || 0) > 0 && (
+              {parseFloat(activeFeeCgst || 0) > 0 && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>CGST ({product.cgst}%)</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(product.cgst)) / 100).toFixed(2)}</Text>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>CGST ({activeFeeCgst}%)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(activeFeeCgst)) / 100).toFixed(2)}</Text>
                 </View>
               )}
-              {parseFloat(product.sgst || 0) > 0 && (
+              {parseFloat(activeFeeSgst || 0) > 0 && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>SGST ({product.sgst}%)</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(product.sgst)) / 100).toFixed(2)}</Text>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>SGST ({activeFeeSgst}%)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{((price * parseFloat(activeFeeSgst)) / 100).toFixed(2)}</Text>
                 </View>
               )}
-              {parseFloat(product.packagingFee || product.packagingPrice || 0) > 0 && (
+              {parseFloat(activeFeePkg || 0) > 0 && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                   <Text style={{ fontSize: 13, color: theme.textSecondary }}>Packaging Fee</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(product.packagingFee || product.packagingPrice).toFixed(2)}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(activeFeePkg).toFixed(2)}</Text>
                 </View>
               )}
-              {parseFloat(product.shippingFee || product.shippingPrice || 0) > 0 && (
+              {parseFloat(activeFeeShip || 0) > 0 && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
                   <Text style={{ fontSize: 13, color: theme.textSecondary }}>Shipping Fee</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(product.shippingFee || product.shippingPrice).toFixed(2)}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(activeFeeShip).toFixed(2)}</Text>
+                </View>
+              )}
+              {parseFloat(activeFeeInst || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, marginBottom: 2 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>Base Installation Fee</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(activeFeeInst).toFixed(2)}</Text>
+                </View>
+              )}
+              {parseFloat(activeInstRate || 0) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, marginBottom: 2 }}>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>Installation (Per Sq.Ft)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>₹{parseFloat(activeInstRate).toFixed(2)}</Text>
                 </View>
               )}
             </View>
           )}
+
 
           {/* Add to Cart + Buy Now */}
           <View style={s.ctaRow}>
@@ -799,13 +830,14 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                     variant: variantStr,
                     image: imgs[activeImg],
                     sqFt: finalSqFt,
-                    installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
-                    baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
-                    cgst: parseFloat(product.cgst || 0),
-                    sgst: parseFloat(product.sgst || 0),
-                    shippingFee: parseFloat(product.shippingFee || product.shippingPrice || 0),
-                    packagingFee: parseFloat(product.packagingFee || product.packagingPrice || 0),
+                    installationRatePerSqFt: parseFloat(activeInstRate || 0),
+                    baseInstallationPrice: parseFloat(activeFeeInst || 0),
+                    cgst: parseFloat(activeFeeCgst || 0),
+                    sgst: parseFloat(activeFeeSgst || 0),
+                    shippingFee: parseFloat(activeFeeShip || 0),
+                    packagingFee: parseFloat(activeFeePkg || 0),
                   }, parseInt(qtyInput) || 1);
+
                 }}
               >
                 <CartIcon size={20} color={THEME_COLORS.primary} />
@@ -843,19 +875,20 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                 _id: product._id || product.id,
                 name: product.name,
                 price: typeof price === 'number' ? price : (parseFloat(price) || 0),
-                installationRatePerSqFt: parseFloat(product.installationRatePerSqFt || product.installationRatePerSqft || product.installationPricePerSqft || product.installationPerSqFt || product.installationRate || 0) || 0,
-                baseInstallationPrice: parseFloat(product.installationPrice || product.installationFee || product.installationCost || 0) || 0,
+                installationRatePerSqFt: parseFloat(activeInstRate || 0),
+                baseInstallationPrice: parseFloat(activeFeeInst || 0),
                 priceSource: 'productDetail',
                 variant: variantStr,
                 image: imgs[activeImg],
                 quantity: parseInt(qtyInput) || 1,
                 // installation handled in Checkout screen
                 sqFt: finalSqFt,
-                cgst: parseFloat(product.cgst || 0),
-                sgst: parseFloat(product.sgst || 0),
-                shippingFee: parseFloat(product.shippingFee || product.shippingPrice || 0),
-                packagingFee: parseFloat(product.packagingFee || product.packagingPrice || 0)
+                cgst: parseFloat(activeFeeCgst || 0),
+                sgst: parseFloat(activeFeeSgst || 0),
+                shippingFee: parseFloat(activeFeeShip || 0),
+                packagingFee: parseFloat(activeFeePkg || 0)
               };
+
               navigation.navigate('Checkout', { directItem });
             }}>
               <Text style={s.buyNowTxt}>Buy Now</Text>

@@ -14,7 +14,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Modal as RNModal, FlatList, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../context/CartContext';
-import { getImageUrl, sanitizeData, userService, authHeaders } from '../services/api';
+import { getImageUrl, sanitizeData, userService, authHeaders, productService } from '../services/api';
 import Razorpay from '@codearcade/expo-razorpay';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -507,21 +507,36 @@ export default function CheckoutScreen({ navigation, route }) {
             if (freshPrice <= 0) freshPrice = parseNum(freshProd.price);
 
             const variantItems = freshProd.variantItems || freshProd.variantPrices || [];
+            let targetVar = null;
             if (variantItems.length > 0) {
-              const firstVar = variantItems[0];
-              // Note: ideal logic would match the exact combination, but we use the first or fallback for now 
-              // as this is a cart refresh. We don't overwrite price if we don't have the exact combination, 
-              // but we DEFINITELY overwrite fees.
+              if (item.variant) {
+                // Split selected variant options from string like "Color: Red, Size: L"
+                const selectedOptions = item.variant.split(', ').map(s => s.split(': ')[1]).filter(Boolean);
+                targetVar = variantItems.find(vp => {
+                   if (!vp.combination) return false;
+                   return selectedOptions.every(opt => vp.combination.includes(opt));
+                });
+              }
+              if (!targetVar) targetVar = variantItems[0];
             }
+
+            // Extract fees safely, preferring the matched variant's fees if they exist and are > 0, otherwise fallback to main product
+            const feeCgst = targetVar && parseFloat(targetVar.cgst) > 0 ? targetVar.cgst : freshProd.cgst;
+            const feeSgst = targetVar && parseFloat(targetVar.sgst) > 0 ? targetVar.sgst : freshProd.sgst;
+            const feePkg = targetVar && parseFloat(targetVar.packagingFee || targetVar.packagingPrice) > 0 ? (targetVar.packagingFee || targetVar.packagingPrice) : (freshProd.packagingFee || freshProd.packagingPrice);
+            const feeShip = targetVar && parseFloat(targetVar.shippingFee || targetVar.shippingPrice) > 0 ? (targetVar.shippingFee || targetVar.shippingPrice) : (freshProd.shippingFee || freshProd.shippingPrice);
+            const feeInst = targetVar && parseFloat(targetVar.installationFee || targetVar.installationPrice) > 0 ? (targetVar.installationFee || targetVar.installationPrice) : (freshProd.installationFee || freshProd.installationPrice);
+
+
             
             return {
               ...item,
-              // We safely update taxes and fees from the fresh product
-              cgst: parseNum(freshProd.cgst),
-              sgst: parseNum(freshProd.sgst),
-              packagingFee: parseNum(freshProd.packagingFee),
-              shippingFee: parseNum(freshProd.shippingFee),
-              installationFee: parseNum(freshProd.installationFee),
+              // We safely update taxes and fees from the fresh product or variant
+              cgst: parseNum(feeCgst),
+              sgst: parseNum(feeSgst),
+              packagingFee: parseNum(feePkg),
+              shippingFee: parseNum(feeShip),
+              installationFee: parseNum(feeInst),
             };
           }));
           setLiveCartItems(updatedItems);
