@@ -483,12 +483,12 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   }
 
   // Add Installation Fee if required
-  const activeFeeCgst = activeTargetVar && parseFloat(activeTargetVar.cgst) > 0 ? activeTargetVar.cgst : product?.cgst;
-  const activeFeeSgst = activeTargetVar && parseFloat(activeTargetVar.sgst) > 0 ? activeTargetVar.sgst : product?.sgst;
-  const activeFeePkg = activeTargetVar && parseFloat(activeTargetVar.packagingFee || activeTargetVar.packagingPrice) > 0 ? (activeTargetVar.packagingFee || activeTargetVar.packagingPrice) : (product?.packagingFee || product?.packagingPrice);
-  const activeFeeShip = activeTargetVar && parseFloat(activeTargetVar.shippingFee || activeTargetVar.shippingPrice) > 0 ? (activeTargetVar.shippingFee || activeTargetVar.shippingPrice) : (product?.shippingFee || product?.shippingPrice);
-  const activeFeeInst = activeTargetVar && parseFloat(activeTargetVar.installationFee || activeTargetVar.installationPrice) > 0 ? (activeTargetVar.installationFee || activeTargetVar.installationPrice) : (product?.installationFee || product?.installationPrice);
-  const activeInstRate = activeTargetVar && parseFloat(activeTargetVar.installationRatePerSqFt || activeTargetVar.installationRate) > 0 ? (activeTargetVar.installationRatePerSqFt || activeTargetVar.installationRate) : (product?.installationRatePerSqFt || product?.installationRate || 0);
+  const activeFeeCgst = activeTargetVar && activeTargetVar.cgst !== undefined ? activeTargetVar.cgst : product?.cgst;
+  const activeFeeSgst = activeTargetVar && activeTargetVar.sgst !== undefined ? activeTargetVar.sgst : product?.sgst;
+  const activeFeePkg = activeTargetVar && (activeTargetVar.packagingFee !== undefined || activeTargetVar.packagingPrice !== undefined) ? (activeTargetVar.packagingFee !== undefined ? activeTargetVar.packagingFee : activeTargetVar.packagingPrice) : (product?.packagingFee !== undefined ? product?.packagingFee : product?.packagingPrice);
+  const activeFeeShip = activeTargetVar && (activeTargetVar.shippingFee !== undefined || activeTargetVar.shippingPrice !== undefined) ? (activeTargetVar.shippingFee !== undefined ? activeTargetVar.shippingFee : activeTargetVar.shippingPrice) : (product?.shippingFee !== undefined ? product?.shippingFee : product?.shippingPrice);
+  const activeFeeInst = activeTargetVar && (activeTargetVar.installationFee !== undefined || activeTargetVar.installationPrice !== undefined) ? (activeTargetVar.installationFee !== undefined ? activeTargetVar.installationFee : activeTargetVar.installationPrice) : (product?.installationFee !== undefined ? product?.installationFee : product?.installationPrice);
+  const activeInstRate = activeTargetVar && (activeTargetVar.installationRatePerSqFt !== undefined || activeTargetVar.installationRate !== undefined) ? (activeTargetVar.installationRatePerSqFt !== undefined ? activeTargetVar.installationRatePerSqFt : activeTargetVar.installationRate) : (product?.installationRatePerSqFt !== undefined ? product?.installationRatePerSqFt : (product?.installationRate || 0));
 
 
   const rating = product.ratings || 4.7;

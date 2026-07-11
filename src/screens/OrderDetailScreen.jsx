@@ -21,6 +21,13 @@ const ORDER_STATUS_STEPS = [
   { label: 'OUT FOR DELIVERY', icon: <ShoppingBag size={16} color="#64748B" />, active: false, completed: false },
 ];
 
+const REFUND_STATUS_STEPS = [
+  { label: 'CANCELLED', icon: <CheckCircle2 size={16} color="#64748B" /> },
+  { label: 'REFUND INITIATED', icon: <CheckCircle2 size={16} color="#64748B" /> },
+  { label: 'REFUND PROCESSED', icon: <CheckCircle2 size={16} color="#64748B" /> },
+  { label: 'REFUND COMPLETED', icon: <CheckCircle2 size={16} color="#64748B" /> },
+];
+
 const RETURN_REASONS = [
   "Manufacturing Defect",
   "Damage during Transit",
@@ -155,9 +162,13 @@ export default function OrderDetailScreen({ navigation, route }) {
 
       // 2. Update order status on backend
       try {
-        const orderId = currentOrder._id || currentOrder.id;
-        await userService.updateOrderStatus(orderId, newStatus);
-        console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+        const backendId = String(currentOrder._id || currentOrder.id);
+        if (/^[0-9a-fA-F]{24}$/.test(backendId)) {
+          await userService.updateOrderStatus(backendId, newStatus);
+          console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+        } else {
+          console.warn(`[${requestType}] Skipping status update: ${backendId} is not a valid ObjectId`);
+        }
       } catch (statusErr) {
         console.warn(`[${requestType}] Could not update order status on backend:`, statusErr.message);
       }
@@ -353,9 +364,10 @@ export default function OrderDetailScreen({ navigation, route }) {
   if (!currentOrder) return null;
 
   const subtotal = currentOrder.items?.reduce((acc, item) => {
-    const p = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
-    return acc + (p * (item.quantity || 1));
-  }, 0) || (currentOrder.total - 20);
+    const price = typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0);
+    const sqFtMult = typeof item.sqFt !== 'undefined' ? (parseFloat(item.sqFt) || 1) : 1;
+    return acc + (price * sqFtMult * (item.quantity || 1));
+  }, 0) || 0;
 
   
   // Calculate delivery date (3 days after order date)
@@ -383,10 +395,13 @@ export default function OrderDetailScreen({ navigation, route }) {
   const handleCancelOrder = async () => {
     try {
       setLoading(true);
-      const orderIdStr = String(currentOrder.id || currentOrder._id);
+      const backendId = String(currentOrder._id || currentOrder.id);
       
-      if (!orderIdStr.startsWith('#')) {
-        await userService.updateOrderStatus(orderIdStr, 'Cancelled');
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(backendId);
+      if (isObjectId) {
+        await userService.updateOrderStatus(backendId, 'Cancelled');
+      } else {
+        console.warn(`Skipping backend cancel: ID ${backendId} is not a valid ObjectId`);
       }
       
       const updatedOrder = { ...currentOrder, status: 'CANCELLED' };
@@ -429,7 +444,9 @@ export default function OrderDetailScreen({ navigation, route }) {
           <View style={styles.orderHeaderRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.orderIdLabel}>Order ID</Text>
-              <Text style={styles.orderIdValue} numberOfLines={1} ellipsizeMode="tail">{currentOrder.id}</Text>
+              <Text style={styles.orderIdValue} numberOfLines={1} ellipsizeMode="tail">
+                {String(currentOrder.id).replace(/^(?:CIM|CIW|CIDM)?-?#?(\d+)/i, 'CIM-$1')}
+              </Text>
             </View>
             <View style={[styles.statusBadge, { marginBottom: 0 }]}>
               <Text style={styles.statusBadgeText}>{currentOrder.status}</Text>
@@ -441,59 +458,87 @@ export default function OrderDetailScreen({ navigation, route }) {
             <View style={styles.timelineWrapper}>
               {/* Progress Line Background */}
               <View style={styles.timelineLineBackground}>
-                {ORDER_STATUS_STEPS.slice(0, -1).map((_, idx) => {
+                {(() => {
                   const s = String(currentOrder.status).toUpperCase();
-                  let lineCompleted = false;
-                  if (s.includes('DELIVERED')) lineCompleted = true;
-                  else if (s.includes('SHIPPED')) lineCompleted = idx < 2;
-                  else if (s.includes('PACKED')) lineCompleted = idx < 1;
-                  else lineCompleted = false;
+                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND');
+                  const stepsArray = isRefundFlow ? REFUND_STATUS_STEPS : ORDER_STATUS_STEPS;
+                  
+                  return stepsArray.slice(0, -1).map((_, idx) => {
+                    let lineCompleted = false;
+                    
+                    if (isRefundFlow) {
+                      if (s.includes('COMPLETED')) lineCompleted = true;
+                      else if (s.includes('PROCESSED')) lineCompleted = idx < 2;
+                      else if (s.includes('INITIATED')) lineCompleted = idx < 1;
+                    } else {
+                      if (s.includes('DELIVERED')) lineCompleted = true;
+                      else if (s.includes('SHIPPED')) lineCompleted = idx < 2;
+                      else if (s.includes('PACKED')) lineCompleted = idx < 1;
+                    }
 
-                  return (
-                    <View 
-                      key={`line-${idx}`} 
-                      style={[
-                        styles.timelineLine, 
-                        lineCompleted && styles.timelineLineCompleted
-                      ]} 
-                    />
-                  );
-                })}
+                    return (
+                      <View 
+                        key={`line-${idx}`} 
+                        style={[
+                          styles.timelineLine, 
+                          lineCompleted && styles.timelineLineCompleted
+                        ]} 
+                      />
+                    );
+                  });
+                })()}
               </View>
 
               {/* Steps Foreground */}
               <View style={styles.timelineStepsRow}>
-                {ORDER_STATUS_STEPS.map((step, idx) => {
+                {(() => {
                   const s = String(currentOrder.status).toUpperCase();
-                  let completed = false;
-                  let active = false;
+                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND');
+                  const stepsArray = isRefundFlow ? REFUND_STATUS_STEPS : ORDER_STATUS_STEPS;
                   
-                  if (s.includes('DELIVERED')) completed = true;
-                  else if (s.includes('SHIPPED')) completed = idx <= 2;
-                  else if (s.includes('PACKED')) completed = idx <= 1;
-                  else completed = idx === 0;
+                  return stepsArray.map((step, idx) => {
+                    let completed = false;
+                    let active = false;
+                    
+                    if (isRefundFlow) {
+                      if (s.includes('COMPLETED')) completed = true;
+                      else if (s.includes('PROCESSED')) completed = idx <= 2;
+                      else if (s.includes('INITIATED')) completed = idx <= 1;
+                      else completed = idx === 0;
 
-                  active = (s.includes('DELIVERED') && idx === 3) ||
-                           (s.includes('SHIPPED') && idx === 2) ||
-                           (s.includes('PACKED') && idx === 1) ||
-                           (!s.includes('DELIVERED') && !s.includes('SHIPPED') && !s.includes('PACKED') && idx === 0);
+                      active = (s.includes('COMPLETED') && idx === 3) ||
+                               (s.includes('PROCESSED') && idx === 2) ||
+                               (s.includes('INITIATED') && idx === 1) ||
+                               (!s.includes('COMPLETED') && !s.includes('PROCESSED') && !s.includes('INITIATED') && idx === 0);
+                    } else {
+                      if (s.includes('DELIVERED')) completed = true;
+                      else if (s.includes('SHIPPED')) completed = idx <= 2;
+                      else if (s.includes('PACKED')) completed = idx <= 1;
+                      else completed = idx === 0;
 
-                  return (
-                    <View key={step.label} style={styles.timelineStep}>
-                      <View style={[
-                        styles.iconCircle, 
-                        completed && styles.iconCircleCompleted,
-                        active && styles.iconCircleActive
-                      ]}>
-                        {completed ? <CheckCircle2 size={16} color="#FFF" /> : step.icon}
+                      active = (s.includes('DELIVERED') && idx === 3) ||
+                               (s.includes('SHIPPED') && idx === 2) ||
+                               (s.includes('PACKED') && idx === 1) ||
+                               (!s.includes('DELIVERED') && !s.includes('SHIPPED') && !s.includes('PACKED') && idx === 0);
+                    }
+
+                    return (
+                      <View key={step.label} style={styles.timelineStep}>
+                        <View style={[
+                          styles.iconCircle, 
+                          completed && styles.iconCircleCompleted,
+                          active && styles.iconCircleActive
+                        ]}>
+                          {completed ? <CheckCircle2 size={16} color="#FFF" /> : step.icon}
+                        </View>
+                        <View style={styles.stepInfo}>
+                          <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{step.label}</Text>
+                          <Text style={styles.stepDate}>{completed ? 'Completed' : 'Pending'}</Text>
+                        </View>
                       </View>
-                      <View style={styles.stepInfo}>
-                        <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{step.label}</Text>
-                        <Text style={styles.stepDate}>{completed ? 'Completed' : 'Pending'}</Text>
-                      </View>
-                    </View>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </View>
             </View>
           )}
@@ -630,17 +675,57 @@ export default function OrderDetailScreen({ navigation, route }) {
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>₹{(Number(subtotal) || 0).toFixed(2)}</Text>
           </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Delivery</Text>
-            <Text style={[styles.summaryValue, { color: '#27AE60' }]}>₹20.00</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Discount</Text>
-            <Text style={[styles.summaryValue, { color: '#EB5757' }]}>-₹0.00</Text>
-          </View>
+          
+          {Number(currentOrder.shippingFee) !== 0 && !isNaN(Number(currentOrder.shippingFee)) && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Delivery</Text>
+              <Text style={[styles.summaryValue, { color: '#27AE60' }]}>₹{Number(currentOrder.shippingFee).toFixed(2)}</Text>
+            </View>
+          )}
+
+          {Number(currentOrder.cgst) > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>CGST</Text>
+              <Text style={styles.summaryValue}>₹{Number(currentOrder.cgst).toFixed(2)}</Text>
+            </View>
+          )}
+
+          {Number(currentOrder.sgst) > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>SGST</Text>
+              <Text style={styles.summaryValue}>₹{Number(currentOrder.sgst).toFixed(2)}</Text>
+            </View>
+          )}
+
+          {Number(currentOrder.packagingFee) > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Packaging Fee</Text>
+              <Text style={styles.summaryValue}>₹{Number(currentOrder.packagingFee).toFixed(2)}</Text>
+            </View>
+          )}
+
+          {Number(currentOrder.installationFee) > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Installation Fee</Text>
+              <Text style={styles.summaryValue}>₹{Number(currentOrder.installationFee).toFixed(2)}</Text>
+            </View>
+          )}
+          
+          {(Number(currentOrder.discount) || 0) > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Discount</Text>
+              <Text style={[styles.summaryValue, { color: '#EB5757' }]}>-₹{(Number(currentOrder.discount) || 0).toFixed(2)}</Text>
+            </View>
+          )}
+
           <View style={[styles.summaryRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Order Total</Text>
-            <Text style={styles.totalValue}>₹{(Number(currentOrder.total) || 0).toFixed(2)}</Text>
+            <Text style={styles.totalValue}>
+              ₹{(
+                Number(currentOrder.total) || 
+                (Number(subtotal) + Number(currentOrder.shippingFee || 0) + Number(currentOrder.cgst || 0) + Number(currentOrder.sgst || 0) + Number(currentOrder.packagingFee || 0) + Number(currentOrder.installationFee || 0) - (Number(currentOrder.discount) || 0))
+              ).toFixed(2)}
+            </Text>
           </View>
         </View>
 

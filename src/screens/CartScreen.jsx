@@ -61,11 +61,11 @@ export default function CartScreen({ navigation }) {
               if (!targetVar) targetVar = variantItems[0];
             }
 
-            const feeCgst = targetVar && parseFloat(targetVar.cgst) > 0 ? targetVar.cgst : freshProd.cgst;
-            const feeSgst = targetVar && parseFloat(targetVar.sgst) > 0 ? targetVar.sgst : freshProd.sgst;
-            const feePkg = targetVar && parseFloat(targetVar.packagingFee || targetVar.packagingPrice) > 0 ? (targetVar.packagingFee || targetVar.packagingPrice) : (freshProd.packagingFee || freshProd.packagingPrice);
-            const feeShip = targetVar && parseFloat(targetVar.shippingFee || targetVar.shippingPrice) > 0 ? (targetVar.shippingFee || targetVar.shippingPrice) : (freshProd.shippingFee || freshProd.shippingPrice);
-            const feeInst = targetVar && parseFloat(targetVar.installationFee || targetVar.installationPrice) > 0 ? (targetVar.installationFee || targetVar.installationPrice) : (freshProd.installationFee || freshProd.installationPrice);
+            const feeCgst = targetVar && targetVar.cgst !== undefined ? targetVar.cgst : freshProd.cgst;
+            const feeSgst = targetVar && targetVar.sgst !== undefined ? targetVar.sgst : freshProd.sgst;
+            const feePkg = targetVar && (targetVar.packagingFee !== undefined || targetVar.packagingPrice !== undefined) ? (targetVar.packagingFee !== undefined ? targetVar.packagingFee : targetVar.packagingPrice) : (freshProd.packagingFee !== undefined ? freshProd.packagingFee : freshProd.packagingPrice);
+            const feeShip = targetVar && (targetVar.shippingFee !== undefined || targetVar.shippingPrice !== undefined) ? (targetVar.shippingFee !== undefined ? targetVar.shippingFee : targetVar.shippingPrice) : (freshProd.shippingFee !== undefined ? freshProd.shippingFee : freshProd.shippingPrice);
+            const feeInst = targetVar && (targetVar.installationFee !== undefined || targetVar.installationPrice !== undefined) ? (targetVar.installationFee !== undefined ? targetVar.installationFee : targetVar.installationPrice) : (freshProd.installationFee !== undefined ? freshProd.installationFee : freshProd.installationPrice);
 
             return {
               ...item,
@@ -180,10 +180,18 @@ export default function CartScreen({ navigation }) {
           {totalInstallation > 0 && (
             <BillRow label="Installation Fee" value={`₹${totalInstallation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
           )}
-          <BillRow label="Secured Packaging Fee" value={`₹${totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
-          <BillRow label="Shipping Fee" value={`₹${totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
-          <BillRow label="CGST" value={`₹${totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
-          <BillRow label="SGST" value={`₹${totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          {totalPackaging > 0 && (
+            <BillRow label="Secured Packaging Fee" value={`₹${totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          )}
+          {totalShipping > 0 && (
+            <BillRow label="Shipping Fee" value={`₹${totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          )}
+          {totalCgst > 0 && (
+            <BillRow label="CGST" value={`₹${totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          )}
+          {totalSgst > 0 && (
+            <BillRow label="SGST" value={`₹${totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} />
+          )}
           <View style={styles.totalDivider} />
           <BillRow label="Total Amount" value={`₹${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} bold />
         </View>

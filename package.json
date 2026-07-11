@@ -1,6 +1,6 @@
 {
   "name": "cromsen-mobile",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "main": "index.js",
   "scripts": {
     "start": "set REACT_NATIVE_PACKAGER_HOSTNAME=192.168.0.110 && expo start",

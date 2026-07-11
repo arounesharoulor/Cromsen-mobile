@@ -178,7 +178,7 @@ export default function OrdersScreen({ navigation }) {
       const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
 
       const requestPayload = {
-        orderId: selectedOrder.id || selectedOrder._id,
+        orderId: selectedOrder._id || selectedOrder.id,
         productId: selectedItem?.productId || selectedItem?.product?._id || selectedItem?.id,
         productName: selectedItem?.name || selectedOrder.mainProduct,
         type: requestType,
@@ -204,9 +204,14 @@ export default function OrdersScreen({ navigation }) {
 
       // 2. Update order status on backend so admin sees "RETURN REQUESTED" / "REPLACEMENT REQUESTED"
       try {
-        const orderId = selectedOrder.id || selectedOrder._id;
-        await userService.updateOrderStatus(orderId, newStatus);
-        console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+        const orderId = selectedOrder._id || selectedOrder.id;
+        const isObjectId = /^[0-9a-fA-F]{24}$/.test(String(orderId));
+        if (isObjectId) {
+          await userService.updateOrderStatus(orderId, newStatus);
+          console.log(`[${requestType}] Order status updated to "${newStatus}" on backend.`);
+        } else {
+          console.warn(`[${requestType}] Skipping order status update on backend (invalid ObjectId):`, orderId);
+        }
       } catch (statusErr) {
         console.warn(`[${requestType}] Could not update order status on backend:`, statusErr.message);
       }
@@ -381,24 +386,21 @@ export default function OrdersScreen({ navigation }) {
       // Normalize backend schema to app schema
       const normalize = (o) => {
         // Build the display ID exactly like the admin dashboard
-        let displayId = o.id || o._id;
-        if (o.orderId) {
-          const oid = String(o.orderId).toUpperCase();
-          const match = oid.match(/(?:CIM|CIW|CIDM)?-?#?(\d+)/);
+        let displayId = o.orderId || o.id || o._id;
+        if (displayId) {
+          const strId = String(displayId).toUpperCase().trim();
+          const match = strId.match(/(?:CIM|CIW|CIDM)?-?#?(\d+)/);
           if (match) {
-            const prefix = oid.startsWith('CIW') ? 'CIW' : oid.startsWith('CIDM') ? 'CIDM' : 'CIM';
-            displayId = `${prefix}-#${match[1]}`;
+            displayId = `CIM-${match[1]}`;
+          } else if (strId.length > 20) {
+            displayId = `CIM-${strId.slice(-4)}`;
+          } else if (strId.startsWith('#')) {
+            displayId = `CIM-${strId.substring(1)}`;
           } else {
-            displayId = oid;
+            displayId = strId;
           }
-        } else if (displayId && String(displayId).length > 20) {
-          // It's likely a raw MongoDB ObjectId, convert to standard format for consistency
-          displayId = `CIM-#${String(displayId).slice(-4).toUpperCase()}`;
-        } else if (!displayId) {
-          displayId = `#ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
         } else {
-          // Ensure short IDs like #01EC78A4 are uppercase
-          displayId = String(displayId).toUpperCase();
+          displayId = `#ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
         }
 
         return {
@@ -408,7 +410,7 @@ export default function OrdersScreen({ navigation }) {
           date: o.date || (o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() : ''),
           createdAt: o.createdAt || new Date().toISOString(), // Preserve original timestamp for sorting
           status: o.status || 'ORDER CONFIRMED',
-          total: o.total || o.totalAmount || 0,
+          total: Number(o.total) || Number(o.totalAmount) || Number(o.amount) || (o.items ? (o.items.reduce((acc, i) => acc + ((parseFloat(i.price) || 0) * (parseFloat(i.sqFt) || 1) * (i.quantity || 1)), 0) + (parseFloat(o.shippingFee) || 0) + (parseFloat(o.cgst) || 0) + (parseFloat(o.sgst) || 0) + (parseFloat(o.packagingFee) || 0) + (parseFloat(o.installationFee) || 0) - (parseFloat(o.discount) || 0)) : 0),
           itemsCount: o.itemsCount || (o.items ? o.items.length : 0),
           mainProduct: o.mainProduct || (o.items && o.items[0] ? sanitizeData(o.items[0].name, 'Product') : 'Product'),
           image: o.image || (o.items && o.items[0] ? getImageUrl(o.items[0].image) : '') || 'https://images.unsplash.com/photo-1513519245088-0e12902e35ca?auto=format&fit=crop&q=80&w=400',
@@ -521,12 +523,15 @@ export default function OrdersScreen({ navigation }) {
       setLoading(true);
       setShowCancelModal(false);
       
-      // Update backend with reason if it's a real order
-      if (!String(cancellingOrderId).startsWith('#')) {
+      // Update backend with reason if it's a real order and we have its MongoDB _id
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(String(cancellingOrderId));
+      if (isObjectId) {
         await userService.updateOrderStatus(cancellingOrderId, 'Cancelled', { 
           reason: finalReason,
           cancelledBy: 'Customer'
         });
+      } else {
+        console.warn('Skipping backend cancel: ID is not a valid ObjectId (local-only or missing _id):', cancellingOrderId);
       }
       
       const updatedOrders = orders.map(o => (o.id === cancellingOrderId || o._id === cancellingOrderId) ? { ...o, status: 'CANCELLED' } : o);
@@ -738,7 +743,7 @@ export default function OrdersScreen({ navigation }) {
                               </View>
                             )}
                           </View>
-                          <Text style={styles.cardId}>{item.orderId || item.id}</Text>
+                          <Text style={styles.cardId}>{String(item.id || item.orderId).replace(/^(?:CIM|CIW|CIDM)?-?#?(\d+)/i, 'CIM-$1')}</Text>
                         </View>
 
                         <View style={[styles.statusBadge, { backgroundColor: STATUS_CONFIG[String(item.status).toUpperCase()]?.bg || '#F3F4F6', paddingVertical: 2, paddingHorizontal: 8 }]}>
@@ -779,7 +784,7 @@ export default function OrdersScreen({ navigation }) {
                         </TouchableOpacity>
 
                         {['ORDER CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED'].includes(String(item.status).toUpperCase()) && (
-                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item.id || item._id)}>
+                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelOrder(item._id || item.id)}>
                             <Text style={styles.cancelBtnText}>Cancel</Text>
                           </TouchableOpacity>
                         )}

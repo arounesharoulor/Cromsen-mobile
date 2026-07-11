@@ -110,6 +110,7 @@ function AddAddressForm({ onSave, initialData, user }) {
         firstName: name,
         countryCode: code,
         mobile: number,
+        alternateNumber: '',
         pincode: '', state: '', city: '',
         line1: '', line2: '', saveAs: 'HOME',
       };
@@ -119,6 +120,7 @@ function AddAddressForm({ onSave, initialData, user }) {
       firstName: initialData.firstName || initialData.name || '',
       countryCode: initialData.countryCode || (initialData.phone?.startsWith('+') ? initialData.phone.split(' ')[0] : '+91'),
       mobile: initialData.mobile || (initialData.phone?.includes(' ') ? initialData.phone.split(' ')[1] : initialData.phone?.replace(/^\+\d+\s?/, '')) || '',
+      alternateNumber: initialData.alternateNumber || initialData.alternatePhone || '',
       pincode: initialData.pincode || initialData.zip || '',
       state: initialData.state || '',
       city: initialData.city || '',
@@ -188,6 +190,7 @@ function AddAddressForm({ onSave, initialData, user }) {
         {[
           { label: 'First name', key: 'firstName', placeholder: 'Enter full name' },
           { label: 'Mobile Number', key: 'mobile', placeholder: 'Enter mobile number', keyType: 'phone-pad', isPhone: true },
+          { label: 'Alternate Number', key: 'alternateNumber', placeholder: 'Enter alternate number (optional)', keyType: 'phone-pad', required: false },
           { label: 'Pincode', key: 'pincode', placeholder: 'Enter pincode', keyType: 'number-pad', half: true },
           { label: 'State', key: 'state', placeholder: 'Enter State', half: true },
           { label: 'City', key: 'city', placeholder: 'Enter city' },
@@ -520,17 +523,18 @@ export default function CheckoutScreen({ navigation, route }) {
               if (!targetVar) targetVar = variantItems[0];
             }
 
-            // Extract fees safely, preferring the matched variant's fees if they exist and are > 0, otherwise fallback to main product
-            const feeCgst = targetVar && parseFloat(targetVar.cgst) > 0 ? targetVar.cgst : freshProd.cgst;
-            const feeSgst = targetVar && parseFloat(targetVar.sgst) > 0 ? targetVar.sgst : freshProd.sgst;
-            const feePkg = targetVar && parseFloat(targetVar.packagingFee || targetVar.packagingPrice) > 0 ? (targetVar.packagingFee || targetVar.packagingPrice) : (freshProd.packagingFee || freshProd.packagingPrice);
-            const feeShip = targetVar && parseFloat(targetVar.shippingFee || targetVar.shippingPrice) > 0 ? (targetVar.shippingFee || targetVar.shippingPrice) : (freshProd.shippingFee || freshProd.shippingPrice);
-            const feeInst = targetVar && parseFloat(targetVar.installationFee || targetVar.installationPrice) > 0 ? (targetVar.installationFee || targetVar.installationPrice) : (freshProd.installationFee || freshProd.installationPrice);
+            // Extract fees safely, preferring the matched variant's fees if they exist and are defined, otherwise fallback to main product
+            const feeCgst = targetVar && targetVar.cgst !== undefined ? targetVar.cgst : freshProd.cgst;
+            const feeSgst = targetVar && targetVar.sgst !== undefined ? targetVar.sgst : freshProd.sgst;
+            const feePkg = targetVar && (targetVar.packagingFee !== undefined || targetVar.packagingPrice !== undefined) ? (targetVar.packagingFee !== undefined ? targetVar.packagingFee : targetVar.packagingPrice) : (freshProd.packagingFee !== undefined ? freshProd.packagingFee : freshProd.packagingPrice);
+            const feeShip = targetVar && (targetVar.shippingFee !== undefined || targetVar.shippingPrice !== undefined) ? (targetVar.shippingFee !== undefined ? targetVar.shippingFee : targetVar.shippingPrice) : (freshProd.shippingFee !== undefined ? freshProd.shippingFee : freshProd.shippingPrice);
+            const feeInst = targetVar && (targetVar.installationFee !== undefined || targetVar.installationPrice !== undefined) ? (targetVar.installationFee !== undefined ? targetVar.installationFee : targetVar.installationPrice) : (freshProd.installationFee !== undefined ? freshProd.installationFee : freshProd.installationPrice);
 
 
-            
             return {
               ...item,
+              productId: item.productId || item.id || item._id,
+              product: item.product || item.id || item._id,
               // We safely update taxes and fees from the fresh product or variant
               cgst: parseNum(feeCgst),
               sgst: parseNum(feeSgst),
@@ -820,12 +824,9 @@ export default function CheckoutScreen({ navigation, route }) {
         clearCart();
         navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
 
-      } else if (result.status === 'cancelled') {
+      } else if (result.status === 'cancelled' || result.status === 'failed') {
         setShowWebView(false);
-        alert('Payment Cancelled by user.');
-      } else if (result.status === 'failed') {
-        setShowWebView(false);
-        alert('Payment Failed.');
+        alert(result.status === 'cancelled' ? 'Payment Cancelled by user.' : 'Payment Failed.');
       }
     } catch (e) {
       console.error("WebView Message Error", e);
@@ -930,7 +931,12 @@ export default function CheckoutScreen({ navigation, route }) {
           paymentStatus,
           paymentMethod,
           paymentId,
+          source: 'mobile',
+          prefix: 'CIM',
           total: grandTotal,
+          totalAmount: grandTotal,
+          totalPrice: grandTotal,
+          amount: grandTotal,
           subtotal,
           discount,
           cgst: totalCgst,
@@ -939,7 +945,25 @@ export default function CheckoutScreen({ navigation, route }) {
           packagingFee: totalPackaging,
           installationFee: totalInstallation,
           items: liveCartItems,
+          cartItems: liveCartItems,
+          products: liveCartItems,
           address: selectedAddress ? selectedAddress.full : 'Store Pickup',
+          shippingAddress: selectedAddress ? {
+            name: selectedAddress.name || user?.name || 'Guest',
+            address: selectedAddress.full || selectedAddress.address,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            zip: selectedAddress.zip,
+            phone: selectedAddress.phone,
+            alternateNumber: selectedAddress.alternateNumber || selectedAddress.alternatePhone || '',
+            country: 'India'
+          } : {},
+          customerName: user?.name || selectedAddress?.name || 'Guest',
+          userName: user?.name || selectedAddress?.name || 'Guest',
+          name: user?.name || selectedAddress?.name || 'Guest',
+          customer: user?.name || selectedAddress?.name || 'Guest',
+          email: user?.email || '',
+          phone: selectedAddress?.phone || user?.phone || '',
           dealerId: user?.role === 'dealer' ? (user?._id || user?.id) : null,
           userId: user?._id || user?.id,
         };
@@ -956,7 +980,7 @@ export default function CheckoutScreen({ navigation, route }) {
             const rzpOrderRes = await fetch(`${API_URL}/payment/create-order`, {
                 method: 'POST',
                 headers: await authHeaders(),
-                body: JSON.stringify({ amount: finalAmount })
+                body: JSON.stringify({ amount: finalAmount, orderDetails: finalOrder })
               });
 
             if (!rzpOrderRes.ok) {
@@ -1034,6 +1058,7 @@ export default function CheckoutScreen({ navigation, route }) {
                 navigation.replace('Main', { screen: 'HomeTab', params: { paymentSuccess: true } });
               } catch (vErr) {
                 console.warn('Verify Payment Error (Native):', vErr);
+                alert('Payment Cancelled or Failed');
               }
             } else {
               // METHOD B: WEBVIEW FALLBACK FOR EXPO GO
@@ -1108,16 +1133,12 @@ export default function CheckoutScreen({ navigation, route }) {
         const finalCODOrder = {
           ...finalOrder,
           items: liveCartItems,
+          cartItems: liveCartItems,
+          products: liveCartItems,
           totalAmount: grandTotal,
-          shippingAddress: {
-            name: selectedAddress.name || user?.name || 'Guest',
-            address: selectedAddress.full || selectedAddress.address,
-            city: selectedAddress.city,
-            state: selectedAddress.state,
-            zip: selectedAddress.zip,
-            phone: selectedAddress.phone,
-            country: 'India'
-          }
+          totalPrice: grandTotal,
+          amount: grandTotal,
+          total: grandTotal,
         };
  
         try {
@@ -1313,10 +1334,18 @@ export default function CheckoutScreen({ navigation, route }) {
             {totalInstallation > 0 && (
               <View style={s.priceRow}><Text style={s.priceLbl}>Installation Fee</Text><Text style={s.priceVal}>₹{totalInstallation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
             )}
-            <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>CGST</Text><Text style={s.priceVal}>₹{totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLbl}>SGST</Text><Text style={s.priceVal}>₹{totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            {totalShipping > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>Shipping</Text><Text style={s.priceVal}>₹{totalShipping.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            )}
+            {totalPackaging > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>Packaging Fee</Text><Text style={s.priceVal}>₹{totalPackaging.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            )}
+            {totalCgst > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>CGST</Text><Text style={s.priceVal}>₹{totalCgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            )}
+            {totalSgst > 0 && (
+              <View style={s.priceRow}><Text style={s.priceLbl}>SGST</Text><Text style={s.priceVal}>₹{totalSgst.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</Text></View>
+            )}
             
             <View style={[s.priceRow, {marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9'}]}>
               <Text style={s.totalLbl}>Order Total</Text>

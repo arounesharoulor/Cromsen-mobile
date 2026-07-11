@@ -211,9 +211,9 @@ export const NotificationProvider = ({ children }) => {
               title = 'Out for Delivery';
             }
 
-            const displayId = String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW#') || String(newOrder.id).startsWith('CIM-#') || String(newOrder.id).startsWith('CIW-#')
-              ? newOrder.id
-              : `#${newOrder.id.slice(-6)}`;
+            const match = String(newOrder.id || newOrder.orderId).match(/(?:CIM|CIW|CIDM)?-?#?(\d+)/i);
+            const displayId = match ? `CIM-${match[1]}` : (newOrder.id || newOrder.orderId);
+
 
             addNotification(
               toastType,
