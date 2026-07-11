@@ -2,6 +2,8 @@ pluginManagement {
   repositories {
     gradlePluginPortal()
     google()
+    maven { url "https://repo1.maven.org/maven2" }
+    maven { url "https://jcenter.bintray.com" }
     mavenCentral()
   }
   def reactNativeGradlePlugin = new File(
