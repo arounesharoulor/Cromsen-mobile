@@ -43,9 +43,7 @@
       "url": "https://u.expo.dev/0d933177-774d-498b-8632-b9cadeefdabe"
     },
     "extra": {
-      "eas": {
-        "projectId": "0d933177-774d-498b-8632-b9cadeefdabe"
-      }
+    
     },
     "plugins": [
       "@react-native-firebase/app",
