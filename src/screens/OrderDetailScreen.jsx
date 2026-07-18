@@ -729,39 +729,6 @@ export default function OrderDetailScreen({ navigation, route }) {
                 </View>
               </View>
 
-              {/* SHOW THE REPLACEMENT ORDER IF REQUESTED */}
-              {activeRequest && activeRequest.type === 'Replace' && (
-                <View style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }, { flexDirection: 'column', alignItems: 'stretch', backgroundColor: '#F8FAFC', marginHorizontal: -12, paddingHorizontal: 12, paddingTop: 16, marginTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: THEME_COLORS.secondary, marginBottom: 8, letterSpacing: 0.5 }}>NEW REPLACEMENT ORDER</Text>
-                  <TouchableOpacity 
-                    activeOpacity={0.7}
-                    style={{ flexDirection: 'row', flex: 1, marginBottom: 8 }}
-                    onPress={() => {
-                      if (itemProdId && !String(itemProdId).startsWith('#')) {
-                        navigation.navigate('ProductDetail', { productId: itemProdId });
-                      }
-                    }}
-                  >
-                    <Image 
-                      source={{ uri: getImageUrl(item?.image || item?.product?.image || currentOrder?.image) }} 
-                      style={styles.itemImg} 
-                    />
-
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{sanitizeData(item.name, 'Product')} (Replacement)</Text>
-                      <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
-                      <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
-                      <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
-                      
-                      <View style={{ alignSelf: 'flex-start', backgroundColor: '#F2F8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 6, borderWidth: 1, borderColor: '#D5E6FF' }}>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: THEME_COLORS.secondary }}>
-                          {String(currentOrder.status).toUpperCase().includes('COMPLETED') ? 'REPLACEMENT DELIVERED' : 'REPLACEMENT PROCESSING'}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              )}
               </React.Fragment>
             );
           })}
