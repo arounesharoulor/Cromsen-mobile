@@ -64,6 +64,45 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   const { user } = useAuth();
   const { isDarkMode, theme } = useTheme();
 
+  const flatListRef = useRef(null);
+
+  // Auto carousel effect
+  useEffect(() => {
+    if (!product) return;
+    
+    const catImg = (Array.isArray(product.category) && product.category[0]?.image) || (product.category?.image) || null;
+    const allImgs = [];
+    if (product.image) allImgs.push(product.image);
+    if (product.imageUrl) allImgs.push(product.imageUrl);
+    if (product.imagePath) allImgs.push(product.imagePath);
+    if (product.thumbnail) allImgs.push(product.thumbnail);
+    if (product.img) allImgs.push(product.img);
+    if (product.pic) allImgs.push(product.pic);
+    if (product.photo) allImgs.push(product.photo);
+    if (product.images?.length > 0) allImgs.push(...product.images);
+    if (allImgs.length === 0 && catImg) allImgs.push(catImg);
+    
+    const raw = [...new Set(allImgs)].filter(Boolean);
+    const num = raw.length > 0 ? raw.length : 1;
+
+    if (num <= 1) return;
+
+    const interval = setInterval(() => {
+      setActiveImg(prev => {
+        const next = (prev + 1) % num;
+        try {
+          if (flatListRef.current) {
+            flatListRef.current.scrollToIndex({ index: next, animated: true });
+          }
+        } catch (e) {
+          console.log('Carousel scroll error', e);
+        }
+        return next;
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [product]);
+
   useEffect(() => {
     if (productId) load(true);
   }, [productId]);
@@ -343,18 +382,18 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
   const categoryImage = (Array.isArray(product.category) && product.category[0]?.image) || 
                         (product.category?.image) || null;
 
-  const rawImgs = (
-    (product.images?.length > 0 ? product.images : null) || 
-    (product.image ? [product.image] : null) || 
-    (product.imageUrl ? [product.imageUrl] : null) || 
-    (product.imagePath ? [product.imagePath] : null) || 
-    (product.thumbnail ? [product.thumbnail] : null) || 
-    (product.img ? [product.img] : null) || 
-    (product.pic ? [product.pic] : null) || 
-    (product.photo ? [product.photo] : null) || 
-    (categoryImage ? [categoryImage] : null) ||
-    []
-  ).filter(Boolean);
+  const allImgs = [];
+  if (product.image) allImgs.push(product.image);
+  if (product.imageUrl) allImgs.push(product.imageUrl);
+  if (product.imagePath) allImgs.push(product.imagePath);
+  if (product.thumbnail) allImgs.push(product.thumbnail);
+  if (product.img) allImgs.push(product.img);
+  if (product.pic) allImgs.push(product.pic);
+  if (product.photo) allImgs.push(product.photo);
+  if (product.images?.length > 0) allImgs.push(...product.images);
+  if (allImgs.length === 0 && categoryImage) allImgs.push(categoryImage);
+
+  const rawImgs = [...new Set(allImgs)].filter(Boolean);
   
   const imgs = rawImgs.length > 0 
     ? rawImgs.map(getImageUrl) 
@@ -542,10 +581,21 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
         {/* Image Carousel */}
         <View>
           <FlatList
+            ref={flatListRef}
             data={imgs}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            onScrollToIndexFailed={info => {
+              const wait = new Promise(resolve => setTimeout(resolve, 500));
+              wait.then(() => {
+                try {
+                  if (flatListRef.current) {
+                    flatListRef.current.scrollToIndex({ index: info.index, animated: true });
+                  }
+                } catch (e) {}
+              });
+            }}
             onMomentumScrollEnd={(e) => {
               const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
               setActiveImg(newIndex);
@@ -1060,7 +1110,12 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                     }}
                   >
                     <Image source={{ uri: getImageUrl(p.image || p.thumbnail) }} style={s.similarImg} />
-                    <TouchableOpacity style={s.similarHeart} onPress={() => toggleWishlist(p)}>
+                    <TouchableOpacity style={s.similarHeart} onPress={() => {
+                      toggleWishlist(p);
+                      if (!checkWishlisted(p._id || p.id)) {
+                        navigation.navigate('Wishlist');
+                      }
+                    }}>
                       <HeartIcon 
                         size={12} 
                         color={checkWishlisted(p._id || p.id) ? THEME_COLORS.error : THEME_COLORS.textSecondary} 
@@ -1089,6 +1144,7 @@ const [sqFtOpen, setSqFtOpen] = useState(false);
                                     installationRatePerSqFt: parseFloat(p.installationRatePerSqFt || p.installationRatePerSqft || p.installationPricePerSqft || p.installationPerSqFt || p.installationRate || 0) || 0,
                                     baseInstallationPrice: parseFloat(p.installationPrice || p.installationFee || p.installationCost || 0) || 0,
                                   }, 1);
+                                  navigation.navigate('Cart');
                                 }}
                               >
                                 <FrameIcon size={20} />

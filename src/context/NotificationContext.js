@@ -222,6 +222,19 @@ export const NotificationProvider = ({ children }) => {
               'Orders'
             );
 
+            // Send email if status is refund, return, cancel, or payment failed
+            if (['REFUND', 'RETURN', 'CANCEL', 'FAIL'].some(s => newStatus.includes(s))) {
+              try {
+                const uEmail = userEmail || user?.email;
+                if (uEmail) {
+                  userService.sendStatusEmail(uEmail, newStatus, {
+                    orderId: newOrder.id,
+                    status: newStatus
+                  });
+                }
+              } catch (e) {}
+            }
+
             // Notify listeners to trigger UI refresh
             orderUpdateListeners.current.forEach(cb => {
               try { cb(); } catch (e) { console.warn('Listener call failed:', e); }

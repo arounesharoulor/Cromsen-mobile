@@ -45,6 +45,7 @@ export default function OrderDetailScreen({ navigation, route }) {
   const [showTracking, setShowTracking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentOrder, setCurrentOrder] = useState(order);
+  const [localRequests, setLocalRequests] = useState([]);
 
   // Review Modal States
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -131,7 +132,8 @@ export default function OrderDetailScreen({ navigation, route }) {
     try {
       setSubmittingRequest(true);
       
-      const newStatus = requestType === 'Return' ? 'Refund Tracking' : 'Replacement Requested';
+      // Both Return and Replace trigger a refund for the old item in this flow
+      const newStatus = requestType === 'Return' ? 'Refund Tracking' : 'Refund Tracking';
       const base64Media = media.map(m => m.base64 ? `data:image/jpeg;base64,${m.base64}` : m.uri);
 
       const requestPayload = {
@@ -177,6 +179,16 @@ export default function OrderDetailScreen({ navigation, route }) {
       try {
         await userService.submitReturnRequest(requestPayload);
         console.log(`[${requestType}] Request sent to backend successfully.`);
+        
+        try {
+          const uEmail = requestPayload.customerEmail || user?.email;
+          if (uEmail) {
+            userService.sendStatusEmail(uEmail, newStatus, {
+              orderId: requestPayload.orderId,
+              status: newStatus
+            });
+          }
+        } catch (e) {}
       } catch (reqErr) {
         console.warn(`[${requestType}] Could not send request to backend:`, reqErr.message);
       }
@@ -207,7 +219,16 @@ export default function OrderDetailScreen({ navigation, route }) {
       addNotification('success', `${requestType} Request Received`, `We have received your ${requestType.toLowerCase()} request for ${selectedItem?.name}. Our team will review it.`, 'Orders');
       
       setShowReturnModal(false);
-      alert(`Your ${requestType.toLowerCase()} request has been submitted successfully.`);
+
+      if (requestType === 'Replace') {
+        alert('Your replacement request is submitted. The original amount will be refunded. Please place a new order for your replacement item.');
+        const itemProdId = selectedItem?.productId || selectedItem?.product?._id || selectedItem?.id;
+        if (itemProdId && !String(itemProdId).startsWith('#')) {
+          navigation.navigate('ProductDetail', { productId: itemProdId });
+        }
+      } else {
+        alert('Your return request has been submitted successfully. The amount will be refunded.');
+      }
     } catch (e) {
       console.error('Error submitting request:', e);
       alert('Failed to submit request. Please try again.');
@@ -328,9 +349,24 @@ export default function OrderDetailScreen({ navigation, route }) {
 
   React.useEffect(() => {
     refreshOrder();
+    loadLocalRequests();
     const interval = setInterval(refreshOrder, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const loadLocalRequests = async () => {
+    try {
+      const currentUserId = user?._id || user?.id;
+      if (currentUserId) {
+        const stored = await AsyncStorage.getItem(`@ReturnRequests_${currentUserId}`);
+        if (stored) {
+          setLocalRequests(JSON.parse(stored));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load local requests', e);
+    }
+  };
 
   const refreshOrder = async () => {
     try {
@@ -400,6 +436,15 @@ export default function OrderDetailScreen({ navigation, route }) {
       const isObjectId = /^[0-9a-fA-F]{24}$/.test(backendId);
       if (isObjectId) {
         await userService.updateOrderStatus(backendId, 'Cancelled');
+        
+        try {
+          const uEmail = currentOrder.email || currentOrder.guestEmail || user?.email;
+          if (uEmail) {
+            userService.sendStatusEmail(uEmail, 'CANCELLED', {
+              orderId: currentOrder.id || currentOrder._id
+            });
+          }
+        } catch (e) {}
       } else {
         console.warn(`Skipping backend cancel: ID ${backendId} is not a valid ObjectId`);
       }
@@ -460,16 +505,16 @@ export default function OrderDetailScreen({ navigation, route }) {
               <View style={styles.timelineLineBackground}>
                 {(() => {
                   const s = String(currentOrder.status).toUpperCase();
-                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND');
+                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND') || s.includes('RETURN');
                   const stepsArray = isRefundFlow ? REFUND_STATUS_STEPS : ORDER_STATUS_STEPS;
                   
                   return stepsArray.slice(0, -1).map((_, idx) => {
                     let lineCompleted = false;
                     
                     if (isRefundFlow) {
-                      if (s.includes('COMPLETED')) lineCompleted = true;
-                      else if (s.includes('PROCESSED')) lineCompleted = idx < 2;
-                      else if (s.includes('INITIATED')) lineCompleted = idx < 1;
+                      if (s.includes('COMPLETED') || s.includes('SUCCESS') || s.includes('DELIVERED')) lineCompleted = true;
+                      else if (s.includes('PROCESSED') || s.includes('APPROVED') || s.includes('ACCEPTED')) lineCompleted = idx < 2;
+                      else if (s.includes('INITIATED') || s.includes('REQUESTED') || s.includes('TRACKING')) lineCompleted = idx < 1;
                     } else {
                       if (s.includes('DELIVERED')) lineCompleted = true;
                       else if (s.includes('SHIPPED')) lineCompleted = idx < 2;
@@ -493,7 +538,7 @@ export default function OrderDetailScreen({ navigation, route }) {
               <View style={styles.timelineStepsRow}>
                 {(() => {
                   const s = String(currentOrder.status).toUpperCase();
-                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND');
+                  const isRefundFlow = s.includes('CANCELLED') || s.includes('REFUND') || s.includes('RETURN');
                   const stepsArray = isRefundFlow ? REFUND_STATUS_STEPS : ORDER_STATUS_STEPS;
                   
                   return stepsArray.map((step, idx) => {
@@ -501,15 +546,19 @@ export default function OrderDetailScreen({ navigation, route }) {
                     let active = false;
                     
                     if (isRefundFlow) {
-                      if (s.includes('COMPLETED')) completed = true;
-                      else if (s.includes('PROCESSED')) completed = idx <= 2;
-                      else if (s.includes('INITIATED')) completed = idx <= 1;
+                      const isStep3 = s.includes('COMPLETED') || s.includes('SUCCESS') || s.includes('DELIVERED');
+                      const isStep2 = s.includes('PROCESSED') || s.includes('APPROVED') || s.includes('ACCEPTED');
+                      const isStep1 = s.includes('INITIATED') || s.includes('REQUESTED') || s.includes('TRACKING');
+
+                      if (isStep3) completed = true;
+                      else if (isStep2) completed = idx <= 2;
+                      else if (isStep1) completed = idx <= 1;
                       else completed = idx === 0;
 
-                      active = (s.includes('COMPLETED') && idx === 3) ||
-                               (s.includes('PROCESSED') && idx === 2) ||
-                               (s.includes('INITIATED') && idx === 1) ||
-                               (!s.includes('COMPLETED') && !s.includes('PROCESSED') && !s.includes('INITIATED') && idx === 0);
+                      active = (isStep3 && idx === 3) ||
+                               (!isStep3 && isStep2 && idx === 2) ||
+                               (!isStep3 && !isStep2 && isStep1 && idx === 1) ||
+                               (!isStep3 && !isStep2 && !isStep1 && idx === 0);
                     } else {
                       if (s.includes('DELIVERED')) completed = true;
                       else if (s.includes('SHIPPED')) completed = idx <= 2;
@@ -592,9 +641,15 @@ export default function OrderDetailScreen({ navigation, route }) {
             const statusUpper = String(currentOrder.status).toUpperCase();
             const canReview = ['DELIVERED', 'CONFIRMED', 'PROCESSING', 'PAID'].includes(statusUpper);
             const itemProdId = item.productId || (typeof item.product === 'string' ? item.product : (item.product?._id || item.product?.id)) || item._id || item.id;
+            
+            const activeRequest = localRequests.find(req => 
+              (req.orderId === currentOrder.id || req.orderId === currentOrder._id) && 
+              req.productId === itemProdId
+            );
 
             return (
-              <View key={idx} style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }, { flexDirection: 'column', alignItems: 'stretch' }]}>
+              <React.Fragment key={idx}>
+              <View style={[styles.itemRow, idx === currentOrder.items.length - 1 && (!activeRequest || activeRequest.type !== 'Replace') && { borderBottomWidth: 0 }, { flexDirection: 'column', alignItems: 'stretch' }]}>
                 <TouchableOpacity 
                   activeOpacity={0.7}
                   style={{ flexDirection: 'row', flex: 1, marginBottom: 8 }}
@@ -614,6 +669,14 @@ export default function OrderDetailScreen({ navigation, route }) {
                     <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
                     <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
                     <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
+                    
+                    {activeRequest && (
+                      <View style={{ alignSelf: 'flex-start', backgroundColor: activeRequest.type === 'Replace' ? '#F2F8FF' : '#FFF2F2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 6, borderWidth: 1, borderColor: activeRequest.type === 'Replace' ? '#D5E6FF' : '#FFD5D5' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: activeRequest.type === 'Replace' ? THEME_COLORS.secondary : '#EB5757' }}>
+                          {activeRequest.type.toUpperCase()} REQUESTED
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </TouchableOpacity>
 
@@ -665,6 +728,41 @@ export default function OrderDetailScreen({ navigation, route }) {
                   )}
                 </View>
               </View>
+
+              {/* SHOW THE REPLACEMENT ORDER IF REQUESTED */}
+              {activeRequest && activeRequest.type === 'Replace' && (
+                <View style={[styles.itemRow, idx === currentOrder.items.length - 1 && { borderBottomWidth: 0 }, { flexDirection: 'column', alignItems: 'stretch', backgroundColor: '#F8FAFC', marginHorizontal: -12, paddingHorizontal: 12, paddingTop: 16, marginTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: THEME_COLORS.secondary, marginBottom: 8, letterSpacing: 0.5 }}>NEW REPLACEMENT ORDER</Text>
+                  <TouchableOpacity 
+                    activeOpacity={0.7}
+                    style={{ flexDirection: 'row', flex: 1, marginBottom: 8 }}
+                    onPress={() => {
+                      if (itemProdId && !String(itemProdId).startsWith('#')) {
+                        navigation.navigate('ProductDetail', { productId: itemProdId });
+                      }
+                    }}
+                  >
+                    <Image 
+                      source={{ uri: getImageUrl(item?.image || item?.product?.image || currentOrder?.image) }} 
+                      style={styles.itemImg} 
+                    />
+
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{sanitizeData(item.name, 'Product')} (Replacement)</Text>
+                      <Text style={styles.itemMeta}>{item.variant || 'Standard'}</Text>
+                      <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
+                      <Text style={styles.itemPrice}>₹{(typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0).toFixed(2)}</Text>
+                      
+                      <View style={{ alignSelf: 'flex-start', backgroundColor: '#F2F8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 6, borderWidth: 1, borderColor: '#D5E6FF' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: THEME_COLORS.secondary }}>
+                          {String(currentOrder.status).toUpperCase().includes('COMPLETED') ? 'REPLACEMENT DELIVERED' : 'REPLACEMENT PROCESSING'}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+              </React.Fragment>
             );
           })}
         </View>

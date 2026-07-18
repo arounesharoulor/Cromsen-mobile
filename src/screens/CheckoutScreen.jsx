@@ -826,7 +826,18 @@ export default function CheckoutScreen({ navigation, route }) {
 
       } else if (result.status === 'cancelled' || result.status === 'failed') {
         setShowWebView(false);
-        alert(result.status === 'cancelled' ? 'Payment Cancelled by user.' : 'Payment Failed.');
+        const errType = result.status === 'cancelled' ? 'Payment Cancelled by user.' : 'Payment Failed.';
+        alert(errType);
+        
+        try {
+          const uEmail = user?.email || pendingOrderDetails?.finalOrder?.guestEmail;
+          if (uEmail) {
+            userService.sendStatusEmail(uEmail, 'PAYMENT_FAILED', {
+              orderId: pendingOrderDetails?.finalOrder?.id,
+              reason: errType,
+            });
+          }
+        } catch (e) {}
       }
     } catch (e) {
       console.error("WebView Message Error", e);

@@ -415,6 +415,26 @@ export const homepageService = {
   },
 };
 export const userService = {
+  sendStatusEmail: async (email, statusType, details = {}) => {
+    if (!email) return;
+    try {
+      console.log(`[Email Service] Attempting to send ${statusType} email to ${email}`);
+      const headers = await authHeaders();
+      const response = await fetch(`${BASE_URL}/users/send-email`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email, type: statusType, details }),
+      });
+      if (response.ok) {
+        console.log(`✅ [Email Service] ${statusType} email sent successfully`);
+      } else {
+        console.warn(`[Email Service] Failed to send email (backend might not support this yet)`);
+      }
+    } catch (e) {
+      console.warn(`[Email Service] Error sending email:`, e);
+    }
+  },
+
   // Addresses: stored inside the user doc — fetch all users, find by ID, PATCH to update
   updateProfile: async (userId, userData, token) => {
     // Based on userroute.js: router.put('/:id/profile', userController.updateUserProfile);
